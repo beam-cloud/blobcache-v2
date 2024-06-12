@@ -5,16 +5,20 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	proto "github.com/beam-cloud/blobcache/proto"
+	"github.com/google/uuid"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	servicePrefix string = "blobcache"
 )
 
 type CacheServiceOpts struct {
@@ -35,8 +39,6 @@ func NewCacheService(config BlobCacheConfig) (*CacheService, error) {
 		return nil, err
 	}
 
-	tailscale := NewTailscale(config.Tailscale)
-
 	metadata, err := NewBlobCacheMetadata(config.Metadata)
 	if err != nil {
 		return nil, err
@@ -45,16 +47,18 @@ func NewCacheService(config BlobCacheConfig) (*CacheService, error) {
 	return &CacheService{
 		cas:       cas,
 		config:    config,
-		tailscale: tailscale,
+		tailscale: NewTailscale(config.Tailscale),
 		metadata:  metadata,
 	}, nil
 }
 
 func (cs *CacheService) StartServer(port uint) error {
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	listener, err := net.Listen("tcp", addr)
+	addr := fmt.Sprintf(":%d", port)
+
+	server := cs.tailscale.GetOrCreateServer(fmt.Sprintf("%s-%s", servicePrefix, uuid.New().String()[:6]))
+	ln, err := server.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("Failed to listen on addr<%s>: %v", addr, err)
+		return err
 	}
 
 	maxMessageSize := cs.config.GRPCMessageSizeBytes
@@ -65,7 +69,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	proto.RegisterBlobCacheServer(s, cs)
 
 	log.Printf("Running @ %s, config: %+v\n", addr, cs.config)
-	go s.Serve(listener)
+	go s.Serve(ln)
 
 	cs.metadata.AddEntry(context.TODO())
 
