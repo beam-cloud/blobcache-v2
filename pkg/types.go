@@ -1,5 +1,7 @@
 package blobcache
 
+import "time"
+
 const (
 	BlobCacheServicePrefix string = "blobcache"
 	BlobCacheVersion       string = "v0.1.0"
@@ -34,6 +36,8 @@ type MetadataConfig struct {
 }
 
 type BlobCachePeer struct {
+	RTT  time.Duration
+	Addr string
 }
 
 type BlobCacheEntry struct {
