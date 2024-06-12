@@ -1,0 +1,10 @@
+dev:
+  blobcache:
+    image: registry.localhost:5000/blobcache:latest
+    command: ["/workspace/bin/hotreload.sh"]
+    sync:
+      - ../:/workspace
+    environment:
+      PATH: ${PATH}:/usr/lib/go-1.21/bin/:/workspace/bin
+      BUILD_COMMAND: "go build -o /workspace/bin/blobcache /workspace/cmd/main.go"
+      BUILD_BINARY_PATH: "/workspace/bin/blobcache"

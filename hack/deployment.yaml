@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blobcache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blobcache
+  template:
+    metadata:
+      labels:
+        app: blobcache
+    spec:
+      containers:
+      - name: blobcache
+        image: registry.localhost:5000/blobcache:latest
+        securityContext:
+          privileged: true

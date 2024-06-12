@@ -1,0 +1,5 @@
+*.tgz
+.DS_Store
+bin/blobcache
+build.sh
+tmp/
