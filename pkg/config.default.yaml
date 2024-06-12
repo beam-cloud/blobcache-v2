@@ -3,6 +3,8 @@ persistencePath: /cache
 pageSizeBytes: 4000000 # 4MB
 maxCacheSizeMb: 100 # 100MB
 grpcMessageSizeBytes: 1000000000
+grpcDialTimeoutS: 1
+discoveryIntervalS: 5
 tailscale:
   controlUrl:
   user:
@@ -11,6 +13,7 @@ tailscale:
   hostName:
   ephemeral: true
   stateDir: /tmp
+  dialTimeoutS: 1
 metadata:
   redisAddr:
   redisPasswd:

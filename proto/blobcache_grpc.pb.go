@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	BlobCache_GetContent_FullMethodName   = "/blobcache.BlobCache/GetContent"
 	BlobCache_StoreContent_FullMethodName = "/blobcache.BlobCache/StoreContent"
+	BlobCache_GetState_FullMethodName     = "/blobcache.BlobCache/GetState"
 )
 
 // BlobCacheClient is the client API for BlobCache service.
@@ -29,6 +30,7 @@ const (
 type BlobCacheClient interface {
 	GetContent(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (*GetContentResponse, error)
 	StoreContent(ctx context.Context, opts ...grpc.CallOption) (BlobCache_StoreContentClient, error)
+	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 }
 
 type blobCacheClient struct {
@@ -82,12 +84,22 @@ func (x *blobCacheStoreContentClient) CloseAndRecv() (*StoreContentResponse, err
 	return m, nil
 }
 
+func (c *blobCacheClient) GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error) {
+	out := new(GetStateResponse)
+	err := c.cc.Invoke(ctx, BlobCache_GetState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlobCacheServer is the server API for BlobCache service.
 // All implementations must embed UnimplementedBlobCacheServer
 // for forward compatibility
 type BlobCacheServer interface {
 	GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error)
 	StoreContent(BlobCache_StoreContentServer) error
+	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	mustEmbedUnimplementedBlobCacheServer()
 }
 
@@ -100,6 +112,9 @@ func (UnimplementedBlobCacheServer) GetContent(context.Context, *GetContentReque
 }
 func (UnimplementedBlobCacheServer) StoreContent(BlobCache_StoreContentServer) error {
 	return status.Errorf(codes.Unimplemented, "method StoreContent not implemented")
+}
+func (UnimplementedBlobCacheServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
 }
 func (UnimplementedBlobCacheServer) mustEmbedUnimplementedBlobCacheServer() {}
 
@@ -158,6 +173,24 @@ func (x *blobCacheStoreContentServer) Recv() (*StoreContentRequest, error) {
 	return m, nil
 }
 
+func _BlobCache_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).GetState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_GetState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).GetState(ctx, req.(*GetStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlobCache_ServiceDesc is the grpc.ServiceDesc for BlobCache service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -168,6 +201,10 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetContent",
 			Handler:    _BlobCache_GetContent_Handler,
+		},
+		{
+			MethodName: "GetState",
+			Handler:    _BlobCache_GetState_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -7,6 +7,7 @@ package blobcache;
 service BlobCache {
   rpc GetContent(GetContentRequest) returns (GetContentResponse) {}
   rpc StoreContent(stream StoreContentRequest) returns (StoreContentResponse) {}
+  rpc GetState(GetStateRequest)  returns (GetStateResponse) {}
 }
 
 message GetContentRequest {
@@ -25,4 +26,11 @@ message StoreContentRequest {
 
 message StoreContentResponse {
   string hash = 1; // Hash of the stored content
+}
+
+message GetStateRequest {
+}
+
+message GetStateResponse {
+  string version = 1;
 }

@@ -1,34 +1,40 @@
 package blobcache
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sync"
+	"time"
 
 	"tailscale.com/tsnet"
 )
 
 type Tailscale struct {
-	cfg    TailscaleConfig
-	server *tsnet.Server
-	mu     sync.Mutex
+	cfg      BlobCacheConfig
+	server   *tsnet.Server
+	mu       sync.Mutex
+	hostname string
 }
 
 // NewTailscale creates a new Tailscale instance using tsnet
-func NewTailscale(cfg TailscaleConfig) *Tailscale {
+func NewTailscale(hostname string, cfg BlobCacheConfig) *Tailscale {
 	return &Tailscale{
-		cfg: cfg,
-		mu:  sync.Mutex{},
+		hostname: hostname,
+		cfg:      cfg,
+		mu:       sync.Mutex{},
 	}
 }
 
 func (t *Tailscale) logF(format string, v ...interface{}) {
-	if t.cfg.Debug {
+	if t.cfg.Tailscale.Debug {
 		log.Printf(format, v...)
 	}
 }
 
-func (t *Tailscale) GetOrCreateServer(hostname string) *tsnet.Server {
+func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.server != nil {
@@ -36,40 +42,30 @@ func (t *Tailscale) GetOrCreateServer(hostname string) *tsnet.Server {
 	}
 
 	server := &tsnet.Server{
-		Hostname:   hostname,
-		Dir:        fmt.Sprintf("%s/%s", t.cfg.StateDir, hostname),
-		AuthKey:    t.cfg.AuthKey,
-		ControlURL: t.cfg.ControlURL,
-		Ephemeral:  t.cfg.Ephemeral,
+		Hostname:   t.hostname,
+		Dir:        fmt.Sprintf("%s/%s", t.cfg.Tailscale.StateDir, t.hostname),
+		AuthKey:    t.cfg.Tailscale.AuthKey,
+		ControlURL: t.cfg.Tailscale.ControlURL,
+		Ephemeral:  t.cfg.Tailscale.Ephemeral,
 	}
 
 	server.Logf = t.logF
 	return server
 }
 
-// // Dial returns a TCP connection to a tailscale service
-// func (t *Tailscale) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
-// 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-// 	defer cancel()
+// Dial returns a TCP connection to a tailscale service
+func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.Tailscale.DialTimeoutS*int(time.Second)))
+	defer cancel()
 
-// 	// Connect to tailnet, if we aren't already
-// 	if !t.initialized {
-// 		t.mu.Lock()
+	if t.server == nil {
+		return nil, errors.New("server not initialized")
+	}
 
-// 		_, err := t.server.Up(timeoutCtx)
-// 		if err != nil {
-// 			t.mu.Unlock()
-// 			return nil, err
-// 		}
+	conn, err := t.server.Dial(timeoutCtx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
 
-// 		t.initialized = true
-// 		t.mu.Unlock()
-// 	}
-
-// 	conn, err := t.server.Dial(timeoutCtx, network, addr)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return conn, nil
-// }
+	return conn, nil
+}

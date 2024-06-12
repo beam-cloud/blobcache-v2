@@ -17,61 +17,64 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	servicePrefix string = "blobcache"
-)
-
 type CacheServiceOpts struct {
 	Addr string
 }
 
 type CacheService struct {
 	proto.UnimplementedBlobCacheServer
+	hostname  string
 	cas       *ContentAddressableStorage
-	config    BlobCacheConfig
+	cfg       BlobCacheConfig
 	tailscale *Tailscale
 	metadata  *BlobCacheMetadata
+	discovery *DiscoveryClient
 }
 
-func NewCacheService(config BlobCacheConfig) (*CacheService, error) {
-	cas, err := NewContentAddressableStorage(config)
+func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
+	hostname := fmt.Sprintf("%s-%s", BlobCacheServicePrefix, uuid.New().String()[:6])
+
+	cas, err := NewContentAddressableStorage(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	metadata, err := NewBlobCacheMetadata(config.Metadata)
+	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
 		return nil, err
 	}
 
+	tailscale := NewTailscale(hostname, cfg)
 	return &CacheService{
+		hostname:  hostname,
 		cas:       cas,
-		config:    config,
-		tailscale: NewTailscale(config.Tailscale),
+		cfg:       cfg,
+		tailscale: tailscale,
 		metadata:  metadata,
+		discovery: NewDiscoveryClient(cfg, tailscale),
 	}, nil
 }
 
 func (cs *CacheService) StartServer(port uint) error {
 	addr := fmt.Sprintf(":%d", port)
 
-	server := cs.tailscale.GetOrCreateServer(fmt.Sprintf("%s-%s", servicePrefix, uuid.New().String()[:6]))
+	server := cs.tailscale.GetOrCreateServer()
 	ln, err := server.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	maxMessageSize := cs.config.GRPCMessageSizeBytes
+	maxMessageSize := cs.cfg.GRPCMessageSizeBytes
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	log.Printf("Running @ %s, config: %+v\n", addr, cs.config)
+	log.Printf("Running @ %s, cfg: %+v\n", addr, cs.cfg)
 	go s.Serve(ln)
 
-	cs.metadata.AddEntry(context.TODO())
+	go cs.discovery.Start(context.TODO())
 
 	// Create a channel to receive termination signals
 	terminationSignal := make(chan os.Signal, 1)
@@ -85,6 +88,10 @@ func (cs *CacheService) StartServer(port uint) error {
 	s.GracefulStop()
 	cs.cas.Cleanup()
 	return nil
+}
+
+func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {

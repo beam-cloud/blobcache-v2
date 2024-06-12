@@ -22,7 +22,7 @@ func NewContentAddressableStorage(config BlobCacheConfig) (*ContentAddressableSt
 	}
 
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e6,
+		NumCounters: 1e7,
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
 	})
