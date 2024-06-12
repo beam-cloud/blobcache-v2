@@ -69,10 +69,10 @@ func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.L
 			wg.Add(1)
 
 			go func(hostname string) {
-				r := d.checkService(hostname)
+				r := d.checkService(ctx, hostname)
 				log.Println(hostname, ":", r)
 				wg.Done()
-			}(peer.HostName)
+			}(peer.DNSName)
 
 		}
 	}
@@ -82,22 +82,22 @@ func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.L
 }
 
 // checkService attempts to connect to the gRPC service and verifies its availability
-func (d *DiscoveryClient) checkService(host string) bool {
+func (d *DiscoveryClient) checkService(ctx context.Context, host string) bool {
 	addr := fmt.Sprintf("%s:%d", host, d.cfg.Port)
 
-	conn, err := grpc.Dial(
-		addr,
+	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(d.tailscale.Dial),
-	)
+	}
+
+	conn, err := grpc.Dial(addr, dialOpts...)
 	if err != nil {
-		log.Printf("Failed to connect to gRPC service<%s>: %v", host, err)
 		return false
 	}
 	defer conn.Close()
 
 	c := proto.NewBlobCacheClient(conn)
-	resp, err := c.GetState(context.TODO(), &proto.GetStateRequest{})
+	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
 	if err != nil {
 		return false
 	}
@@ -105,6 +105,5 @@ func (d *DiscoveryClient) checkService(host string) bool {
 	if resp.GetVersion() != BlobCacheVersion {
 		return false
 	}
-
 	return true
 }

@@ -55,7 +55,7 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 
 // Dial returns a TCP connection to a tailscale service
 func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.Tailscale.DialTimeoutS*int(time.Second)))
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
 
 	if t.server == nil {
