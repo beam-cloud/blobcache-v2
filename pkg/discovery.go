@@ -73,8 +73,6 @@ func (d *DiscoveryClient) processPeer(peer BlobCachePeer) {
 
 	// Naively add all peers
 	d.peers[peer.Addr] = peer
-
-	log.Println("Peers:", d.peers)
 }
 func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.LocalClient) error {
 	status, err := client.Status(ctx)
