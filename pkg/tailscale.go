@@ -41,7 +41,7 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 		return t.server
 	}
 
-	server := &tsnet.Server{
+	t.server = &tsnet.Server{
 		Hostname:   t.hostname,
 		Dir:        fmt.Sprintf("%s/%s", t.cfg.Tailscale.StateDir, t.hostname),
 		AuthKey:    t.cfg.Tailscale.AuthKey,
@@ -49,13 +49,12 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 		Ephemeral:  t.cfg.Tailscale.Ephemeral,
 	}
 
-	server.Logf = t.logF
-	return server
+	t.server.Logf = t.logF
+	return t.server
 }
 
 // Dial returns a TCP connection to a tailscale service
 func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
-	log.Println("starting tailscale dial")
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.Tailscale.DialTimeoutS*int(time.Second)))
 	defer cancel()
 
@@ -67,7 +66,5 @@ func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println("dialed")
 	return conn, nil
 }

@@ -77,14 +77,12 @@ func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.L
 		}
 	}
 
-	log.Println("waiting!")
 	wg.Wait()
 	return nil
 }
 
 // checkService attempts to connect to the gRPC service and verifies its availability
 func (d *DiscoveryClient) checkService(host string) bool {
-	log.Println("calling check svc for host: ", host)
 	addr := fmt.Sprintf("%s:%d", host, d.cfg.Port)
 
 	conn, err := grpc.Dial(
