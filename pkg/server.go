@@ -23,8 +23,10 @@ type CacheServiceOpts struct {
 
 type CacheService struct {
 	proto.UnimplementedBlobCacheServer
-	cas    *ContentAddressableStorage
-	config BlobCacheConfig
+	cas       *ContentAddressableStorage
+	config    BlobCacheConfig
+	tailscale *Tailscale
+	metadata  *BlobCacheMetadata
 }
 
 func NewCacheService(config BlobCacheConfig) (*CacheService, error) {
@@ -33,10 +35,52 @@ func NewCacheService(config BlobCacheConfig) (*CacheService, error) {
 		return nil, err
 	}
 
+	tailscale := NewTailscale(config.Tailscale)
+
+	metadata, err := NewBlobCacheMetadata(config.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
 	return &CacheService{
-		cas:    cas,
-		config: config,
+		cas:       cas,
+		config:    config,
+		tailscale: tailscale,
+		metadata:  metadata,
 	}, nil
+}
+
+func (cs *CacheService) StartServer(port uint) error {
+	addr := fmt.Sprintf("0.0.0.0:%d", port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Failed to listen on addr<%s>: %v", addr, err)
+	}
+
+	maxMessageSize := cs.config.GRPCMessageSizeBytes
+	s := grpc.NewServer(
+		grpc.MaxRecvMsgSize(maxMessageSize),
+		grpc.MaxSendMsgSize(maxMessageSize),
+	)
+	proto.RegisterBlobCacheServer(s, cs)
+
+	log.Printf("Running @ %s, config: %+v\n", addr, cs.config)
+	go s.Serve(listener)
+
+	cs.metadata.AddEntry(context.TODO())
+
+	// Create a channel to receive termination signals
+	terminationSignal := make(chan os.Signal, 1)
+	signal.Notify(terminationSignal, os.Interrupt, syscall.SIGTERM)
+
+	// Block until a termination signal is received
+	<-terminationSignal
+	log.Println("Termination signal received. Shutting down...")
+
+	// Close in-memory cache
+	s.GracefulStop()
+	cs.cas.Cleanup()
+	return nil
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
@@ -69,36 +113,4 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
-}
-
-func (cs *CacheService) StartServer(port uint) error {
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("Failed to listen on addr<%s>: %v", addr, err)
-	}
-
-	maxMessageSize := cs.config.GRPCMessageSizeBytes
-	s := grpc.NewServer(
-		grpc.MaxRecvMsgSize(maxMessageSize),
-		grpc.MaxSendMsgSize(maxMessageSize),
-	)
-	proto.RegisterBlobCacheServer(s, cs)
-
-	log.Printf("Config: %+v\n", cs.config)
-	log.Println("Running @", addr)
-	go s.Serve(listener)
-
-	// Create a channel to receive termination signals
-	terminationSignal := make(chan os.Signal, 1)
-	signal.Notify(terminationSignal, os.Interrupt, syscall.SIGTERM)
-
-	// Block until a termination signal is received
-	<-terminationSignal
-	log.Println("Termination signal received. Shutting down...")
-
-	// Close in-memory cache
-	s.GracefulStop()
-	cs.cas.Cleanup()
-	return nil
 }

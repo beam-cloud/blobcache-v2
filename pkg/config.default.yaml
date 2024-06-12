@@ -2,5 +2,15 @@ port: 2049
 persistencePath: /cache
 pageSizeBytes: 4000000 # 4MB
 maxCacheSizeMb: 100 # 100MB
-maxCacheMemoryPercent: 50 # 50%
 grpcMessageSizeBytes: 1000000000
+tailscale:
+  controlUrl:
+  user:
+  authKey:
+  debug: false
+  hostName:
+  ephemeral: true
+  stateDir: /tmp
+metadata:
+  redisAddr:
+  redisPasswd:

@@ -1,6 +1,9 @@
 chartVersion := 0.1.2
 imageVersion := latest
 
+init:
+	cp pkg/config.default.yaml config.yaml
+
 protocol:
 	cd proto && ./gen.sh
 

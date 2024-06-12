@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/dgraph-io/ristretto"
@@ -24,7 +22,7 @@ func NewContentAddressableStorage(config BlobCacheConfig) (*ContentAddressableSt
 	}
 
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 10,
+		NumCounters: 1e6,
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
 	})
@@ -44,11 +42,6 @@ func (cas *ContentAddressableStorage) Add(content []byte) (string, error) {
 	cas.mu.Lock()
 	defer cas.mu.Unlock()
 
-	persistencePath := filepath.Join(cas.config.PersistencePath, hashStr)
-	if err := os.MkdirAll(persistencePath, 0755); err != nil {
-		return "", fmt.Errorf("failed to create directory: %w", err)
-	}
-
 	// Break content into chunks and store on disk
 	for offset := int64(0); offset < int64(len(content)); offset += cas.config.PageSizeBytes {
 		chunkIdx := offset / cas.config.PageSizeBytes
@@ -58,11 +51,6 @@ func (cas *ContentAddressableStorage) Add(content []byte) (string, error) {
 		}
 
 		chunk := content[offset:end]
-		filePath := filepath.Join(persistencePath, fmt.Sprintf("%d", chunkIdx))
-		if err := os.WriteFile(filePath, chunk, 0644); err != nil {
-			return "", fmt.Errorf("failed to write file: %w", err)
-		}
-
 		chunkKey := fmt.Sprintf("%s-%d", hashStr, chunkIdx)
 		cas.inMemory.Set(chunkKey, chunk, int64(len(chunk)))
 	}
@@ -86,15 +74,6 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		// Check in-memory cache first
 		if chunk, found := cas.inMemory.Get(chunkKey); found {
 			chunkBytes = chunk.([]byte)
-		} else {
-			// Check disk cache
-			chunkPath := filepath.Join(cas.config.PersistencePath, hash, fmt.Sprintf("%d", chunkIdx))
-			chunkBytesRead, err := os.ReadFile(chunkPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read from disk cache: %w", err)
-			}
-			chunkBytes = chunkBytesRead
-			cas.inMemory.Set(chunkKey, chunkBytes, int64(len(chunkBytes)))
 		}
 
 		start := o % cas.config.PageSizeBytes

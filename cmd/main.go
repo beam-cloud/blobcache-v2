@@ -9,7 +9,7 @@ import (
 func main() {
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
-		log.Printf("failed to load config: %v\n", err)
+		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
 	config := configManager.GetConfig()

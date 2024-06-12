@@ -3,3 +3,4 @@
 bin/blobcache
 build.sh
 tmp/
+config.yaml
