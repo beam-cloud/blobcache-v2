@@ -1,7 +1,7 @@
 package blobcache
 
 const (
-	BlobCacheServicePrefix string = "blobcache-"
+	BlobCacheServicePrefix string = "blobcache"
 	BlobCacheVersion       string = "v0.1.0"
 )
 

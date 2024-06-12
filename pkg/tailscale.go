@@ -55,6 +55,7 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 
 // Dial returns a TCP connection to a tailscale service
 func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
+	log.Println("starting tailscale dial")
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.Tailscale.DialTimeoutS*int(time.Second)))
 	defer cancel()
 
@@ -67,5 +68,6 @@ func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
 		return nil, err
 	}
 
+	log.Println("dialed")
 	return conn, nil
 }
