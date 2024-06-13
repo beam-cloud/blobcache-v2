@@ -20,11 +20,11 @@ type DiscoveryClient struct {
 	mu        sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, onHostAdded func(*BlobCacheHost) error) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:       cfg,
 		tailscale: tailscale,
-		hostMap:   NewHostMap(onHostAdded),
+		hostMap:   hostMap,
 	}
 }
 
@@ -115,6 +115,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	}
 	defer conn.Close()
 
+	// Query host state to figure out what the round-trip times might look like
 	startTime := time.Now()
 	c := proto.NewBlobCacheClient(conn)
 	resp, err := c.GetState(ctx, &proto.GetStateRequest{})

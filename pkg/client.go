@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache/proto"
@@ -35,7 +36,9 @@ type BlobCacheClient struct {
 	hostname        string
 	discoveryClient *DiscoveryClient
 	tailscaleClient *tailscale.LocalClient
-	grpcClient      proto.BlobCacheClient
+	grpcClients     map[string]proto.BlobCacheClient
+	hostMap         *HostMap
+	mu              sync.Mutex
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
@@ -54,23 +57,14 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		hostname:        hostname,
 		tailscale:       tailscale,
 		tailscaleClient: tailscaleClient,
+		grpcClients:     make(map[string]proto.BlobCacheClient),
+		mu:              sync.Mutex{},
 	}
+	bc.hostMap = NewHostMap(bc.connectToHost)
+	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
 
-	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.connectToHost)
-
-	// Find and connect to nearest host
-	hosts, err := bc.getNearbyHosts()
-	if err != nil {
-		return nil, err
-	}
-
+	// Start searching for nearby hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
-
-	err = bc.connectToHost(hosts[0])
-	if err != nil {
-		return nil, err
-	}
-
 	return bc, nil
 }
 
@@ -103,7 +97,9 @@ func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
 		return err
 	}
 
-	c.grpcClient = proto.NewBlobCacheClient(conn)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
 	return nil
 }
 
@@ -111,7 +107,11 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client := c.getGRPCClient()
+	client, err := c.getGRPCClient()
+	if err != nil {
+		return nil, err
+	}
+
 	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 	if err != nil {
 		return nil, err
@@ -119,15 +119,36 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	return getContentResponse.Content, nil
 }
 
-func (c *BlobCacheClient) getGRPCClient() proto.BlobCacheClient {
-	return c.grpcClient
+func (c *BlobCacheClient) getGRPCClient() (proto.BlobCacheClient, error) {
+	host, err := c.hostMap.Closest(time.Second * 20)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("Found closest host: %+v\n", host)
+
+	client, exists := c.grpcClients[host.Addr]
+	if !exists {
+		return nil, errors.New("host not found")
+	}
+
+	/*
+		TODO: add in more realistic client routing logic
+	*/
+
+	return client, nil
 }
 
 func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	stream, err := c.grpcClient.StoreContent(ctx)
+	client, err := c.getGRPCClient()
+	if err != nil {
+		return "", err
+	}
+
+	stream, err := client.StoreContent(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -151,32 +172,16 @@ func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	resp, err := c.grpcClient.GetState(ctx, &proto.GetStateRequest{})
+	client, err := c.getGRPCClient()
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.GetState(ctx, &proto.GetStateRequest{})
 	if err != nil {
 		return err
 	}
 
 	log.Println("resp: ", resp)
 	return nil
-}
-
-func (c *BlobCacheClient) getNearbyHosts() ([]*BlobCacheHost, error) {
-	log.Println("Searching for nearby hosts....")
-
-	maxAttempts := 20
-	for attempts := 0; attempts < maxAttempts; attempts++ {
-		hosts, err := c.discoveryClient.FindNearbyHosts(context.TODO(), c.tailscaleClient)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(hosts) > 0 {
-			log.Println("Located host @ ", hosts[0].Addr)
-			return hosts, nil
-		}
-
-		time.Sleep(time.Second)
-	}
-
-	return nil, errors.New("no host found")
 }

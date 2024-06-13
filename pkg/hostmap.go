@@ -1,8 +1,11 @@
 package blobcache
 
 import (
+	"errors"
 	"log"
+	"sort"
 	"sync"
+	"time"
 )
 
 func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
@@ -36,13 +39,41 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 }
 
 func (hm *HostMap) Get(addr string) *BlobCacheHost {
-	existingHost, exists := hm.hosts[addr]
+	host, exists := hm.hosts[addr]
 	if !exists {
 		return nil
 	}
 
-	return existingHost
+	return host
 }
 
-func (hm *HostMap) Closest() {
+// Closest finds the nearest host within a given timeout
+// If no hosts are found, it will error out
+func (hm *HostMap) Closest(timeout time.Duration) (*BlobCacheHost, error) {
+	start := time.Now()
+	for {
+		// If there are hosts, find the closet one
+		if len(hm.hosts) > 0 {
+
+			hm.mu.Lock()
+			hosts := make([]*BlobCacheHost, 0, len(hm.hosts)) // Convert map into slice of hosts
+			for _, host := range hm.hosts {
+				hosts = append(hosts, host)
+			}
+			hm.mu.Unlock()
+
+			// Sort by rount-trip time, return closest
+			sort.Slice(hosts, func(i, j int) bool { return hosts[i].RTT < hosts[j].RTT })
+			return hosts[0], nil
+		}
+
+		elapsed := time.Since(start)
+
+		// We reached the timeout
+		if elapsed > timeout {
+			return nil, errors.New("no hosts found")
+		}
+
+		time.Sleep(time.Second)
+	}
 }

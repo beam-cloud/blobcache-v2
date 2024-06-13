@@ -29,6 +29,7 @@ type CacheService struct {
 	tailscale       *Tailscale
 	metadata        *BlobCacheMetadata
 	discoveryClient *DiscoveryClient
+	hostMap         *HostMap
 }
 
 func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
@@ -44,14 +45,17 @@ func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
 		return nil, err
 	}
 
+	hostMap := NewHostMap(nil)
 	tailscale := NewTailscale(hostname, cfg)
+
 	return &CacheService{
 		hostname:        hostname,
 		cas:             cas,
 		cfg:             cfg,
 		tailscale:       tailscale,
 		metadata:        metadata,
-		discoveryClient: NewDiscoveryClient(cfg, tailscale, nil),
+		discoveryClient: NewDiscoveryClient(cfg, tailscale, hostMap),
+		hostMap:         hostMap,
 	}, nil
 }
 
