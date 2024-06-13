@@ -1,17 +1,22 @@
 package blobcache
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
-func NewHostMap() *HostMap {
+func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
-		hosts: make(map[string]*BlobCacheHost),
-		mu:    sync.Mutex{},
+		hosts:       make(map[string]*BlobCacheHost),
+		mu:          sync.Mutex{},
+		onHostAdded: onHostAdded,
 	}
 }
 
 type HostMap struct {
-	hosts map[string]*BlobCacheHost
-	mu    sync.Mutex
+	hosts       map[string]*BlobCacheHost
+	mu          sync.Mutex
+	onHostAdded func(*BlobCacheHost) error
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {
@@ -24,6 +29,10 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 	}
 
 	hm.hosts[host.Addr] = host
+	if hm.onHostAdded != nil {
+		log.Println("Added new host @ ", host.Addr)
+		hm.onHostAdded(host)
+	}
 }
 
 func (hm *HostMap) Get(addr string) *BlobCacheHost {

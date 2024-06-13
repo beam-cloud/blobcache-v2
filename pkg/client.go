@@ -33,7 +33,7 @@ type BlobCacheClient struct {
 	cfg             BlobCacheConfig
 	tailscale       *Tailscale
 	hostname        string
-	discovery       *DiscoveryClient
+	discoveryClient *DiscoveryClient
 	tailscaleClient *tailscale.LocalClient
 	grpcClient      proto.BlobCacheClient
 }
@@ -53,9 +53,10 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		cfg:             cfg,
 		hostname:        hostname,
 		tailscale:       tailscale,
-		discovery:       NewDiscoveryClient(cfg, tailscale),
 		tailscaleClient: tailscaleClient,
 	}
+
+	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.connectToHost)
 
 	// Find and connect to nearest host
 	hosts, err := bc.getNearbyHosts()
@@ -63,9 +64,9 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
-	go bc.discovery.StartInBackground(bc.ctx)
+	go bc.discoveryClient.StartInBackground(bc.ctx)
 
-	err = bc.connect(hosts[0].Addr, "")
+	err = bc.connectToHost(hosts[0])
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +74,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	return bc, nil
 }
 
-func (c *BlobCacheClient) connect(addr, token string) error {
+func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
-	isTLS := strings.HasSuffix(addr, "443")
+	token := "" // TODO: add token auth
+	isTLS := strings.HasSuffix(host.Addr, "443")
 	if isTLS {
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
@@ -96,7 +98,7 @@ func (c *BlobCacheClient) connect(addr, token string) error {
 			))
 	}
 
-	conn, err := grpc.Dial(addr, dialOpts...)
+	conn, err := grpc.Dial(host.Addr, dialOpts...)
 	if err != nil {
 		return err
 	}
@@ -163,7 +165,7 @@ func (c *BlobCacheClient) getNearbyHosts() ([]*BlobCacheHost, error) {
 
 	maxAttempts := 20
 	for attempts := 0; attempts < maxAttempts; attempts++ {
-		hosts, err := c.discovery.FindNearbyHosts(context.TODO(), c.tailscaleClient)
+		hosts, err := c.discoveryClient.FindNearbyHosts(context.TODO(), c.tailscaleClient)
 		if err != nil {
 			return nil, err
 		}

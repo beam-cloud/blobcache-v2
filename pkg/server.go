@@ -23,12 +23,12 @@ type CacheServiceOpts struct {
 
 type CacheService struct {
 	proto.UnimplementedBlobCacheServer
-	hostname  string
-	cas       *ContentAddressableStorage
-	cfg       BlobCacheConfig
-	tailscale *Tailscale
-	metadata  *BlobCacheMetadata
-	discovery *DiscoveryClient
+	hostname        string
+	cas             *ContentAddressableStorage
+	cfg             BlobCacheConfig
+	tailscale       *Tailscale
+	metadata        *BlobCacheMetadata
+	discoveryClient *DiscoveryClient
 }
 
 func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
@@ -46,12 +46,12 @@ func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
 
 	tailscale := NewTailscale(hostname, cfg)
 	return &CacheService{
-		hostname:  hostname,
-		cas:       cas,
-		cfg:       cfg,
-		tailscale: tailscale,
-		metadata:  metadata,
-		discovery: NewDiscoveryClient(cfg, tailscale),
+		hostname:        hostname,
+		cas:             cas,
+		cfg:             cfg,
+		tailscale:       tailscale,
+		metadata:        metadata,
+		discoveryClient: NewDiscoveryClient(cfg, tailscale, nil),
 	}, nil
 }
 
@@ -74,7 +74,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	log.Printf("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(ln)
-	go cs.discovery.StartInBackground(context.TODO())
+	go cs.discoveryClient.StartInBackground(context.TODO())
 
 	// Create a channel to receive termination signals
 	terminationSignal := make(chan os.Signal, 1)

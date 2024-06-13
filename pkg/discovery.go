@@ -20,11 +20,11 @@ type DiscoveryClient struct {
 	mu        sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, onHostAdded func(*BlobCacheHost) error) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:       cfg,
 		tailscale: tailscale,
-		hostMap:   NewHostMap(),
+		hostMap:   NewHostMap(onHostAdded),
 	}
 }
 
