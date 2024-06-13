@@ -16,15 +16,57 @@ import (
 type DiscoveryClient struct {
 	tailscale *Tailscale
 	cfg       BlobCacheConfig
-	hosts     map[string]BlobCacheHost
+	hostMap   *HostMap
 	mu        sync.Mutex
+}
+
+func NewHostMap() *HostMap {
+	return &HostMap{
+		hosts: make(map[string]*BlobCacheHost),
+		mu:    sync.Mutex{},
+	}
+}
+
+type HostMap struct {
+	hosts map[string]*BlobCacheHost
+	mu    sync.Mutex
+}
+
+func (hm *HostMap) Set(host *BlobCacheHost) {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	_, exists := hm.hosts[host.Addr]
+	if exists {
+		return
+	}
+
+	hm.hosts[host.Addr] = host
+}
+
+func (hm *HostMap) Get(addr string) *BlobCacheHost {
+	existingHost, exists := hm.hosts[addr]
+	if !exists {
+		return nil
+	}
+
+	return existingHost
+}
+
+func (hm *HostMap) Closest() {
 }
 
 func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:       cfg,
 		tailscale: tailscale,
-		hosts:     make(map[string]BlobCacheHost),
+		hostMap:   NewHostMap(),
+	}
+}
+
+func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
+	for _, h := range newHosts {
+		d.hostMap.Set(h)
 	}
 }
 
@@ -40,17 +82,19 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			_, err := d.FindNearbyCacheServers(ctx, client)
+			hosts, err := d.FindNearbyHosts(ctx, client)
 			if err != nil {
 				continue
 			}
+
+			d.updateHostMap(hosts)
 		case <-ctx.Done():
 			return nil
 		}
 	}
 }
 
-func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
+func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
 	status, err := client.Status(ctx)
 	if err != nil {
 		return nil, err

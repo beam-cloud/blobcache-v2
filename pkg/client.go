@@ -18,6 +18,9 @@ import (
 	"tailscale.com/client/tailscale"
 )
 
+const getContentRequestTimeout = 5 * time.Second
+const storeContentRequestTimeout = 60 * time.Second
+
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
@@ -25,20 +28,17 @@ func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	}
 }
 
-const getContentRequestTimeout = 5 * time.Second
-const storeContentRequestTimeout = 60 * time.Second
-
 type BlobCacheClient struct {
+	ctx             context.Context
 	cfg             BlobCacheConfig
 	tailscale       *Tailscale
 	hostname        string
 	discovery       *DiscoveryClient
 	tailscaleClient *tailscale.LocalClient
-	conn            *grpc.ClientConn
 	grpcClient      proto.BlobCacheClient
 }
 
-func NewBlobCacheClient(cfg BlobCacheConfig) (*BlobCacheClient, error) {
+func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 	tailscale := NewTailscale(hostname, cfg)
 
@@ -49,6 +49,7 @@ func NewBlobCacheClient(cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	}
 
 	bc := &BlobCacheClient{
+		ctx:             ctx,
 		cfg:             cfg,
 		hostname:        hostname,
 		tailscale:       tailscale,
@@ -57,12 +58,14 @@ func NewBlobCacheClient(cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	}
 
 	// Find and connect to nearest host
-	nearestHost, err := bc.getNearestHost()
+	hosts, err := bc.getNearbyHosts()
 	if err != nil {
 		return nil, err
 	}
 
-	err = bc.connect(nearestHost.Addr, "")
+	go bc.discovery.StartInBackground(bc.ctx)
+
+	err = bc.connect(hosts[0].Addr, "")
 	if err != nil {
 		return nil, err
 	}
@@ -98,24 +101,28 @@ func (c *BlobCacheClient) connect(addr, token string) error {
 		return err
 	}
 
-	c.conn = conn
 	c.grpcClient = proto.NewBlobCacheClient(conn)
 	return nil
 }
 
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), getContentRequestTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	getContentResponse, err := c.grpcClient.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
+	client := c.getGRPCClient()
+	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 	if err != nil {
 		return nil, err
 	}
 	return getContentResponse.Content, nil
 }
 
+func (c *BlobCacheClient) getGRPCClient() proto.BlobCacheClient {
+	return c.grpcClient
+}
+
 func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), storeContentRequestTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
 	stream, err := c.grpcClient.StoreContent(ctx)
@@ -139,7 +146,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 }
 
 func (c *BlobCacheClient) GetState() error {
-	ctx, cancel := context.WithTimeout(context.Background(), getContentRequestTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
 	resp, err := c.grpcClient.GetState(ctx, &proto.GetStateRequest{})
@@ -151,27 +158,23 @@ func (c *BlobCacheClient) GetState() error {
 	return nil
 }
 
-func (c *BlobCacheClient) getNearestHost() (*BlobCacheHost, error) {
-	log.Println("Searching for nearaest host....")
+func (c *BlobCacheClient) getNearbyHosts() ([]*BlobCacheHost, error) {
+	log.Println("Searching for nearby hosts....")
 
 	maxAttempts := 20
 	for attempts := 0; attempts < maxAttempts; attempts++ {
-		hosts, err := c.discovery.FindNearbyCacheServers(context.TODO(), c.tailscaleClient)
+		hosts, err := c.discovery.FindNearbyHosts(context.TODO(), c.tailscaleClient)
 		if err != nil {
 			return nil, err
 		}
 
 		if len(hosts) > 0 {
 			log.Println("Located host @ ", hosts[0].Addr)
-			return hosts[0], nil
+			return hosts, nil
 		}
 
 		time.Sleep(time.Second)
 	}
 
 	return nil, errors.New("no host found")
-}
-
-func (c *BlobCacheClient) Close() error {
-	return c.conn.Close()
 }

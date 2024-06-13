@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"time"
 
 	blobcache "github.com/beam-cloud/blobcache/pkg"
 )
@@ -13,10 +15,16 @@ func main() {
 	}
 
 	cfg := configManager.GetConfig()
-	client, err := blobcache.NewBlobCacheClient(cfg)
+	ctx := context.Background()
+
+	client, err := blobcache.NewBlobCacheClient(ctx, cfg)
 	if err != nil {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	client.GetState()
+	for {
+		client.GetState()
+		time.Sleep(time.Second)
+	}
+
 }
