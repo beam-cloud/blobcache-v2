@@ -18,12 +18,5 @@ func main() {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	log.Println("CONFIG: ", cfg)
-
-	host, err := client.GetNearestHost()
-	if err != nil {
-		log.Printf("err finding host: %v\n", err)
-	}
-
-	log.Printf("Found host: %+v\n", host)
+	client.GetState()
 }
