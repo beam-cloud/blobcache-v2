@@ -1,6 +1,8 @@
 package blobcache
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -23,4 +25,23 @@ func NewBlobCacheClient(cfg BlobCacheConfig) (*BlobCacheClient, error) {
 		tailscale: tailscale,
 		discovery: NewDiscoveryClient(cfg, tailscale),
 	}, nil
+}
+
+func (c *BlobCacheClient) GetNearestHost() (*BlobCacheHost, error) {
+	server := c.tailscale.GetOrCreateServer()
+	client, err := server.LocalClient()
+	if err != nil {
+		return nil, err
+	}
+
+	hosts, err := c.discovery.FindNearbyCacheServers(context.TODO(), client)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(hosts) == 0 {
+		return nil, errors.New("no hosts found")
+	}
+
+	return hosts[0], nil
 }

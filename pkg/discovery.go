@@ -41,23 +41,27 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			err := d.FindNearbyCacheServers(ctx, client)
+			hosts, err := d.FindNearbyCacheServers(ctx, client)
 			if err != nil {
 				log.Printf("Failed to discover neighbors: %v\n", err)
 			}
+			log.Println("hosts: ", hosts)
 		case <-ctx.Done():
 			return nil
 		}
 	}
 }
 
-func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *tailscale.LocalClient) error {
+func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
 	status, err := client.Status(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	log.Println("Status: ", status)
+
 	wg := sync.WaitGroup{}
+	hosts := []*BlobCacheHost{}
 
 	// Iterate through the peers to find any matching blobcache services
 	for _, peer := range status.Peer {
@@ -73,26 +77,28 @@ func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *ta
 			go func(hostname string) {
 				defer wg.Done()
 
-				hostState, err := d.GetHostState(ctx, hostname)
+				addr := fmt.Sprintf("%s:%d", hostname, d.cfg.Port)
+				host, err := d.GetHostState(ctx, addr)
 				if err != nil {
 					return
 				}
 
-				log.Printf("hostState %v\n", hostState)
+				d.mu.Lock()
+				defer d.mu.Unlock()
+				hosts = append(hosts, host)
 
 			}(peer.DNSName)
 		}
 	}
 
 	wg.Wait()
-	return nil
+	return hosts, nil
 }
 
 // checkService attempts to connect to the gRPC service and verifies its availability
-func (d *DiscoveryClient) GetHostState(ctx context.Context, host string) (*BlobCacheHost, error) {
-	addr := fmt.Sprintf("%s:%d", host, d.cfg.Port)
-	peerData := BlobCacheHost{
-		Addr: host,
+func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobCacheHost, error) {
+	host := BlobCacheHost{
+		Addr: addr,
 		RTT:  0,
 	}
 
@@ -113,11 +119,11 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, host string) (*BlobC
 	if err != nil {
 		return nil, err
 	}
-	peerData.RTT = time.Since(startTime)
+	host.RTT = time.Since(startTime)
 
 	if resp.GetVersion() != BlobCacheVersion {
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
 	}
 
-	return &peerData, nil
+	return &host, nil
 }

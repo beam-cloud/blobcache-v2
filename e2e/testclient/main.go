@@ -15,9 +15,15 @@ func main() {
 	cfg := configManager.GetConfig()
 	client, err := blobcache.NewBlobCacheClient(cfg)
 	if err != nil {
-		log.Fatalf("err: %+v\n", err)
+		log.Fatalf("err: %v\n", err)
 	}
 
-	log.Println(client)
-	log.Println("hello world")
+	log.Println("CONFIG: ", cfg)
+
+	host, err := client.GetNearestHost()
+	if err != nil {
+		log.Printf("err finding host: %v\n", err)
+	}
+
+	log.Printf("Found host: %+v\n", host)
 }

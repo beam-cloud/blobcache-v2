@@ -41,6 +41,8 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 		return t.server
 	}
 
+	log.Println("HOSTNAME: ", t.hostname)
+	log.Println("State dir: ", fmt.Sprintf("%s/%s", t.cfg.Tailscale.StateDir, t.hostname))
 	t.server = &tsnet.Server{
 		Hostname:   t.hostname,
 		Dir:        fmt.Sprintf("%s/%s", t.cfg.Tailscale.StateDir, t.hostname),

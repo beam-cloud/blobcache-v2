@@ -9,7 +9,7 @@ tailscale:
   controlUrl:
   user:
   authKey:
-  debug: false
+  debug: true
   hostName:
   ephemeral: true
   stateDir: /tmp
