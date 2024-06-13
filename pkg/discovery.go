@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -41,11 +40,10 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			hosts, err := d.FindNearbyCacheServers(ctx, client)
+			_, err := d.FindNearbyCacheServers(ctx, client)
 			if err != nil {
-				log.Printf("Failed to discover neighbors: %v\n", err)
+				continue
 			}
-			log.Println("hosts: ", hosts)
 		case <-ctx.Done():
 			return nil
 		}
@@ -58,8 +56,6 @@ func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *ta
 		return nil, err
 	}
 
-	log.Println("Status: ", status)
-
 	wg := sync.WaitGroup{}
 	hosts := []*BlobCacheHost{}
 
@@ -70,8 +66,6 @@ func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *ta
 		}
 
 		if strings.Contains(peer.HostName, BlobCacheHostPrefix) {
-			log.Printf("Found service @ %s\n", peer.HostName)
-
 			wg.Add(1)
 
 			go func(hostname string) {
