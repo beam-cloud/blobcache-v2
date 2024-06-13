@@ -15,37 +15,33 @@ import (
 )
 
 type DiscoveryClient struct {
-	tailscale     *Tailscale
-	cfg           BlobCacheConfig
-	peers         map[string]BlobCachePeer
-	mu            sync.Mutex
-	processorChan chan BlobCachePeer
+	tailscale *Tailscale
+	cfg       BlobCacheConfig
+	hosts     map[string]BlobCacheHost
+	mu        sync.Mutex
 }
 
 func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale) *DiscoveryClient {
 	return &DiscoveryClient{
-		cfg:           cfg,
-		tailscale:     tailscale,
-		peers:         make(map[string]BlobCachePeer),
-		processorChan: make(chan BlobCachePeer),
+		cfg:       cfg,
+		tailscale: tailscale,
+		hosts:     make(map[string]BlobCacheHost),
 	}
 }
 
-func (d *DiscoveryClient) Start(ctx context.Context) error {
+// Used by blobcache servers to discover their closest peers
+func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	server := d.tailscale.GetOrCreateServer()
 	client, err := server.LocalClient()
 	if err != nil {
 		return err
 	}
 
-	// Start the peer processor
-	go d.peerProcessor(ctx)
-
 	ticker := time.NewTicker(time.Duration(d.cfg.DiscoveryIntervalS) * time.Second)
 	for {
 		select {
 		case <-ticker.C:
-			err := d.findNeighbors(ctx, client)
+			err := d.FindNearbyCacheServers(ctx, client)
 			if err != nil {
 				log.Printf("Failed to discover neighbors: %v\n", err)
 			}
@@ -55,26 +51,7 @@ func (d *DiscoveryClient) Start(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) peerProcessor(ctx context.Context) {
-	for {
-		select {
-		case peer := <-d.processorChan:
-			log.Println("Processing peer: ", peer.Addr, "RTT: ", peer.RTT)
-			d.processPeer(peer)
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (d *DiscoveryClient) processPeer(peer BlobCachePeer) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	// Naively add all peers
-	d.peers[peer.Addr] = peer
-}
-func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.LocalClient) error {
+func (d *DiscoveryClient) FindNearbyCacheServers(ctx context.Context, client *tailscale.LocalClient) error {
 	status, err := client.Status(ctx)
 	if err != nil {
 		return err
@@ -88,20 +65,21 @@ func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.L
 			continue
 		}
 
-		if strings.Contains(peer.HostName, BlobCacheServicePrefix) {
+		if strings.Contains(peer.HostName, BlobCacheHostPrefix) {
 			log.Printf("Found service @ %s\n", peer.HostName)
 
 			wg.Add(1)
 
 			go func(hostname string) {
 				defer wg.Done()
-				peerData, err := d.checkService(ctx, hostname)
+
+				hostState, err := d.GetHostState(ctx, hostname)
 				if err != nil {
-					log.Printf("Failed to check service %s: %v\n", hostname, err)
 					return
 				}
 
-				d.processorChan <- *peerData
+				log.Printf("hostState %v\n", hostState)
+
 			}(peer.DNSName)
 		}
 	}
@@ -111,9 +89,9 @@ func (d *DiscoveryClient) findNeighbors(ctx context.Context, client *tailscale.L
 }
 
 // checkService attempts to connect to the gRPC service and verifies its availability
-func (d *DiscoveryClient) checkService(ctx context.Context, host string) (*BlobCachePeer, error) {
+func (d *DiscoveryClient) GetHostState(ctx context.Context, host string) (*BlobCacheHost, error) {
 	addr := fmt.Sprintf("%s:%d", host, d.cfg.Port)
-	peerData := BlobCachePeer{
+	peerData := BlobCacheHost{
 		Addr: host,
 		RTT:  0,
 	}

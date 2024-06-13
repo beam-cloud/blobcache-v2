@@ -1,6 +1,7 @@
 *.tgz
 .DS_Store
 bin/blobcache
+bin/testclient
 build.sh
 tmp/
 config.yaml

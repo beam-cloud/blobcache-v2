@@ -32,15 +32,14 @@ type CacheService struct {
 }
 
 func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheServicePrefix, uuid.New().String()[:6])
-	log.Printf("Hostname is %s\n", hostname)
+	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 
-	cas, err := NewContentAddressableStorage(cfg)
+	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
+	cas, err := NewContentAddressableStorage(metadata, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -72,10 +71,10 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	log.Printf("Running @ %s, cfg: %+v\n", addr, cs.cfg)
-	go s.Serve(ln)
+	log.Printf("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
-	go cs.discovery.Start(context.TODO())
+	go s.Serve(ln)
+	go cs.discovery.StartInBackground(context.TODO())
 
 	// Create a channel to receive termination signals
 	terminationSignal := make(chan os.Signal, 1)
@@ -104,6 +103,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 }
 
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
+	ctx := stream.Context()
 	var content []byte
 
 	for {
@@ -119,7 +119,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		content = append(content, req.Content...)
 	}
 
-	hash, err := cs.cas.Add(content)
+	hash, err := cs.cas.Add(ctx, content)
 	if err != nil {
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}

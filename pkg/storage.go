@@ -1,6 +1,7 @@
 package blobcache
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,12 +12,13 @@ import (
 )
 
 type ContentAddressableStorage struct {
-	inMemory *ristretto.Cache
+	cache    *ristretto.Cache
 	config   BlobCacheConfig
 	mu       sync.RWMutex
+	metadata *BlobCacheMetadata
 }
 
-func NewContentAddressableStorage(config BlobCacheConfig) (*ContentAddressableStorage, error) {
+func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.MaxCacheSizeMb <= 0 || config.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
@@ -31,11 +33,12 @@ func NewContentAddressableStorage(config BlobCacheConfig) (*ContentAddressableSt
 	}
 
 	return &ContentAddressableStorage{
-		inMemory: cache,
+		cache:    cache,
+		metadata: metadata,
 	}, nil
 }
 
-func (cas *ContentAddressableStorage) Add(content []byte) (string, error) {
+func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte) (string, error) {
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
 
@@ -52,8 +55,14 @@ func (cas *ContentAddressableStorage) Add(content []byte) (string, error) {
 
 		chunk := content[offset:end]
 		chunkKey := fmt.Sprintf("%s-%d", hashStr, chunkIdx)
-		cas.inMemory.Set(chunkKey, chunk, int64(len(chunk)))
+
+		added := cas.cache.Set(chunkKey, chunk, int64(len(chunk)))
+		if !added {
+			return "", errors.New("unable to cache: set dropped")
+		}
 	}
+
+	cas.metadata.AddEntry(ctx)
 
 	return hashStr, nil
 }
@@ -63,6 +72,8 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 	defer cas.mu.RUnlock()
 
 	var result []byte
+	result = make([]byte, 0, length)
+
 	remainingLength := length
 
 	o := offset
@@ -72,7 +83,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		// Check in-memory cache first
-		if chunk, found := cas.inMemory.Get(chunkKey); found {
+		if chunk, found := cas.cache.Get(chunkKey); found {
 			chunkBytes = chunk.([]byte)
 		}
 
@@ -91,11 +102,8 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		// Read only the required portion of the chunk
-		requiredChunkBytes := chunkBytes[start:end]
-
 		// Append the required bytes to the result
-		result = append(result, requiredChunkBytes...)
+		result = append(result, chunkBytes[start:end]...)
 
 		// Update the remaining length and current offset for the next iteration
 		remainingLength -= readLength
@@ -106,7 +114,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 }
 
 func (cas *ContentAddressableStorage) Cleanup() {
-	cas.inMemory.Close()
+	cas.cache.Close()
 }
 
 func min(a, b int64) int64 {

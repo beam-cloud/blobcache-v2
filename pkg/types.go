@@ -3,8 +3,9 @@ package blobcache
 import "time"
 
 const (
-	BlobCacheServicePrefix string = "blobcache"
-	BlobCacheVersion       string = "v0.1.0"
+	BlobCacheHostPrefix   string = "blobcache-host"
+	BlobCacheClientPrefix string = "blobcache-client"
+	BlobCacheVersion      string = "v0.1.0"
 )
 
 type BlobCacheConfig struct {
@@ -31,17 +32,18 @@ type TailscaleConfig struct {
 }
 
 type MetadataConfig struct {
-	RedisAddr   string `key:"redisAddr" json:"redis_addr"`
-	RedisPasswd string `key:"redisPasswd" json:"redis_passwd"`
+	RedisAddr       string `key:"redisAddr" json:"redis_addr"`
+	RedisPasswd     string `key:"redisPasswd" json:"redis_passwd"`
+	RedisTLSEnabled bool   `key:"redisTLSEnabled" json:"redis_tls_enabled"`
 }
 
-type BlobCachePeer struct {
+type BlobCacheHost struct {
 	RTT  time.Duration
 	Addr string
 }
 
 type BlobCacheEntry struct {
-	Hash string
-	Size uint64
-	// Chunks []BlobCacheEntryChunk
+	Hash    string
+	Size    uint64
+	Content []byte
 }

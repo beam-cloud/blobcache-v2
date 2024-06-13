@@ -17,3 +17,4 @@ tailscale:
 metadata:
   redisAddr:
   redisPasswd:
+  redisTLSEnabled: false

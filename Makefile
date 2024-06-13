@@ -23,3 +23,6 @@ build-chart:
 publish-chart:
 	helm push beam-blobcache-chart-$(chartVersion).tgz oci://public.ecr.aws/n4e0e1y0
 	rm beam-blobcache-chart-$(chartVersion).tgz
+
+testclient:
+	go build -o bin/testclient e2e/testclient/main.go
