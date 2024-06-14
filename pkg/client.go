@@ -78,18 +78,18 @@ func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
+	maxMessageSize := c.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
 		grpc.WithContextDialer(c.tailscale.Dial),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxMessageSize),
+			grpc.MaxCallSendMsgSize(maxMessageSize),
+		),
 	}
 
-	maxMessageSize := c.cfg.GRPCMessageSizeBytes
 	if token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(token)),
-			grpc.WithDefaultCallOptions(
-				grpc.MaxCallRecvMsgSize(maxMessageSize),
-				grpc.MaxCallSendMsgSize(maxMessageSize),
-			))
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(token)))
 	}
 
 	conn, err := grpc.Dial(host.Addr, dialOpts...)

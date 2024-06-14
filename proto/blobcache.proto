@@ -17,7 +17,8 @@ message GetContentRequest {
 }
 
 message GetContentResponse {
-  bytes content = 1; // Content data
+  bool ok = 1;
+  bytes content = 2; // Content data
 }
 
 message StoreContentRequest {

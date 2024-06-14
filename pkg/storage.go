@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/dgraph-io/ristretto"
@@ -33,6 +34,7 @@ func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheC
 	}
 
 	return &ContentAddressableStorage{
+		config:   config,
 		cache:    cache,
 		metadata: metadata,
 	}, nil
@@ -45,7 +47,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte) (
 	cas.mu.Lock()
 	defer cas.mu.Unlock()
 
-	// Break content into chunks and store on disk
+	// Break content into chunks and store
 	for offset := int64(0); offset < int64(len(content)); offset += cas.config.PageSizeBytes {
 		chunkIdx := offset / cas.config.PageSizeBytes
 		end := offset + cas.config.PageSizeBytes
@@ -83,8 +85,12 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		// Check in-memory cache first
-		if chunk, found := cas.cache.Get(chunkKey); found {
+		chunk, found := cas.cache.Get(chunkKey)
+		if found {
 			chunkBytes = chunk.([]byte)
+		} else {
+			log.Println("content not found")
+			return nil, errors.New("content not found")
 		}
 
 		start := o % cas.config.PageSizeBytes

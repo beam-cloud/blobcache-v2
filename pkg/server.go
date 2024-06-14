@@ -101,9 +101,9 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
-		return nil, err
+		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
-	return &proto.GetContentResponse{Content: content}, nil
+	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"log"
-	"time"
+	"os"
 
 	blobcache "github.com/beam-cloud/blobcache/pkg"
 )
@@ -22,9 +24,30 @@ func main() {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	for {
-		client.GetState()
-		time.Sleep(time.Second)
+	chunks := make(chan []byte, 1)
+
+	b, err := os.ReadFile("e2e/testclient/testdata/test2.bin")
+	if err != nil {
+		fmt.Print(err)
 	}
 
+	// Read file in chunks and dump into channel for StoreContent RPC calls
+	go func() {
+		log.Printf("read %d bytes\n", len(b))
+		chunks <- b[:]
+		close(chunks)
+	}()
+
+	hash, err := client.StoreContent(chunks)
+	if err != nil {
+		log.Fatalf("err: %v\n", err)
+	}
+
+	content, err := client.GetContent(hash, 0, int64(len(b)))
+	if err != nil {
+		log.Fatalf("err: %v\n", err)
+	}
+
+	log.Printf("content length: %d, file length: %d\n", len(content), len(b))
+	fmt.Println(bytes.Compare(content, b)) // 0, means "equal"
 }
