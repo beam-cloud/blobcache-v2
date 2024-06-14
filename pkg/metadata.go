@@ -33,6 +33,10 @@ func (m *BlobCacheMetadata) AddEntry(ctx context.Context) error {
 	return m.rdb.Set(ctx, MetadataKeys.MetadataPrefix(), "true", 0).Err()
 }
 
+func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context) error {
+	return m.rdb.Set(ctx, MetadataKeys.MetadataPrefix(), "true", 0).Err()
+}
+
 // Metadata key storage format
 var (
 	metadataPrefix   string = "blobcache"

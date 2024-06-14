@@ -1,7 +1,9 @@
-blobcache consists of a series of in-memory caches that store content addressed binary blobs
+## blobcache metadata storage
 
-the metadata server encodes the location and some other information specific objects
-metadata structure:
+Blobcache consists of a series of in-memory caches that store content addressed binary blobs across nodes. The metadata server encodes the location and some other information specific objects.
+
+---
+### redis key structure
 
 blobcache:entry:<HASH> -->
     {
@@ -11,10 +13,25 @@ blobcache:entry:<HASH> -->
         "content": []bytes OR nil
     }
 
-blobcache:ref:<HASH> -->
+blobcache:location:<HASH> -->
     SET {blobcache-host-9f5739.tailc480d.ts.net, blobcache-host-22222.tailc480d.ts.net}
 
-on insert, the goal is to:
+blobcache:ref:hash -->
+    INT (inc/dec) ref on SET/EVICT
+
+---
+### client requests
+
+on insert:
     - pick a shard (maybe the closest), and store the content
     - when done, we will add a ref to that particular shard
     - we will also INC the ref count
+
+on evict:
+    - convert key to hash
+    - decrement ref 
+    - srem location
+    - evict all other chunks
+
+on retrieve:
+    - TODO
