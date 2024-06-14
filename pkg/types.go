@@ -1,6 +1,9 @@
 package blobcache
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	BlobCacheHostPrefix   string = "blobcache-host"
@@ -59,4 +62,12 @@ type BlobCacheEntry struct {
 	Size    int64  `redis:"size" json:"size"`
 	Content []byte `redis:"content" json:"content"`
 	Source  string `redis:"source" json:"source"`
+}
+
+type ErrEntryNotFound struct {
+	Hash string
+}
+
+func (e *ErrEntryNotFound) Error() string {
+	return fmt.Sprintf("entry not found: %s", e.Hash)
 }
