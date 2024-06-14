@@ -57,6 +57,13 @@ const (
 	ClientRequestTypeRetrieval
 )
 
+type ContentSource string
+
+const (
+	ContentSourceS3      ContentSource = "s3://"
+	ContentSourceJuiceFS ContentSource = "jfs://"
+)
+
 type BlobCacheEntry struct {
 	Hash    string `redis:"hash" json:"hash"`
 	Size    int64  `redis:"size" json:"size"`
