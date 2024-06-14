@@ -42,6 +42,11 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 		return err
 	}
 
+	hosts, err := d.FindNearbyHosts(ctx, client)
+	if err == nil {
+		d.updateHostMap(hosts)
+	}
+
 	ticker := time.NewTicker(time.Duration(d.cfg.DiscoveryIntervalS) * time.Second)
 	for {
 		select {

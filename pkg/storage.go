@@ -93,7 +93,8 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		log.Println("GETTING KEY: ", chunkKey)
-		// Check in-memory cache first
+
+		// Check cache for chunk
 		chunk, found := cas.cache.Get(chunkKey)
 		if found {
 			chunkBytes = chunk.([]byte)

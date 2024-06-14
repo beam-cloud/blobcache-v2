@@ -35,17 +35,27 @@ func (m *BlobCacheMetadata) AddEntry(ctx context.Context) error {
 
 // Metadata key storage format
 var (
-	metadataPrefix string = "blobcache"
-	metadataEntry  string = "blobcache:entry:%s"
+	metadataPrefix   string = "blobcache"
+	metadataEntry    string = "blobcache:entry:%s"
+	metadataLocation string = "blobcache:location:%s"
+	metadataRef      string = "blobcache:ref:%s"
 )
 
-// Workspace keys
+// Metadata keys
 func (k *metadataKeys) MetadataPrefix() string {
 	return metadataPrefix
 }
 
 func (k *metadataKeys) MetadataEntry(hash string) string {
 	return fmt.Sprintf(metadataEntry, hash)
+}
+
+func (k *metadataKeys) MetadataLocation(hash string) string {
+	return fmt.Sprintf(metadataLocation, hash)
+}
+
+func (k *metadataKeys) MetadataRef(hash string) string {
+	return fmt.Sprintf(metadataRef, hash)
 }
 
 var MetadataKeys = &metadataKeys{}

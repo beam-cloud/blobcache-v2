@@ -42,8 +42,21 @@ type BlobCacheHost struct {
 	Addr string
 }
 
+type ClientRequest struct {
+	rt   ClientRequestType
+	hash string
+}
+
+type ClientRequestType int
+
+const (
+	ClientRequestTypeStorage ClientRequestType = iota
+	ClientRequestTypeRetrieval
+)
+
 type BlobCacheEntry struct {
-	Hash    string
-	Size    uint64
-	Content []byte
+	Hash    string `redis:"hash" json:"hash"`
+	Size    uint64 `redis:"size" json:"size"`
+	Content []byte `redis:"content" json:"content"`
+	Source  string `redis:"source" json:"source"`
 }

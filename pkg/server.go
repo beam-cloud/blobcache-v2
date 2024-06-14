@@ -95,6 +95,7 @@ func (cs *CacheService) StartServer(port uint) error {
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+	// cs.cas.cache.Metrics()
 	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }
 

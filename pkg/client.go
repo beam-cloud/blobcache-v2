@@ -39,6 +39,7 @@ type BlobCacheClient struct {
 	grpcClients     map[string]proto.BlobCacheClient
 	hostMap         *HostMap
 	mu              sync.Mutex
+	metadata        *BlobCacheMetadata
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
@@ -51,6 +52,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
+	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
 	bc := &BlobCacheClient{
 		ctx:             ctx,
 		cfg:             cfg,
@@ -59,6 +65,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		tailscaleClient: tailscaleClient,
 		grpcClients:     make(map[string]proto.BlobCacheClient),
 		mu:              sync.Mutex{},
+		metadata:        metadata,
 	}
 	bc.hostMap = NewHostMap(bc.connectToHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
@@ -107,7 +114,10 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient()
+	client, err := c.getGRPCClient(&ClientRequest{
+		rt:   ClientRequestTypeRetrieval,
+		hash: hash,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -116,25 +126,34 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	if err != nil {
 		return nil, err
 	}
+
 	return getContentResponse.Content, nil
 }
 
-func (c *BlobCacheClient) getGRPCClient() (proto.BlobCacheClient, error) {
-	host, err := c.hostMap.Closest(time.Second * 30)
-	if err != nil {
-		return nil, err
+func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, error) {
+	var host *BlobCacheHost = nil
+	var err error = nil
+
+	switch request.rt {
+	case ClientRequestTypeStorage:
+		host, err = c.hostMap.Closest(time.Second * 30)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("Found closest host: %+v\n", host)
+	case ClientRequestTypeRetrieval:
+		fallthrough
+	default:
 	}
 
-	log.Printf("Found closest host: %+v\n", host)
+	if host == nil {
+		return nil, errors.New("no host found")
+	}
 
 	client, exists := c.grpcClients[host.Addr]
 	if !exists {
 		return nil, errors.New("host not found")
 	}
-
-	/*
-		TODO: add in more realistic client routing logic
-	*/
 
 	return client, nil
 }
@@ -143,7 +162,9 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient()
+	client, err := c.getGRPCClient(&ClientRequest{
+		rt: ClientRequestTypeStorage,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -172,7 +193,7 @@ func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient()
+	client, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval})
 	if err != nil {
 		return err
 	}
