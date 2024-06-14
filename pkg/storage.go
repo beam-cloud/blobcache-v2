@@ -19,6 +19,12 @@ type ContentAddressableStorage struct {
 	metadata *BlobCacheMetadata
 }
 
+func cacheItemEvicted(item *ristretto.Item) {
+	log.Println("evicted item: ", item.Key)
+	// TODO: make sure on eviction, we evict all chunks,
+	// and update metadata to say we no longer have the file
+}
+
 func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.MaxCacheSizeMb <= 0 || config.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
@@ -28,6 +34,7 @@ func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheC
 		NumCounters: 1e7,
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
+		OnEvict:     cacheItemEvicted,
 	})
 	if err != nil {
 		return nil, err
@@ -58,6 +65,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte) (
 		chunk := content[offset:end]
 		chunkKey := fmt.Sprintf("%s-%d", hashStr, chunkIdx)
 
+		log.Println("SETTING KEY: ", chunkKey)
 		added := cas.cache.Set(chunkKey, chunk, int64(len(chunk)))
 		if !added {
 			return "", errors.New("unable to cache: set dropped")
@@ -84,6 +92,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		chunkIdx := o / cas.config.PageSizeBytes
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
+		log.Println("GETTING KEY: ", chunkKey)
 		// Check in-memory cache first
 		chunk, found := cas.cache.Get(chunkKey)
 		if found {
