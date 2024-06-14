@@ -5,7 +5,7 @@ dev:
     sync:
       - ../:/workspace
     environment:
-      PATH: ${PATH}:/usr/lib/go-1.21/bin/:/workspace/bin
+      PATH: ${PATH}:/usr/local/go/bin:/workspace/bin
       BUILD_COMMAND: "go build -o /workspace/bin/blobcache /workspace/cmd/main.go"
       BUILD_BINARY_PATH: "/workspace/bin/blobcache"
       CONFIG_PATH: /workspace/config.yaml
