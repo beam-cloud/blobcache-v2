@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	mapset "github.com/deckarep/golang-set/v2"
 )
 
 func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
@@ -36,6 +38,20 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 		log.Println("Added new host @ ", host.Addr)
 		hm.onHostAdded(host)
 	}
+}
+
+func (hm *HostMap) Members() mapset.Set[string] {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	set := mapset.NewSet[string]()
+	for addr := range hm.hosts {
+		set.Add(hm.hosts[addr].Addr)
+	}
+
+	log.Println("set: ", set)
+
+	return set
 }
 
 func (hm *HostMap) Get(addr string) *BlobCacheHost {

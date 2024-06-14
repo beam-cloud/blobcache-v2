@@ -84,6 +84,7 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 			go func(hostname string) {
 				defer wg.Done()
 
+				hostname = hostname[:len(hostname)-1] // Strip the last period
 				addr := fmt.Sprintf("%s:%d", hostname, d.cfg.Port)
 				host, err := d.GetHostState(ctx, addr)
 				if err != nil {

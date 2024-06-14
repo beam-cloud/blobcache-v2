@@ -40,6 +40,7 @@ type BlobCacheClient struct {
 	hostMap         *HostMap
 	mu              sync.Mutex
 	metadata        *BlobCacheMetadata
+	closestHost     *BlobCacheHost
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
@@ -66,6 +67,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		grpcClients:     make(map[string]proto.BlobCacheClient),
 		mu:              sync.Mutex{},
 		metadata:        metadata,
+		closestHost:     nil,
 	}
 	bc.hostMap = NewHostMap(bc.connectToHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
@@ -136,13 +138,28 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		host, err = c.hostMap.Closest(time.Second * 30)
+		if c.closestHost != nil {
+			host = c.closestHost
+		} else {
+			host, err = c.hostMap.Closest(time.Second * 30)
+			if err != nil {
+				return nil, err
+			}
+			c.closestHost = host
+		}
+	case ClientRequestTypeRetrieval:
+		hostAddrs, err := c.metadata.GetEntryLocations(c.ctx, request.hash)
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("Found closest host: %+v\n", host)
-	case ClientRequestTypeRetrieval:
-		fallthrough
+
+		intersection := hostAddrs.Intersect(c.hostMap.Members())
+		addr, ok := intersection.Pop()
+		if !ok {
+			return nil, errors.New("no host found")
+		}
+
+		host = c.hostMap.Get(addr)
 	default:
 	}
 

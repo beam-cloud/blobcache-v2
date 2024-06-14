@@ -6,6 +6,7 @@ import (
 
 	"github.com/beam-cloud/beta9/pkg/common"
 	"github.com/beam-cloud/beta9/pkg/types"
+	mapset "github.com/deckarep/golang-set/v2"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -72,6 +73,20 @@ func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context, hash string) (*Bl
 	}
 
 	return entry, nil
+}
+
+func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
+	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataLocation(hash)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	hostSet := mapset.NewSet[string]()
+	for _, addr := range hostAddrs {
+		hostSet.Add(addr)
+	}
+
+	return hostSet, err
 }
 
 func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
