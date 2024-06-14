@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	proto "github.com/beam-cloud/blobcache/v2/proto"
+	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"github.com/google/uuid"
 
 	"google.golang.org/grpc"

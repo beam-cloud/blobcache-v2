@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	blobcache "github.com/beam-cloud/blobcache/v2/pkg"
+	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
 
 func main() {
