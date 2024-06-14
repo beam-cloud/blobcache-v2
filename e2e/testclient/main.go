@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	blobcache "github.com/beam-cloud/blobcache/pkg"
+	blobcache "github.com/beam-cloud/blobcache/v2/pkg"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 
 	chunks := make(chan []byte, 1)
 
-	b, err := os.ReadFile("e2e/testclient/testdata/test2.bin")
+	b, err := os.ReadFile("e2e/testclient/testdata/test1.bin")
 	if err != nil {
 		fmt.Print(err)
 	}

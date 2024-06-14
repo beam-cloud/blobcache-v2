@@ -1,4 +1,4 @@
-module github.com/beam-cloud/blobcache
+module github.com/beam-cloud/blobcache/v2
 
 go 1.22.0
 

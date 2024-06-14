@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/beam-cloud/blobcache/proto"
+	proto "github.com/beam-cloud/blobcache/v2/proto"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -120,7 +120,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 }
 
 func (c *BlobCacheClient) getGRPCClient() (proto.BlobCacheClient, error) {
-	host, err := c.hostMap.Closest(time.Second * 20)
+	host, err := c.hostMap.Closest(time.Second * 30)
 	if err != nil {
 		return nil, err
 	}

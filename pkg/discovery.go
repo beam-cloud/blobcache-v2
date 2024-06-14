@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/beam-cloud/blobcache/proto"
+	proto "github.com/beam-cloud/blobcache/v2/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"tailscale.com/client/tailscale"

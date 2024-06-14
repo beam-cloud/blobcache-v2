@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	blobcache "github.com/beam-cloud/blobcache/pkg"
+	blobcache "github.com/beam-cloud/blobcache/v2/pkg"
 )
 
 func main() {
