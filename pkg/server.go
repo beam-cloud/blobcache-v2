@@ -34,13 +34,17 @@ type CacheService struct {
 
 func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+	currentHost := &BlobCacheHost{
+		Addr: fmt.Sprintf("%s.%s:%d", hostname, cfg.Tailscale.HostName, cfg.Port),
+		RTT:  0,
+	}
 
 	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	cas, err := NewContentAddressableStorage(metadata, cfg)
+	cas, err := NewContentAddressableStorage(currentHost, metadata, cfg)
 	if err != nil {
 		return nil, err
 	}

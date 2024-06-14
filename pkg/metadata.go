@@ -29,11 +29,24 @@ func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
 	}, nil
 }
 
-func (m *BlobCacheMetadata) AddEntry(ctx context.Context) error {
+func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry, host *BlobCacheHost) error {
+	entryKey := MetadataKeys.MetadataEntry(entry.Hash)
+
+	// TODO: first check if entry exists in redis setting anything
+	err := m.rdb.HSet(context.TODO(), entryKey, common.ToSlice(entry)).Err()
+
+	if err != nil {
+		return fmt.Errorf("failed to set entry <%v>: %w", entryKey, err)
+	}
+
+	return m.addEntryLocation(ctx, host)
+}
+
+func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context) error {
 	return m.rdb.Set(ctx, MetadataKeys.MetadataPrefix(), "true", 0).Err()
 }
 
-func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context) error {
+func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, host *BlobCacheHost) error {
 	return m.rdb.Set(ctx, MetadataKeys.MetadataPrefix(), "true", 0).Err()
 }
 

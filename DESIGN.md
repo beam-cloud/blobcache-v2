@@ -9,7 +9,7 @@ blobcache:entry:<HASH> -->
     {
         "hash": <HASH>,
         "size:": uint64,
-        "source": s3://oci-images-stage/myfile.bin:0,1000
+        "source": s3://oci-images-stage/myfile.bin,0-1000
         "content": []bytes OR nil
     }
 

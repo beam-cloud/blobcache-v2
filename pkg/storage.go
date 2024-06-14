@@ -13,10 +13,11 @@ import (
 )
 
 type ContentAddressableStorage struct {
-	cache    *ristretto.Cache
-	config   BlobCacheConfig
-	mu       sync.RWMutex
-	metadata *BlobCacheMetadata
+	currentHost *BlobCacheHost
+	cache       *ristretto.Cache
+	config      BlobCacheConfig
+	mu          sync.RWMutex
+	metadata    *BlobCacheMetadata
 }
 
 func cacheItemEvicted(item *ristretto.Item) {
@@ -25,7 +26,7 @@ func cacheItemEvicted(item *ristretto.Item) {
 	// and update metadata to say we no longer have the file
 }
 
-func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
+func NewContentAddressableStorage(currentHost *BlobCacheHost, metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.MaxCacheSizeMb <= 0 || config.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
@@ -41,9 +42,10 @@ func NewContentAddressableStorage(metadata *BlobCacheMetadata, config BlobCacheC
 	}
 
 	return &ContentAddressableStorage{
-		config:   config,
-		cache:    cache,
-		metadata: metadata,
+		config:      config,
+		cache:       cache,
+		metadata:    metadata,
+		currentHost: currentHost,
 	}, nil
 }
 
@@ -54,12 +56,14 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte) (
 	cas.mu.Lock()
 	defer cas.mu.Unlock()
 
+	size := int64(len(content))
+
 	// Break content into chunks and store
-	for offset := int64(0); offset < int64(len(content)); offset += cas.config.PageSizeBytes {
+	for offset := int64(0); offset < size; offset += cas.config.PageSizeBytes {
 		chunkIdx := offset / cas.config.PageSizeBytes
 		end := offset + cas.config.PageSizeBytes
-		if end > int64(len(content)) {
-			end = int64(len(content))
+		if end > size {
+			end = size
 		}
 
 		chunk := content[offset:end]
@@ -72,7 +76,16 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte) (
 		}
 	}
 
-	cas.metadata.AddEntry(ctx)
+	// Store entry
+	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
+		Hash:    hashStr,
+		Size:    size,
+		Content: nil,
+		Source:  "s3://mock-bucket/key,0-1000",
+	}, cas.currentHost)
+	if err != nil {
+		return "", err
+	}
 
 	return hashStr, nil
 }

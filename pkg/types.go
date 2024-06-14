@@ -56,7 +56,7 @@ const (
 
 type BlobCacheEntry struct {
 	Hash    string `redis:"hash" json:"hash"`
-	Size    uint64 `redis:"size" json:"size"`
+	Size    int64  `redis:"size" json:"size"`
 	Content []byte `redis:"content" json:"content"`
 	Source  string `redis:"source" json:"source"`
 }
