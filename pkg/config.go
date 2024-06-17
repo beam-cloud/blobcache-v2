@@ -65,7 +65,7 @@ func NewConfigManager[T any]() (*ConfigManager[T], error) {
 	configJson := os.Getenv("CONFIG_JSON")
 	if configJson != "" {
 		if err := cm.LoadConfig(JSONConfigFormat, rawbytes.Provider([]byte(configJson))); err != nil {
-			log.Printf("Error loading configuration from CONFIG_JSON: %v", err)
+			log.Fatalf("Error loading configuration from CONFIG_JSON: %v", err)
 		} else {
 			configFormat = JSONConfigFormat
 		}
@@ -73,7 +73,7 @@ func NewConfigManager[T any]() (*ConfigManager[T], error) {
 
 	// If debug mode is enabled, print the current configuration.
 	if cm.kf.Bool("debugMode") {
-		log.Println("Debug mode enabled. Current configuration:")
+		log.Print("Debug mode enabled. Current configuration:")
 		log.Println(cm.Print())
 	}
 

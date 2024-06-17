@@ -99,14 +99,13 @@ func (cs *CacheService) StartServer(port uint) error {
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
-	// cs.cas.cache.Metrics()
 	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
-		Logger.Errorf("GET - [%s] - %v", req.Hash, err)
+		Logger.Debugf("GET - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
@@ -125,6 +124,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		if err != nil {
+			Logger.Debugf("STORE - %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
@@ -133,6 +133,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
 	if err != nil {
+		Logger.Debugf("STORE - [%s] - %v", hash, err)
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 

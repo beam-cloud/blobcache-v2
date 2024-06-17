@@ -43,6 +43,9 @@ func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry,
 		return err
 	}
 
+	// m.rdb.ZAdd()
+	// m.rdb.ZRangeByScore()
+
 	// Entry not found, add it
 	if exists == 0 {
 		err := m.rdb.HSet(ctx, entryKey, common.ToSlice(entry)).Err()

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/dgraph-io/ristretto"
@@ -46,6 +47,11 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 	return cas, nil
 }
 
+type cacheValue struct {
+	Hash    string
+	Content []byte
+}
+
 func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, source string) (string, error) {
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
@@ -54,6 +60,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 	defer cas.mu.Unlock()
 
 	size := int64(len(content))
+	chunkKeys := []string{}
 
 	// Break content into chunks and store
 	for offset := int64(0); offset < size; offset += cas.config.PageSizeBytes {
@@ -64,12 +71,21 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 		}
 
 		chunk := content[offset:end]
+
 		chunkKey := fmt.Sprintf("%s-%d", hashStr, chunkIdx)
 
-		added := cas.cache.Set(chunkKey, chunk, int64(len(chunk)))
+		added := cas.cache.Set(chunkKey, cacheValue{Hash: hashStr, Content: chunk}, int64(len(chunk)))
 		if !added {
 			return "", errors.New("unable to cache: set dropped")
 		}
+
+		chunkKeys = append(chunkKeys, chunkKey)
+	}
+
+	chunks := strings.Join(chunkKeys, ",")
+	added := cas.cache.Set(hashStr, chunks, int64(len(chunks)))
+	if !added {
+		return "", errors.New("unable to cache: set dropped")
 	}
 
 	// Store entry
@@ -99,12 +115,14 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		// Check cache for chunk
-		chunk, found := cas.cache.Get(chunkKey)
+		value, found := cas.cache.Get(chunkKey)
 		if !found {
 			return nil, errors.New("content not found")
 		}
 
-		chunkBytes := chunk.([]byte)
+		v := value.(cacheValue)
+
+		chunkBytes := v.Content
 		start := o % cas.config.PageSizeBytes
 		chunkRemaining := int64(len(chunkBytes)) - start
 		if chunkRemaining <= 0 {
@@ -127,11 +145,42 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
-	// logger.Info("evicted item: ", item.Key)
 
-	cas.metadata.RemoveEntryLocation(cas.ctx, "mock", cas.currentHost)
-	// TODO: make sure on eviction, we evict all chunks,
-	// and update metadata to say we no longer have the file
+	hash := ""
+	var chunkKeys []string = []string{}
+
+	// We've evicted a chunk of a cached object - extract the hash and evict all the other chunks
+	v, ok := item.Value.(cacheValue)
+	if ok {
+		hash = v.Hash
+		chunks, found := cas.cache.Get(hash)
+		if !found {
+			return
+		}
+
+		chunkKeys = strings.Split(chunks.(string), ",")
+	} else {
+		// In this case, we evicted the key that stores which chunks are currently present in the cache
+		// the value of which is formatted like this: "<hash>-0,<hash>-1,<hash>-2"
+		// so here we can extract the hash by splitting on '-' and taking the first item
+		v, ok := item.Value.(string)
+		if ok {
+			hash = strings.SplitN(v, "-", 2)[0]
+		}
+
+		chunkKeys = strings.Split(v, ",")
+	}
+
+	Logger.Debugf("Evicted object: %s", hash)
+
+	cas.mu.Lock()
+	defer cas.mu.Unlock()
+	for _, k := range chunkKeys {
+		cas.cache.Del(k)
+	}
+
+	// Remove location of this cached content
+	cas.metadata.RemoveEntryLocation(cas.ctx, hash, cas.currentHost)
 }
 
 func (cas *ContentAddressableStorage) Cleanup() {

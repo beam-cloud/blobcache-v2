@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -123,13 +124,20 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		return nil, err
 	}
 
+	entry, err := c.metadata.RetrieveEntry(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Println("entry: ", entry)
+
 	start := time.Now()
 	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 	if err != nil {
 		return nil, err
 	}
 
-	Logger.Debugf("Elapsed time to get the content: %v", time.Since(start))
+	Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
 	return getContentResponse.Content, nil
 }
 
