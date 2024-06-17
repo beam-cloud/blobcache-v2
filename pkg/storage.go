@@ -145,7 +145,6 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
-
 	hash := ""
 	var chunkKeys []string = []string{}
 

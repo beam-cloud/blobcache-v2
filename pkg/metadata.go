@@ -4,22 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/beam-cloud/beta9/pkg/common"
-	"github.com/beam-cloud/beta9/pkg/types"
 	mapset "github.com/deckarep/golang-set/v2"
 	redis "github.com/redis/go-redis/v9"
 )
 
 type BlobCacheMetadata struct {
-	rdb *common.RedisClient
+	rdb *RedisClient
 }
 
 const (
-	redisMode types.RedisMode = "single"
+	redisMode RedisMode = "single"
 )
 
 func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
-	rdb, err := common.NewRedisClient(types.RedisConfig{
+	rdb, err := NewRedisClient(RedisConfig{
 		Addrs:              []string{cfg.RedisAddr},
 		Mode:               redisMode,
 		Password:           cfg.RedisPasswd,
@@ -48,7 +46,7 @@ func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry,
 
 	// Entry not found, add it
 	if exists == 0 {
-		err := m.rdb.HSet(ctx, entryKey, common.ToSlice(entry)).Err()
+		err := m.rdb.HSet(ctx, entryKey, ToSlice(entry)).Err()
 		if err != nil {
 			return fmt.Errorf("failed to set entry <%v>: %w", entryKey, err)
 		}
@@ -71,7 +69,7 @@ func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context, hash string) (*Bl
 	}
 
 	entry := &BlobCacheEntry{}
-	if err = common.ToStruct(res, entry); err != nil {
+	if err = ToStruct(res, entry); err != nil {
 		return nil, fmt.Errorf("failed to deserialize entry <%v>: %v", entryKey, err)
 	}
 
