@@ -19,7 +19,7 @@ CMD ["/usr/local/bin/blobcache"]
 
 FROM ubuntu:22.04 AS release
 
-COPY --from=build /workspace/blobcache /usr/local/bin
+COPY --from=build /usr/local/bin/blobcache /usr/local/bin/blobcache
 
 WORKDIR /workspace
 

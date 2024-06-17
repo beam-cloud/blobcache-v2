@@ -75,6 +75,15 @@ func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context, hash string) (*Bl
 	return entry, nil
 }
 
+func (m *BlobCacheMetadata) RemoveEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
+	err := m.rdb.SRem(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
+	if err != nil {
+		return err
+	}
+
+	return m.rdb.Decr(ctx, MetadataKeys.MetadataRef(hash)).Err()
+}
+
 func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
 	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataLocation(hash)).Result()
 	if err != nil {
@@ -95,7 +104,7 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 		return err
 	}
 
-	return err
+	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
 // Metadata key storage format

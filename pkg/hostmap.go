@@ -2,7 +2,6 @@ package blobcache
 
 import (
 	"errors"
-	"log"
 	"sort"
 	"sync"
 	"time"
@@ -35,7 +34,7 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 
 	hm.hosts[host.Addr] = host
 	if hm.onHostAdded != nil {
-		log.Println("Added new host @ ", host.Addr)
+		Logger.Infof("Added new host @ %s", host.Addr)
 		hm.onHostAdded(host)
 	}
 }
@@ -48,8 +47,6 @@ func (hm *HostMap) Members() mapset.Set[string] {
 	for addr := range hm.hosts {
 		set.Add(hm.hosts[addr].Addr)
 	}
-
-	log.Println("set: ", set)
 
 	return set
 }

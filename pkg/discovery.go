@@ -112,7 +112,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(d.tailscale.Dial),
+		grpc.WithContextDialer(d.tailscale.DialWithTimeout),
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)

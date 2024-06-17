@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -30,7 +29,7 @@ func NewTailscale(hostname string, cfg BlobCacheConfig) *Tailscale {
 
 func (t *Tailscale) logF(format string, v ...interface{}) {
 	if t.cfg.Tailscale.Debug {
-		log.Printf(format, v...)
+		Logger.Infof(format, v...)
 	}
 }
 
@@ -53,8 +52,8 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 	return t.server
 }
 
-// Dial returns a TCP connection to a tailscale service
-func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
+// DialWithTimeout returns a TCP connection to a tailscale service but times out after GRPCDialTimeoutS
+func (t *Tailscale) DialWithTimeout(ctx context.Context, addr string) (net.Conn, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(t.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
 
@@ -63,6 +62,19 @@ func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
 	}
 
 	conn, err := t.server.Dial(timeoutCtx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+// Dial returns a TCP connection to a tailscale service
+func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
+	if t.server == nil {
+		return nil, errors.New("server not initialized")
+	}
+
+	conn, err := t.server.Dial(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}

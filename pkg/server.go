@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,6 +21,7 @@ type CacheServiceOpts struct {
 }
 
 type CacheService struct {
+	ctx context.Context
 	proto.UnimplementedBlobCacheServer
 	hostname        string
 	cas             *ContentAddressableStorage
@@ -32,7 +32,7 @@ type CacheService struct {
 	hostMap         *HostMap
 }
 
-func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
+func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 	currentHost := &BlobCacheHost{
 		Addr: fmt.Sprintf("%s.%s:%d", hostname, cfg.Tailscale.HostName, cfg.Port),
@@ -44,7 +44,7 @@ func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
 		return nil, err
 	}
 
-	cas, err := NewContentAddressableStorage(currentHost, metadata, cfg)
+	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -53,6 +53,7 @@ func NewCacheService(cfg BlobCacheConfig) (*CacheService, error) {
 	tailscale := NewTailscale(hostname, cfg)
 
 	return &CacheService{
+		ctx:             ctx,
 		hostname:        hostname,
 		cas:             cas,
 		cfg:             cfg,
@@ -79,18 +80,17 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	log.Printf("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
+	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(ln)
 	go cs.discoveryClient.StartInBackground(context.TODO())
 
-	// Create a channel to receive termination signals
-	terminationSignal := make(chan os.Signal, 1)
-	signal.Notify(terminationSignal, os.Interrupt, syscall.SIGTERM)
-
 	// Block until a termination signal is received
-	<-terminationSignal
-	log.Println("Termination signal received. Shutting down...")
+	terminationChan := make(chan os.Signal, 1)
+	signal.Notify(terminationChan, os.Interrupt, syscall.SIGTERM)
+	<-terminationChan
+
+	Logger.Info("Termination signal received. Shutting down server...")
 
 	// Close in-memory cache
 	s.GracefulStop()
@@ -106,8 +106,11 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
+		Logger.Errorf("GET - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
+
+	Logger.Debugf("GET - [%s]", req.Hash)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
@@ -128,10 +131,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		content = append(content, req.Content...)
 	}
 
-	hash, err := cs.cas.Add(ctx, content)
+	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
 	if err != nil {
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
+	Logger.Debugf("STORE - [%s]", hash)
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
 }

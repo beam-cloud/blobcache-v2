@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
@@ -12,12 +13,16 @@ func main() {
 		log.Fatalf("Failed to load config: %v\n", err)
 	}
 
-	config := configManager.GetConfig()
+	ctx := context.Background()
+	cfg := configManager.GetConfig()
 
-	s, err := blobcache.NewCacheService(config)
+	blobcache.InitLogger(cfg.DebugMode)
+	defer blobcache.Logger.Sync()
+
+	s, err := blobcache.NewCacheService(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.StartServer(config.Port)
+	s.StartServer(cfg.Port)
 }
