@@ -163,8 +163,8 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			return nil, errors.New("no host found")
 		}
 
-		log.Printf("Found host with content: %+v\n", host)
 		host = c.hostMap.Get(addr)
+		log.Printf("Found host with content: %+v\n", host)
 	default:
 	}
 

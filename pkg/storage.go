@@ -56,9 +56,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
 
-	cas.mu.Lock()
-	defer cas.mu.Unlock()
-
 	size := int64(len(content))
 	chunkKeys := []string{}
 
@@ -103,9 +100,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {
-	cas.mu.RLock()
-	defer cas.mu.RUnlock()
-
 	result := make([]byte, 0, length)
 	remainingLength := length
 	o := offset
@@ -170,8 +164,6 @@ func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
 
 	Logger.Debugf("Evicted object: %s", hash)
 
-	cas.mu.Lock()
-	defer cas.mu.Unlock()
 	for _, k := range chunkKeys {
 		cas.cache.Del(k)
 	}
