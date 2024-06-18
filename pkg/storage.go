@@ -63,6 +63,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 	start := time.Now()
 
 	Logger.Debugf("Adding content")
+
 	// Break content into chunks and store
 	for offset := int64(0); offset < size; offset += cas.config.PageSizeBytes {
 		chunkIdx := offset / cas.config.PageSizeBytes

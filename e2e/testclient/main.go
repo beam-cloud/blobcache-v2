@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -29,19 +30,38 @@ func main() {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	b, err := os.ReadFile("e2e/testclient/testdata/test1.bin")
+	filePath := "e2e/testclient/testdata/test1.bin"
+	b, err := os.ReadFile(filePath)
 	if err != nil {
-		fmt.Print(err)
+		log.Fatalf("err: %v\n", err)
 	}
 
+	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
 	var totalTime float64
+
 	for i := 0; i < 10; i++ {
 		chunks := make(chan []byte, 1)
 
 		// Read file in chunks and dump into channel for StoreContent RPC calls
 		go func() {
-			log.Printf("read %d bytes\n", len(b))
-			chunks <- b[:]
+			file, err := os.Open(filePath)
+			if err != nil {
+				log.Fatalf("err: %v\n", err)
+			}
+			defer file.Close()
+
+			buf := make([]byte, chunkSize)
+			for {
+				n, err := file.Read(buf)
+				if err != nil && err != io.EOF {
+					log.Fatalf("err reading file: %v\n", err)
+				}
+				if n == 0 {
+					break
+				}
+				chunks <- buf[:n]
+			}
+
 			close(chunks)
 		}()
 
@@ -65,5 +85,4 @@ func main() {
 	averageTime := totalTime / 10
 	mbPerSecond := (float64(len(b)) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
-
 }

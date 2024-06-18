@@ -1,6 +1,7 @@
 package blobcache
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -119,7 +120,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	Logger.Debugf("STORING CONTENT")
 
 	ctx := stream.Context()
-	var content []byte
+	var buffer bytes.Buffer
 
 	for {
 		req, err := stream.Recv()
@@ -134,9 +135,13 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 		Logger.Debugf("STORE rx chunk - %d bytes", len(req.Content))
 
-		content = append(content, req.Content...)
+		if _, err := buffer.Write(req.Content); err != nil {
+			Logger.Debugf("STORE - failed to write to buffer: %v", err)
+			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
+		}
 	}
 
+	content := buffer.Bytes()
 	Logger.Debugf("STORE Received %d bytes", len(content))
 
 	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
