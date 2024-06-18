@@ -132,6 +132,8 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
+		Logger.Debugf("STORE rx chunk - %d bytes", len(req.Content))
+
 		content = append(content, req.Content...)
 	}
 

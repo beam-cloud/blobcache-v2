@@ -196,6 +196,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 		return "", err
 	}
 
+	start := time.Now()
 	for chunk := range chunks {
 		req := &proto.StoreContentRequest{Content: chunk}
 		if err := stream.Send(req); err != nil {
@@ -203,10 +204,14 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 		}
 	}
 
+	log.Printf("Sent chunks at %v\n", time.Since(start))
+
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
 		return "", err
 	}
+
+	log.Printf("Stream closed at %v\n", time.Since(start))
 
 	return resp.Hash, nil
 }
