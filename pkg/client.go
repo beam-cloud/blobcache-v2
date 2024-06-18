@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -142,10 +143,12 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		if c.closestHost != nil {
 			host = c.closestHost
 		} else {
+			log.Println("Selecting closest host.")
 			host, err = c.hostMap.Closest(time.Second * 30)
 			if err != nil {
 				return nil, err
 			}
+			log.Printf("Selected closest host: %+v\n", host)
 			c.closestHost = host
 		}
 	case ClientRequestTypeRetrieval:
@@ -160,6 +163,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			return nil, errors.New("no host found")
 		}
 
+		log.Printf("Found host with content: %+v\n", host)
 		host = c.hostMap.Get(addr)
 	default:
 	}

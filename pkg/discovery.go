@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 				continue
 			}
 
+			log.Printf("Hosts: %+v\n", hosts)
 			d.updateHostMap(hosts)
 		case <-ctx.Done():
 			return nil
@@ -90,6 +92,8 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 				if err != nil {
 					return
 				}
+
+				log.Printf("Discovered host: %+v\n", host)
 
 				d.mu.Lock()
 				defer d.mu.Unlock()

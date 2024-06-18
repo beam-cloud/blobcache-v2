@@ -103,17 +103,21 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
+	Logger.Debugf("GET REQUESTED - [%s]", req.Hash)
+
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
 		Logger.Debugf("GET - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Debugf("GET - [%s]", req.Hash)
+	Logger.Debugf("GET COMPLETE - [%s]", req.Hash)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
+	Logger.Debugf("STORING CONTENT")
+
 	ctx := stream.Context()
 	var content []byte
 
