@@ -135,6 +135,8 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		content = append(content, req.Content...)
 	}
 
+	Logger.Debugf("STORE Received %d bytes", len(content))
+
 	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
 	if err != nil {
 		Logger.Debugf("STORE - [%s] - %v", hash, err)
