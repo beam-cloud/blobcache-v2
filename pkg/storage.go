@@ -153,11 +153,9 @@ func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
 	if ok {
 		hash = v.Hash
 		chunks, found := cas.cache.Get(hash)
-		if !found {
-			return
+		if found {
+			chunkKeys = strings.Split(chunks.(string), ",")
 		}
-
-		chunkKeys = strings.Split(chunks.(string), ",")
 	} else {
 		// In this case, we evicted the key that stores which chunks are currently present in the cache
 		// the value of which is formatted like this: "<hash>-0,<hash>-1,<hash>-2"

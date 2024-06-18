@@ -14,7 +14,6 @@ const (
 type BlobCacheConfig struct {
 	DebugMode            bool            `key:"debugMode" json:"debug_mode"`
 	Port                 uint            `key:"port" json:"port"`
-	PersistencePath      string          `key:"persistencePath" json:"persistence_path"`
 	MaxCacheSizeMb       int64           `key:"maxCacheSizeMb" json:"max_cache_size_mb"`
 	PageSizeBytes        int64           `key:"pageSizeBytes" json:"page_size_bytes"`
 	GRPCDialTimeoutS     int             `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
