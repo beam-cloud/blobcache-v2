@@ -6,3 +6,4 @@ build.sh
 tmp/
 config.yaml
 e2e/testclient/testdata/*.bin
+daemonset.yaml
