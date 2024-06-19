@@ -50,7 +50,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	hostMap := NewHostMap(nil)
+	hostMap := NewHostMap(nil, nil)
 	tailscale := NewTailscale(hostname, cfg)
 
 	return &CacheService{
@@ -99,26 +99,18 @@ func (cs *CacheService) StartServer(port uint) error {
 	return nil
 }
 
-func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
-	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
-}
-
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	Logger.Debugf("GET REQUESTED - [%s]", req.Hash)
-
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
 		Logger.Debugf("GET - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Debugf("GET COMPLETE - [%s]", req.Hash)
+	Logger.Infof("GET - [%s]", req.Hash)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
-	Logger.Debugf("STORING CONTENT")
-
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
@@ -129,12 +121,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		if err != nil {
-			Logger.Debugf("STORE - %v", err)
+			Logger.Infof("STORE - error occurred: %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
 		Logger.Debugf("STORE rx chunk - %d bytes", len(req.Content))
-
 		if _, err := buffer.Write(req.Content); err != nil {
 			Logger.Debugf("STORE - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
@@ -146,10 +137,14 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
 	if err != nil {
-		Logger.Debugf("STORE - [%s] - %v", hash, err)
+		Logger.Infof("STORE - [%s] - %v", hash, err)
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
-	Logger.Debugf("STORE - [%s]", hash)
+	Logger.Infof("STORE - [%s]", hash)
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
+}
+
+func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }

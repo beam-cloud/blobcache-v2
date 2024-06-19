@@ -9,18 +9,20 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
-func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
+func NewHostMap(onHostAdded func(*BlobCacheHost) error, onHostRemoved func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
-		hosts:       make(map[string]*BlobCacheHost),
-		mu:          sync.Mutex{},
-		onHostAdded: onHostAdded,
+		hosts:         make(map[string]*BlobCacheHost),
+		mu:            sync.Mutex{},
+		onHostAdded:   onHostAdded,
+		onHostRemoved: onHostRemoved,
 	}
 }
 
 type HostMap struct {
-	hosts       map[string]*BlobCacheHost
-	mu          sync.Mutex
-	onHostAdded func(*BlobCacheHost) error
+	hosts         map[string]*BlobCacheHost
+	mu            sync.Mutex
+	onHostAdded   func(*BlobCacheHost) error
+	onHostRemoved func(*BlobCacheHost) error
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {
@@ -36,6 +38,23 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 	if hm.onHostAdded != nil {
 		Logger.Infof("Added new host @ %s", host.Addr)
 		hm.onHostAdded(host)
+	}
+}
+
+func (hm *HostMap) Remove(host *BlobCacheHost) {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	_, exists := hm.hosts[host.Addr]
+	if !exists {
+		return
+	}
+
+	delete(hm.hosts, host.Addr)
+
+	if hm.onHostRemoved != nil {
+		Logger.Infof("Removed host @ %s", host.Addr)
+		hm.onHostRemoved(host)
 	}
 }
 

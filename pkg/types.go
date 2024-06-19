@@ -12,7 +12,9 @@ const (
 )
 
 type BlobCacheConfig struct {
+	Token                string          `key:"token" json:"token"`
 	DebugMode            bool            `key:"debugMode" json:"debug_mode"`
+	TLSEnabled           bool            `key:"tlsEnabled" json:"tls_enabled"`
 	Port                 uint            `key:"port" json:"port"`
 	MaxCacheSizeMb       int64           `key:"maxCacheSizeMb" json:"max_cache_size_mb"`
 	PageSizeBytes        int64           `key:"pageSizeBytes" json:"page_size_bytes"`

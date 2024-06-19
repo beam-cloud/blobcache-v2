@@ -5,8 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +19,7 @@ import (
 
 const getContentRequestTimeout = 5 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
+const closestHostTimeout = 30 * time.Second
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -47,6 +46,8 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 	tailscale := NewTailscale(hostname, cfg)
 
+	InitLogger(cfg.DebugMode)
+
 	server := tailscale.GetOrCreateServer()
 	tailscaleClient, err := server.LocalClient()
 	if err != nil {
@@ -69,19 +70,18 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		metadata:        metadata,
 		closestHost:     nil,
 	}
-	bc.hostMap = NewHostMap(bc.connectToHost)
+	bc.hostMap = NewHostMap(bc.addHost, bc.removeHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
 
-	// Start searching for nearby hosts
+	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
 	return bc, nil
 }
 
-func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
+func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
-	token := "" // TODO: add token auth
-	isTLS := strings.HasSuffix(host.Addr, "443")
+	isTLS := c.cfg.TLSEnabled
 	if isTLS {
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
@@ -97,8 +97,8 @@ func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
 		),
 	}
 
-	if token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(token)))
+	if c.cfg.Token != "" {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.cfg.Token)))
 	}
 
 	conn, err := grpc.Dial(host.Addr, dialOpts...)
@@ -109,6 +109,10 @@ func (c *BlobCacheClient) connectToHost(host *BlobCacheHost) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+	return nil
+}
+
+func (c *BlobCacheClient) removeHost(host *BlobCacheHost) error {
 	return nil
 }
 
@@ -143,12 +147,11 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		if c.closestHost != nil {
 			host = c.closestHost
 		} else {
-			log.Println("Selecting closest host.")
-			host, err = c.hostMap.Closest(time.Second * 30)
+			host, err = c.hostMap.Closest(closestHostTimeout)
 			if err != nil {
 				return nil, err
 			}
-			log.Printf("Selected closest host: %+v\n", host)
+
 			c.closestHost = host
 		}
 	case ClientRequestTypeRetrieval:
@@ -164,7 +167,6 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		}
 
 		host = c.hostMap.Get(addr)
-		log.Printf("Found host with content: %+v\n", host)
 	default:
 	}
 
@@ -204,15 +206,12 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 		}
 	}
 
-	log.Printf("Sent chunks at %v\n", time.Since(start))
-
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
 		return "", err
 	}
 
-	log.Printf("Stream closed at %v\n", time.Since(start))
-
+	Logger.Debugf("Elapsed time to send content: %v\n", time.Since(start))
 	return resp.Hash, nil
 }
 

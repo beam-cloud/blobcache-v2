@@ -1,4 +1,6 @@
 port: 2049
+token:
+tlsEnabled: false
 pageSizeBytes: 4000000 # 4MB
 maxCacheSizeMb: 100 # 100MB
 grpcMessageSizeBytes: 1000000000
