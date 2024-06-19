@@ -2,6 +2,7 @@ package blobcache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -86,6 +87,12 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 
 				hostname = hostname[:len(hostname)-1] // Strip the last period
 				addr := fmt.Sprintf("%s:%d", hostname, d.cfg.Port)
+
+				// Don't try to get the state on peers we're already aware of
+				if d.hostMap.Get(addr) != nil {
+					return
+				}
+
 				host, err := d.GetHostState(ctx, addr)
 				if err != nil {
 					return
@@ -129,6 +136,11 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 		return nil, err
 	}
 	host.RTT = time.Since(startTime)
+
+	threshold := time.Duration(d.cfg.RoundTripThresholdMillseconds) * time.Millisecond
+	if host.RTT > threshold {
+		return nil, errors.New("round-trip time exceeds threshold")
+	}
 
 	if resp.GetVersion() != BlobCacheVersion {
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)

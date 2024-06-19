@@ -17,7 +17,7 @@ import (
 	"tailscale.com/client/tailscale"
 )
 
-const getContentRequestTimeout = 5 * time.Second
+const getContentRequestTimeout = 30 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
 const closestHostTimeout = 30 * time.Second
 
@@ -70,7 +70,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		metadata:        metadata,
 		closestHost:     nil,
 	}
-	bc.hostMap = NewHostMap(bc.addHost, bc.removeHost)
+	bc.hostMap = NewHostMap(bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
 
 	// Start searching for nearby blobcache hosts
@@ -90,7 +90,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	maxMessageSize := c.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
-		grpc.WithContextDialer(c.tailscale.Dial),
+		grpc.WithContextDialer(c.tailscale.DialWithTimeout),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
@@ -109,11 +109,56 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+
+	go c.monitorHost(host)
 	return nil
 }
 
-func (c *BlobCacheClient) removeHost(host *BlobCacheHost) error {
-	return nil
+func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			err := func() error {
+				client, exists := c.grpcClients[host.Addr]
+				if !exists {
+					return errors.New("host not found")
+				}
+
+				resp, err := client.GetState(c.ctx, &proto.GetStateRequest{})
+				if err != nil {
+					return errors.New("unable to reach host")
+				}
+
+				if resp.GetVersion() != BlobCacheVersion {
+					return errors.New("invalid host version")
+				}
+
+				return nil
+			}()
+
+			// We were unable to reach the host for some reason, remove it as a possible client
+			if err != nil {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+
+				c.hostMap.Remove(host)
+
+				if c.closestHost != nil && c.closestHost.Addr == host.Addr {
+					c.closestHost = nil
+				}
+
+				delete(c.grpcClients, host.Addr)
+
+				return
+			}
+
+		case <-c.ctx.Done():
+			return
+		}
+	}
 }
 
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {

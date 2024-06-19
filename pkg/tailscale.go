@@ -67,16 +67,3 @@ func (t *Tailscale) DialWithTimeout(ctx context.Context, addr string) (net.Conn,
 	}
 	return conn, nil
 }
-
-// Dial returns a TCP connection to a tailscale service
-func (t *Tailscale) Dial(ctx context.Context, addr string) (net.Conn, error) {
-	if t.server == nil {
-		return nil, errors.New("server not initialized")
-	}
-
-	conn, err := t.server.Dial(ctx, "tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
-}

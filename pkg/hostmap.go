@@ -9,20 +9,18 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
-func NewHostMap(onHostAdded func(*BlobCacheHost) error, onHostRemoved func(*BlobCacheHost) error) *HostMap {
+func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
-		hosts:         make(map[string]*BlobCacheHost),
-		mu:            sync.Mutex{},
-		onHostAdded:   onHostAdded,
-		onHostRemoved: onHostRemoved,
+		hosts:       make(map[string]*BlobCacheHost),
+		mu:          sync.Mutex{},
+		onHostAdded: onHostAdded,
 	}
 }
 
 type HostMap struct {
-	hosts         map[string]*BlobCacheHost
-	mu            sync.Mutex
-	onHostAdded   func(*BlobCacheHost) error
-	onHostRemoved func(*BlobCacheHost) error
+	hosts       map[string]*BlobCacheHost
+	mu          sync.Mutex
+	onHostAdded func(*BlobCacheHost) error
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {
@@ -51,11 +49,6 @@ func (hm *HostMap) Remove(host *BlobCacheHost) {
 	}
 
 	delete(hm.hosts, host.Addr)
-
-	if hm.onHostRemoved != nil {
-		Logger.Infof("Removed host @ %s", host.Addr)
-		hm.onHostRemoved(host)
-	}
 }
 
 func (hm *HostMap) Members() mapset.Set[string] {
@@ -71,6 +64,9 @@ func (hm *HostMap) Members() mapset.Set[string] {
 }
 
 func (hm *HostMap) Get(addr string) *BlobCacheHost {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
 	host, exists := hm.hosts[addr]
 	if !exists {
 		return nil

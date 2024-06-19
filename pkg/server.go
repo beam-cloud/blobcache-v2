@@ -51,7 +51,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	hostMap := NewHostMap(nil, nil)
+	hostMap := NewHostMap(nil)
 	tailscale := NewTailscale(hostname, cfg)
 
 	return &CacheService{
@@ -107,7 +107,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Infof("GET - [%s]", req.Hash)
+	Logger.Infof("GET - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
@@ -122,11 +122,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		if err != nil {
-			Logger.Infof("STORE - error occurred: %v", err)
+			Logger.Infof("STORE - error: %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
-		Logger.Debugf("STORE rx chunk - %d bytes", len(req.Content))
+		Logger.Debugf("STORE rx chunk (%d bytes)", len(req.Content))
 		if _, err := buffer.Write(req.Content); err != nil {
 			Logger.Debugf("STORE - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
@@ -134,7 +134,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	content := buffer.Bytes()
-	Logger.Debugf("STORE Received %d bytes", len(content))
+	Logger.Debugf("STORE rx (%d bytes)", len(content))
 
 	hash, err := cs.cas.Add(ctx, content, "s3://mock-bucket/key,0-1000")
 	if err != nil {
