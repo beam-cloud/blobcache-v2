@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
@@ -75,10 +74,6 @@ func (cs *CacheService) StartServer(port uint) error {
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		http.ListenAndServe(":10001", nil)
-	}()
 
 	maxMessageSize := cs.cfg.GRPCMessageSizeBytes
 	s := grpc.NewServer(
