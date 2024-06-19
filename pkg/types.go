@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	BlobCacheHostPrefix   string = "blobcache-host"
-	BlobCacheClientPrefix string = "blobcache-client"
-	BlobCacheVersion      string = "v0.1.0"
+	BlobCacheHostPrefix         string = "blobcache-host"
+	BlobCacheClientPrefix       string = "blobcache-client"
+	BlobCacheVersion            string = "v0.1.0"
+	BlobCacheHostMetadataServer string = "redis"
 )
 
 type BlobCacheConfig struct {
@@ -17,6 +18,7 @@ type BlobCacheConfig struct {
 	TLSEnabled                    bool            `key:"tlsEnabled" json:"tls_enabled"`
 	Port                          uint            `key:"port" json:"port"`
 	RoundTripThresholdMillseconds uint            `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
+	MaxSmallFileSizeBytes         uint            `key:"maxSmallFileSizeBytes" json:"max_small_file_size_bytes"`
 	MaxCacheSizeMb                int64           `key:"maxCacheSizeMb" json:"max_cache_size_mb"`
 	PageSizeBytes                 int64           `key:"pageSizeBytes" json:"page_size_bytes"`
 	GRPCDialTimeoutS              int             `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`

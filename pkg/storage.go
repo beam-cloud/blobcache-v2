@@ -3,8 +3,6 @@ package blobcache
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -53,10 +51,7 @@ type cacheValue struct {
 	Content []byte
 }
 
-func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, source string) (string, error) {
-	hash := sha256.Sum256(content)
-	hashStr := hex.EncodeToString(hash[:])
-
+func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, source string) error {
 	size := int64(len(content))
 	chunkKeys := []string{}
 
@@ -70,34 +65,34 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, content []byte, s
 
 		chunk := content[offset:end]
 
-		chunkKey := fmt.Sprintf("%s-%d", hashStr, chunkIdx)
+		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
-		added := cas.cache.Set(chunkKey, cacheValue{Hash: hashStr, Content: chunk}, int64(len(chunk)))
+		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
 		if !added {
-			return "", errors.New("unable to cache: set dropped")
+			return errors.New("unable to cache: set dropped")
 		}
 
 		chunkKeys = append(chunkKeys, chunkKey)
 	}
 
 	chunks := strings.Join(chunkKeys, ",")
-	added := cas.cache.Set(hashStr, chunks, int64(len(chunks)))
+	added := cas.cache.Set(hash, chunks, int64(len(chunks)))
 	if !added {
-		return "", errors.New("unable to cache: set dropped")
+		return errors.New("unable to cache: set dropped")
 	}
 
 	// Store entry
 	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
-		Hash:    hashStr,
+		Hash:    hash,
 		Size:    size,
 		Content: nil,
 		Source:  source,
 	}, cas.currentHost)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return hashStr, nil
+	return nil
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {

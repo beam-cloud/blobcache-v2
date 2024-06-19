@@ -165,6 +165,15 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
+	// Try to retrieve directly from metadata server if possible
+	entry, err := c.metadata.RetrieveEntry(c.ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	if entry.Content != nil {
+		return entry.Content, nil
+	}
+
 	client, err := c.getGRPCClient(&ClientRequest{
 		rt:   ClientRequestTypeRetrieval,
 		hash: hash,
