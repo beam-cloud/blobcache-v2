@@ -271,7 +271,11 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 	client, exists := c.grpcClients[host.Addr]
 	if !exists {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.localHostCache, request.hash)
 		return nil, errors.New("host not found")
+
 	}
 
 	return client, nil
