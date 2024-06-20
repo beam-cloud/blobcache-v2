@@ -137,7 +137,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	}
 	host.RTT = time.Since(startTime)
 
-	threshold := time.Duration(d.cfg.RoundTripThresholdMillseconds) * time.Millisecond
+	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
 	if host.RTT > threshold {
 		return nil, errors.New("round-trip time exceeds threshold")
 	}
