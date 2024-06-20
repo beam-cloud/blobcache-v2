@@ -136,7 +136,6 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	content := buffer.Bytes()
-	size := int64(buffer.Len())
 
 	Logger.Debugf("STORE rx (%d bytes)", len(content))
 
@@ -144,26 +143,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	hashBytes := sha256.Sum256(content)
 	hash := hex.EncodeToString(hashBytes[:])
 
-	// Store entry directly in metadata server
-	if size <= int64(cs.cfg.MaxSmallFileSizeBytes) {
-		err := cs.metadata.AddEntry(ctx, &BlobCacheEntry{
-			Hash:    hash,
-			Size:    size,
-			Content: content,
-			Source:  source,
-		}, &BlobCacheHost{RTT: 0, Addr: BlobCacheHostMetadataServer})
-
-		if err != nil {
-			Logger.Infof("STORE - [%s] - %v", hash, err)
-			return status.Errorf(codes.Internal, "Failed to add content: %v", err)
-		}
-	} else {
-		// Store in local in-memory cache
-		err := cs.cas.Add(ctx, hash, content, source)
-		if err != nil {
-			Logger.Infof("STORE - [%s] - %v", hash, err)
-			return status.Errorf(codes.Internal, "Failed to add content: %v", err)
-		}
+	// Store in local in-memory cache
+	err := cs.cas.Add(ctx, hash, content, source)
+	if err != nil {
+		Logger.Infof("STORE - [%s] - %v", hash, err)
+		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
 	Logger.Infof("STORE - [%s]", hash)
