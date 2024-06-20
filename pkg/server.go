@@ -92,9 +92,9 @@ func (cs *CacheService) StartServer(port uint) error {
 	// Block until a termination signal is received
 	terminationChan := make(chan os.Signal, 1)
 	signal.Notify(terminationChan, os.Interrupt, syscall.SIGTERM)
-	<-terminationChan
 
-	Logger.Info("Termination signal received. Shutting down server...")
+	sig := <-terminationChan
+	Logger.Infof("Termination signal (%v) received. Shutting down server...", sig)
 
 	// Close in-memory cache
 	s.GracefulStop()

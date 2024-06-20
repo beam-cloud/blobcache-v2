@@ -20,6 +20,8 @@ import (
 const getContentRequestTimeout = 30 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
 const closestHostTimeout = 30 * time.Second
+const localClientCacheCleanupInterval = 1 * time.Second
+const localClientCacheTTL = 30 * time.Second
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -40,6 +42,12 @@ type BlobCacheClient struct {
 	mu              sync.Mutex
 	metadata        *BlobCacheMetadata
 	closestHost     *BlobCacheHost
+	localHostCache  map[string]*localClientCache
+}
+
+type localClientCache struct {
+	host      *BlobCacheHost
+	timestamp time.Time
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
@@ -66,6 +74,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		tailscale:       tailscale,
 		tailscaleClient: tailscaleClient,
 		grpcClients:     make(map[string]proto.BlobCacheClient),
+		localHostCache:  make(map[string]*localClientCache),
 		mu:              sync.Mutex{},
 		metadata:        metadata,
 		closestHost:     nil,
@@ -75,6 +84,10 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
+
+	// Monitor and cleanup local client cache
+	go bc.manageLocalClientCache(localClientCacheCleanupInterval, localClientCacheTTL)
+
 	return bc, nil
 }
 
@@ -183,6 +196,31 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	return getContentResponse.Content, nil
 }
 
+func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+
+				for hash, entry := range c.localHostCache {
+					if now.Sub(entry.timestamp) > ttl {
+						c.mu.Lock()
+						delete(c.localHostCache, hash)
+						c.mu.Unlock()
+					}
+				}
+
+			case <-c.ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, error) {
 	var host *BlobCacheHost = nil
 	var err error = nil
@@ -200,18 +238,30 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			c.closestHost = host
 		}
 	case ClientRequestTypeRetrieval:
-		hostAddrs, err := c.metadata.GetEntryLocations(c.ctx, request.hash)
-		if err != nil {
-			return nil, err
-		}
+		cachedHost, hostFound := c.localHostCache[request.hash]
+		if hostFound {
+			host = cachedHost.host
+		} else {
+			hostAddrs, err := c.metadata.GetEntryLocations(c.ctx, request.hash)
+			if err != nil {
+				return nil, err
+			}
 
-		intersection := hostAddrs.Intersect(c.hostMap.Members())
-		addr, ok := intersection.Pop()
-		if !ok {
-			return nil, errors.New("no host found")
-		}
+			intersection := hostAddrs.Intersect(c.hostMap.Members())
+			addr, ok := intersection.Pop()
+			if !ok {
+				return nil, errors.New("no host found")
+			}
 
-		host = c.hostMap.Get(addr)
+			host = c.hostMap.Get(addr)
+
+			c.mu.Lock()
+			c.localHostCache[request.hash] = &localClientCache{
+				host:      host,
+				timestamp: time.Now(),
+			}
+			c.mu.Unlock()
+		}
 	default:
 	}
 
