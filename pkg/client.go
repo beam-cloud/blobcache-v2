@@ -20,7 +20,7 @@ import (
 const getContentRequestTimeout = 30 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
 const closestHostTimeout = 30 * time.Second
-const localClientCacheCleanupInterval = 1 * time.Second
+const localClientCacheCleanupInterval = 5 * time.Second
 const localClientCacheTTL = 30 * time.Second
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {

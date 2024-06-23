@@ -5,8 +5,8 @@ global:
   fullnameOverride:
 
 image:
-  repository: public.ecr.aws/n4e0e1y0/beam-blobcache
-  tag: 0.1.2
+  repository: public.ecr.aws/n4e0e1y0/beam-blobcache-v2
+  tag: latest
 
 controllers:
   main:
@@ -22,39 +22,3 @@ controllers:
         resources:
           limits: {}
           requests: {}
-            # cpu: 8000m
-            # memory: 64Gi
-
-persistence:
-  cache:
-    enabled: true
-    type: emptyDir
-    medium: Memory
-    sizeLimit: 60Gi
-
-service:
-  main:
-    enabled: true
-    annotations: {}
-    labels: {}
-    ports:
-      http:
-        port: 2049
-        targetPort: 2049
-        protocol: TCP
-
-ingress:
-  main:
-    enabled: false
-    annotations: {}
-    labels: {}
-    className: # nginx, traefik, etc.
-    hosts:
-    - host: blobcache.local
-      paths:
-      - path: /
-        pathType: Prefix
-        service:
-          name: main # Refers to service key
-          port: 2049
-    tls: []

@@ -1,8 +1,8 @@
 apiVersion: v2
-name: beam-blobcache-chart
+name: beam-blobcache-v2-chart
 description: A Helm chart for Blobcache
 type: application
-version: 0.1.2
+version: 0.1.1
 appVersion: 0.1.1
 home: https://beam.cloud
 dependencies:

@@ -1,4 +1,4 @@
-chartVersion := 0.1.2
+chartVersion := 0.1.1
 imageVersion := latest
 
 init:
@@ -21,8 +21,8 @@ build-chart:
 	helm package --dependency-update deploy/charts/blobcache --version $(chartVersion)
 
 publish-chart:
-	helm push beam-blobcache-chart-$(chartVersion).tgz oci://public.ecr.aws/n4e0e1y0
-	rm beam-blobcache-chart-$(chartVersion).tgz
+	helm push beam-blobcache-v2-chart-$(chartVersion).tgz oci://public.ecr.aws/n4e0e1y0
+	rm beam-blobcache-v2-chart-$(chartVersion).tgz
 
 testclient:
 	go build -o bin/testclient e2e/testclient/main.go
