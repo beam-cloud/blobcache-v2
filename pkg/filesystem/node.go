@@ -50,7 +50,7 @@ type FSNode struct {
 
 func (n *FSNode) log(format string, v ...interface{}) {
 	if n.filesystem.verbose {
-		log.Printf(fmt.Sprintf("[INFINFS] (%s) %s", n.bfsNode.Path, format), v...)
+		blobcache.Logger.Infof(fmt.Sprintf("(%s) %s", n.bfsNode.Path, format), v...)
 	}
 }
 
@@ -112,6 +112,7 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 	}
 
 	nRead := 0
+
 	// nRead, err := n.filesystem.Storage.ReadFile(n.bfsNode, dest, off)
 	// if err != nil {
 	// 	return nil, syscall.EIO

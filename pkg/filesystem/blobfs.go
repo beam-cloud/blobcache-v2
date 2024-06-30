@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -54,7 +55,7 @@ type BlobFs struct {
 }
 
 func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
-	log.Printf("Mounting to %s\n", opts.MountPoint)
+	blobcache.Logger.Infof("Mounting to %s\n", opts.MountPoint)
 
 	if _, err := os.Stat(opts.MountPoint); os.IsNotExist(err) {
 		err = os.MkdirAll(opts.MountPoint, 0755)
@@ -62,7 +63,7 @@ func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
 			return nil, nil, fmt.Errorf("failed to create mount point directory: %v", err)
 		}
 
-		log.Println("Mount point directory created.")
+		blobcache.Logger.Info("Mount point directory created.")
 	}
 
 	blobfs, err := NewFileSystem(BlobFsSystemOpts{Verbose: opts.Verbose})
