@@ -65,12 +65,12 @@ func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
 		log.Println("Mount point directory created.")
 	}
 
-	infiniFs, err := NewFileSystem(BlobFsSystemOpts{Verbose: opts.Verbose})
+	blobfs, err := NewFileSystem(BlobFsSystemOpts{Verbose: opts.Verbose})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
 	}
 
-	root, _ := infiniFs.Root()
+	root, _ := blobfs.Root()
 	attrTimeout := time.Second * 60
 	entryTimeout := time.Second * 60
 	fsOptions := &fs.Options{
@@ -111,7 +111,7 @@ func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
 
 // NewFileSystem initializes a new BlobFs with root metadata.
 func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
-	cfs := &BlobFs{
+	bfs := &BlobFs{
 		verbose:  opts.Verbose,
 		Metadata: opts.Metadata,
 		// Storage:  storage,
@@ -121,7 +121,7 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 	rootPID := "" // Root node has no parent
 
 	// Fetch or create root directory access metadata
-	rootAccessMetadata, err := cfs.Metadata.GetDirectoryAccessMetadata(rootPID, "/")
+	rootAccessMetadata, err := bfs.Metadata.GetDirectoryAccessMetadata(rootPID, "/")
 	if err != nil {
 		// Default permissions for root directory (e.g., drwxr-xr-x)
 		rootAccessMetadata = &DirectoryAccessMetadata{
@@ -129,7 +129,7 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 			ID:         rootID,
 			Permission: fuse.S_IFDIR | 0755, // Octal notation for permissions
 		}
-		if err := cfs.Metadata.SaveDirectoryAccessMetadata(rootAccessMetadata); err != nil {
+		if err := bfs.Metadata.SaveDirectoryAccessMetadata(rootAccessMetadata); err != nil {
 			return nil, fmt.Errorf("failed to save root directory access metadata: %w", err)
 		}
 	}
@@ -139,7 +139,7 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 	// Fetch or create root directory content metadata
 	// If there is no directory content metadata, this is sort of the equivlanet of a "format"
 	// in that the root directory content metadata that's saved will no longer have any entries
-	_, err = cfs.Metadata.GetDirectoryContentMetadata(rootID)
+	_, err = bfs.Metadata.GetDirectoryContentMetadata(rootID)
 	if err != nil {
 		rootContentMetadata := &DirectoryContentMetadata{
 			Id:         rootID,
@@ -147,14 +147,14 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 			Timestamps: make(map[string]time.Time), // Empty timestamps
 		}
 
-		if err := cfs.Metadata.SaveDirectoryContentMetadata(rootContentMetadata); err != nil {
+		if err := bfs.Metadata.SaveDirectoryContentMetadata(rootContentMetadata); err != nil {
 			return nil, fmt.Errorf("failed to save root directory content metadata: %w", err)
 		}
 	}
 
 	// Create the actual root filesystem node required by FUSE
 	rootNode := &FSNode{
-		filesystem: cfs,
+		filesystem: bfs,
 		attr: fuse.Attr{
 			Ino:  1,
 			Mode: rootAccessMetadata.Permission,
@@ -168,13 +168,13 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 		},
 	}
 
-	cfs.root = rootNode
-	return cfs, nil
+	bfs.root = rootNode
+	return bfs, nil
 }
 
-func (cfs *BlobFs) Root() (fs.InodeEmbedder, error) {
-	if cfs.root == nil {
+func (bfs *BlobFs) Root() (fs.InodeEmbedder, error) {
+	if bfs.root == nil {
 		return nil, fmt.Errorf("root not initialized")
 	}
-	return cfs.root, nil
+	return bfs.root, nil
 }
