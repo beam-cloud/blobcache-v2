@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/dgraph-io/ristretto"
@@ -41,12 +40,6 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 	if err != nil {
 		return nil, err
 	}
-
-	metrics := cache.Metrics
-
-	// TODO: evaluate if this is correct / can be converted to a percentage of total cache
-	currentCost := metrics.CostAdded() - metrics.CostEvicted()
-	log.Println("currentCost: ", currentCost)
 
 	cas.cache = cache
 	return cas, nil

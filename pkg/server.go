@@ -54,11 +54,16 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	}
 
 	// TODO: connect to config
-	_, _, err = Mount(FileSystemOpts{
+	startServer, _, err := Mount(FileSystemOpts{
 		Verbose:    true,
 		Metadata:   metadata,
 		MountPoint: "/tmp/test",
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = startServer()
 	if err != nil {
 		return nil, err
 	}
