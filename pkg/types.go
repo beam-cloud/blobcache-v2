@@ -112,7 +112,7 @@ func (e *ErrEntryNotFound) Error() string {
 	return fmt.Sprintf("entry not found: %s", e.Hash)
 }
 
-// BlobFs types
+// BlobFS types
 type FileSystemOpts struct {
 	MountPoint string
 	Verbose    bool

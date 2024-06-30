@@ -57,7 +57,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	_, _, err = Mount(FileSystemOpts{
 		Verbose:    true,
 		Metadata:   metadata,
-		MountPoint: "test",
+		MountPoint: "/tmp/test",
 	})
 	if err != nil {
 		return nil, err

@@ -4,6 +4,11 @@ FROM golang:1.22-bullseye AS build
 
 WORKDIR /workspace
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    fuse3 libfuse3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN go install github.com/cosmtrek/air@v1.49.0
 
 COPY go.mod go.sum ./
@@ -18,6 +23,11 @@ CMD ["/usr/local/bin/blobcache"]
 
 
 FROM ubuntu:22.04 AS release
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    fuse3 libfuse3-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /usr/local/bin/blobcache /usr/local/bin/blobcache
 

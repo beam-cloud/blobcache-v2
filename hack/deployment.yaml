@@ -12,8 +12,10 @@ spec:
       labels:
         app: blobcache
     spec:
+      hostNetwork: true
       containers:
       - name: blobcache
         image: registry.localhost:5000/blobcache:latest
         securityContext:
           privileged: true
+      dnsPolicy: ClusterFirstWithHostNet
