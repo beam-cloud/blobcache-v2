@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -93,7 +94,31 @@ func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) 
 		hostSet.Add(addr)
 	}
 
-	return hostSet, err
+	return hostSet, nil
+}
+
+func (m *BlobCacheMetadata) GetDirectoryAccessMetadata(pid, name string) (*DirectoryAccessMetadata, error) {
+	return &DirectoryAccessMetadata{}, nil
+}
+
+func (m *BlobCacheMetadata) GetDirectoryContentMetadata(id string) (*DirectoryContentMetadata, error) {
+	return &DirectoryContentMetadata{}, nil
+}
+
+func (m *BlobCacheMetadata) GetFileMetadata(pid, name string) (*FileMetadata, error) {
+	return &FileMetadata{}, nil
+}
+
+func (m *BlobCacheMetadata) ListDirectory(string) []fuse.DirEntry {
+	return []fuse.DirEntry{}
+}
+
+func (m *BlobCacheMetadata) SaveDirectoryContentMetadata(contentMeta *DirectoryContentMetadata) error {
+	return nil
+}
+
+func (m *BlobCacheMetadata) SaveDirectoryAccessMetadata(accessMeta *DirectoryAccessMetadata) error {
+	return nil
 }
 
 func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {

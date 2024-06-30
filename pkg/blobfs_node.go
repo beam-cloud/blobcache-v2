@@ -1,4 +1,4 @@
-package blobcache_fs
+package blobcache
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"path"
 	"syscall"
 
-	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -50,7 +49,7 @@ type FSNode struct {
 
 func (n *FSNode) log(format string, v ...interface{}) {
 	if n.filesystem.verbose {
-		blobcache.Logger.Infof(fmt.Sprintf("(%s) %s", n.bfsNode.Path, format), v...)
+		Logger.Infof(fmt.Sprintf("(%s) %s", n.bfsNode.Path, format), v...)
 	}
 }
 
@@ -140,7 +139,7 @@ func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
 
 	// Use the directory ID to fetch the directory content metadata
-	contentMetadataKey := blobcache.MetadataKeys.MetadataDirectoryContent(n.bfsNode.ID)
+	contentMetadataKey := MetadataKeys.MetadataDirectoryContent(n.bfsNode.ID)
 	contentMetadata, err := n.filesystem.Metadata.GetDirectoryContentMetadata(contentMetadataKey)
 	if err != nil {
 		n.log(fmt.Sprintf("Error reading directory content metadata: %v", err))

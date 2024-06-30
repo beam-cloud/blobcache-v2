@@ -3,6 +3,8 @@ package blobcache
 import (
 	"fmt"
 	"time"
+
+	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 const (
@@ -108,4 +110,33 @@ type ErrEntryNotFound struct {
 
 func (e *ErrEntryNotFound) Error() string {
 	return fmt.Sprintf("entry not found: %s", e.Hash)
+}
+
+// BlobFs types
+type FileSystemOpts struct {
+	MountPoint string
+	Verbose    bool
+	Metadata   MetadataEngine
+}
+
+type FileSystem interface {
+	Mount(opts FileSystemOpts) (func() error, <-chan error, error)
+	Unmount() error
+	Format() error
+}
+
+type FileSystemStorage interface {
+	Metadata()
+	Get(string)
+	ListDirectory(string)
+	ReadFile(interface{} /* This could be any sort of FS node type, depending on the implementation */, []byte, int64)
+}
+
+type MetadataEngine interface {
+	GetDirectoryContentMetadata(id string) (*DirectoryContentMetadata, error)
+	GetDirectoryAccessMetadata(pid, name string) (*DirectoryAccessMetadata, error)
+	GetFileMetadata(pid, name string) (*FileMetadata, error)
+	SaveDirectoryContentMetadata(contentMeta *DirectoryContentMetadata) error
+	SaveDirectoryAccessMetadata(accessMeta *DirectoryAccessMetadata) error
+	ListDirectory(string) []fuse.DirEntry
 }

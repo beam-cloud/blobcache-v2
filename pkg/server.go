@@ -53,6 +53,16 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
+	// TODO: connect to config
+	_, _, err = Mount(FileSystemOpts{
+		Verbose:    true,
+		Metadata:   metadata,
+		MountPoint: "test",
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	hostMap := NewHostMap(nil)
 	tailscale := NewTailscale(hostname, cfg)
 

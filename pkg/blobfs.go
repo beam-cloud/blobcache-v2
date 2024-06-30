@@ -1,4 +1,4 @@
-package blobcache_fs
+package blobcache
 
 import (
 	"crypto/sha256"
@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -21,7 +20,7 @@ type DirectoryAccessMetadata struct {
 
 type DirectoryContentMetadata struct {
 	Id         string               `json:"id"`         // ID of the directory.
-	EntryList  []string             `json:"entryList"`  // List of file/directory names under this directory (Represents )
+	EntryList  []string             `json:"entryList"`  // List of file/directory names under this directory
 	Timestamps map[string]time.Time `json:"timestamps"` // Timestamps for each entry.
 }
 
@@ -55,7 +54,7 @@ type BlobFs struct {
 }
 
 func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
-	blobcache.Logger.Infof("Mounting to %s\n", opts.MountPoint)
+	Logger.Infof("Mounting to %s\n", opts.MountPoint)
 
 	if _, err := os.Stat(opts.MountPoint); os.IsNotExist(err) {
 		err = os.MkdirAll(opts.MountPoint, 0755)
@@ -63,10 +62,10 @@ func Mount(opts FileSystemOpts) (func() error, <-chan error, error) {
 			return nil, nil, fmt.Errorf("failed to create mount point directory: %v", err)
 		}
 
-		blobcache.Logger.Info("Mount point directory created.")
+		Logger.Info("Mount point directory created.")
 	}
 
-	blobfs, err := NewFileSystem(BlobFsSystemOpts{Verbose: opts.Verbose})
+	blobfs, err := NewFileSystem(BlobFsSystemOpts{Verbose: opts.Verbose, Metadata: opts.Metadata})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
 	}
@@ -138,7 +137,7 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 	log.Println("root access metadata: ", rootAccessMetadata)
 
 	// Fetch or create root directory content metadata
-	// If there is no directory content metadata, this is sort of the equivlanet of a "format"
+	// If there is no directory content metadata, this is sort of the equivalnet of a "format"
 	// in that the root directory content metadata that's saved will no longer have any entries
 	_, err = bfs.Metadata.GetDirectoryContentMetadata(rootID)
 	if err != nil {
