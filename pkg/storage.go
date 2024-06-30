@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
-	"sync"
 
 	"github.com/dgraph-io/ristretto"
 )
@@ -16,7 +16,6 @@ type ContentAddressableStorage struct {
 	currentHost *BlobCacheHost
 	cache       *ristretto.Cache
 	config      BlobCacheConfig
-	mu          sync.RWMutex
 	metadata    *BlobCacheMetadata
 }
 
@@ -37,10 +36,17 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
 		OnEvict:     cas.onEvict,
+		Metrics:     true,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	metrics := cache.Metrics
+
+	// TODO: evaluate if this is correct / can be converted to a percentage of total cache
+	currentCost := metrics.CostAdded() - metrics.CostEvicted()
+	log.Println("currentCost: ", currentCost)
 
 	cas.cache = cache
 	return cas, nil

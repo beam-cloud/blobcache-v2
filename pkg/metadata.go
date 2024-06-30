@@ -107,10 +107,11 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 
 // Metadata key storage format
 var (
-	metadataPrefix   string = "blobcache"
-	metadataEntry    string = "blobcache:entry:%s"
-	metadataLocation string = "blobcache:location:%s"
-	metadataRef      string = "blobcache:ref:%s"
+	metadataPrefix           string = "blobcache"
+	metadataEntry            string = "blobcache:entry:%s"
+	metadataLocation         string = "blobcache:location:%s"
+	metadataRef              string = "blobcache:ref:%s"
+	metadataDirectoryContent string = "blobcache:fs:dir_content:%s"
 )
 
 // Metadata keys
@@ -128,6 +129,10 @@ func (k *metadataKeys) MetadataLocation(hash string) string {
 
 func (k *metadataKeys) MetadataRef(hash string) string {
 	return fmt.Sprintf(metadataRef, hash)
+}
+
+func (k *metadataKeys) MetadataDirectoryContent(nodeId string) string {
+	return fmt.Sprintf(metadataDirectoryContent, nodeId)
 }
 
 var MetadataKeys = &metadataKeys{}

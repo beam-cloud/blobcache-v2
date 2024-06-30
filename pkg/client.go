@@ -253,6 +253,8 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				return nil, errors.New("no host found")
 			}
 
+			// TODO: pick the closest one in the intersection of these sets (lowest RTT)
+
 			host = c.hostMap.Get(addr)
 
 			c.mu.Lock()
