@@ -124,7 +124,6 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	n.log("Readlink called")
 
 	if n.bfsNode.NodeType != SymLinkNode {
-		// This node is not a symlink
 		return nil, syscall.EINVAL
 	}
 
@@ -146,10 +145,12 @@ func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 		return nil, syscall.EIO // Or the most appropriate error based on the context
 	}
 
+	contentMetadata.EntryList = append(contentMetadata.EntryList, "somefile.txt")
+
 	dirEntries := make([]fuse.DirEntry, len(contentMetadata.EntryList))
 	for i, entryName := range contentMetadata.EntryList {
 		// Populate dirEntries with the actual entries, possibly with additional metadata such as inode numbers
-		dirEntries[i] = fuse.DirEntry{Name: entryName}
+		dirEntries[i] = fuse.DirEntry{Name: entryName, Mode: fuse.S_IFDIR}
 	}
 
 	return fs.NewListDirStream(dirEntries), fs.OK

@@ -22,7 +22,8 @@ message GetContentResponse {
 }
 
 message StoreContentRequest {
-  bytes content = 1; // Content data to store
+  bytes content = 1; // Content bytes to store
+  string object_name = 2; // Name is a path mapped to disk
 }
 
 message StoreContentResponse {

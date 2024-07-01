@@ -132,10 +132,15 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
+	objectName := ""
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			break
+		}
+
+		if req.ObjectName != "" && objectName == "" {
+			objectName = req.ObjectName
 		}
 
 		if err != nil {
@@ -164,6 +169,9 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		Logger.Infof("STORE - [%s] - %v", hash, err)
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
+
+	// TODO: write metadata entries for directory access
+	// we now have the object name
 
 	Logger.Infof("STORE - [%s]", hash)
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
