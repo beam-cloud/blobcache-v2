@@ -137,21 +137,12 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
 
-	// Use the directory ID to fetch the directory content metadata
-	contentMetadataKey := MetadataKeys.MetadataDirectoryContent(n.bfsNode.ID)
-	contentMetadata, err := n.filesystem.Metadata.GetDirectoryContentMetadata(contentMetadataKey)
-	if err != nil {
-		n.log(fmt.Sprintf("Error reading directory content metadata: %v", err))
-		return nil, syscall.EIO // Or the most appropriate error based on the context
-	}
-
-	contentMetadata.EntryList = append(contentMetadata.EntryList, "somefile.txt")
-
-	dirEntries := make([]fuse.DirEntry, len(contentMetadata.EntryList))
-	for i, entryName := range contentMetadata.EntryList {
-		// Populate dirEntries with the actual entries, possibly with additional metadata such as inode numbers
-		dirEntries[i] = fuse.DirEntry{Name: entryName, Mode: fuse.S_IFDIR}
-	}
+	dirEntries := []fuse.DirEntry{} // make([]fuse.DirEntry, len(contentMetadata.EntryList))
+	// contentMetadata.EntryList = append(contentMetadata.EntryList, "somefile.txt")
+	// for i, entryName := range contentMetadata.EntryList {
+	// 	// Populate dirEntries with the actual entries, possibly with additional metadata such as inode numbers
+	// 	dirEntries[i] = fuse.DirEntry{Name: entryName, Mode: fuse.S_IFDIR}
+	// }
 
 	return fs.NewListDirStream(dirEntries), fs.OK
 }

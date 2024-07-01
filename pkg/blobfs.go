@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -120,44 +119,12 @@ func NewFileSystem(opts BlobFsSystemOpts) (*BlobFs, error) {
 	rootID := GenerateDirectoryID("", "/", 0)
 	rootPID := "" // Root node has no parent
 
-	// Fetch or create root directory access metadata
-	rootAccessMetadata, err := bfs.Metadata.GetDirectoryAccessMetadata(rootPID, "/")
-	if err != nil {
-		// Default permissions for root directory (e.g., drwxr-xr-x)
-		rootAccessMetadata = &DirectoryAccessMetadata{
-			PID:        rootPID,
-			ID:         rootID,
-			Permission: fuse.S_IFDIR | 0755, // Octal notation for permissions
-		}
-		if err := bfs.Metadata.SaveDirectoryAccessMetadata(rootAccessMetadata); err != nil {
-			return nil, fmt.Errorf("failed to save root directory access metadata: %w", err)
-		}
-	}
-
-	log.Println("root access metadata: ", rootAccessMetadata)
-
-	// Fetch or create root directory content metadata
-	// If there is no directory content metadata, this is sort of the equivalnet of a "format"
-	// in that the root directory content metadata that's saved will no longer have any entries
-	_, err = bfs.Metadata.GetDirectoryContentMetadata(rootID)
-	if err != nil {
-		rootContentMetadata := &DirectoryContentMetadata{
-			Id:         rootID,
-			EntryList:  []string{},                 // Empty list, no entries yet
-			Timestamps: make(map[string]time.Time), // Empty timestamps
-		}
-
-		if err := bfs.Metadata.SaveDirectoryContentMetadata(rootContentMetadata); err != nil {
-			return nil, fmt.Errorf("failed to save root directory content metadata: %w", err)
-		}
-	}
-
 	// Create the actual root filesystem node required by FUSE
 	rootNode := &FSNode{
 		filesystem: bfs,
 		attr: fuse.Attr{
 			Ino:  1,
-			Mode: rootAccessMetadata.Permission,
+			Mode: fuse.S_IFDIR | 0755,
 		},
 
 		bfsNode: &BlobFsNode{

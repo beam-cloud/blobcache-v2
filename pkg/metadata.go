@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -97,30 +96,6 @@ func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) 
 	return hostSet, nil
 }
 
-func (m *BlobCacheMetadata) GetDirectoryAccessMetadata(pid, name string) (*DirectoryAccessMetadata, error) {
-	return &DirectoryAccessMetadata{}, nil
-}
-
-func (m *BlobCacheMetadata) GetDirectoryContentMetadata(id string) (*DirectoryContentMetadata, error) {
-	return &DirectoryContentMetadata{}, nil
-}
-
-func (m *BlobCacheMetadata) GetFileMetadata(pid, name string) (*FileMetadata, error) {
-	return &FileMetadata{}, nil
-}
-
-func (m *BlobCacheMetadata) ListDirectory(string) []fuse.DirEntry {
-	return []fuse.DirEntry{}
-}
-
-func (m *BlobCacheMetadata) SaveDirectoryContentMetadata(contentMeta *DirectoryContentMetadata) error {
-	return nil
-}
-
-func (m *BlobCacheMetadata) SaveDirectoryAccessMetadata(accessMeta *DirectoryAccessMetadata) error {
-	return nil
-}
-
 func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
 	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
 	if err != nil {
@@ -130,13 +105,16 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
+func (m *BlobCacheMetadata) GetFileMetadata(pid, name string) (*FileMetadata, error) {
+	return &FileMetadata{}, nil
+}
+
 // Metadata key storage format
 var (
-	metadataPrefix           string = "blobcache"
-	metadataEntry            string = "blobcache:entry:%s"
-	metadataLocation         string = "blobcache:location:%s"
-	metadataRef              string = "blobcache:ref:%s"
-	metadataDirectoryContent string = "blobcache:fs:dir_content:%s"
+	metadataPrefix   string = "blobcache"
+	metadataEntry    string = "blobcache:entry:%s"
+	metadataLocation string = "blobcache:location:%s"
+	metadataRef      string = "blobcache:ref:%s"
 )
 
 // Metadata keys
@@ -154,10 +132,6 @@ func (k *metadataKeys) MetadataLocation(hash string) string {
 
 func (k *metadataKeys) MetadataRef(hash string) string {
 	return fmt.Sprintf(metadataRef, hash)
-}
-
-func (k *metadataKeys) MetadataDirectoryContent(nodeId string) string {
-	return fmt.Sprintf(metadataDirectoryContent, nodeId)
 }
 
 var MetadataKeys = &metadataKeys{}

@@ -3,8 +3,6 @@ package blobcache
 import (
 	"fmt"
 	"time"
-
-	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
 const (
@@ -128,15 +126,9 @@ type FileSystem interface {
 type FileSystemStorage interface {
 	Metadata()
 	Get(string)
-	ListDirectory(string)
 	ReadFile(interface{} /* This could be any sort of FS node type, depending on the implementation */, []byte, int64)
 }
 
 type MetadataEngine interface {
-	GetDirectoryContentMetadata(id string) (*DirectoryContentMetadata, error)
-	GetDirectoryAccessMetadata(pid, name string) (*DirectoryAccessMetadata, error)
 	GetFileMetadata(pid, name string) (*FileMetadata, error)
-	SaveDirectoryContentMetadata(contentMeta *DirectoryContentMetadata) error
-	SaveDirectoryAccessMetadata(accessMeta *DirectoryAccessMetadata) error
-	ListDirectory(string) []fuse.DirEntry
 }
