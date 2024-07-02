@@ -153,8 +153,9 @@ type FileSystemStorage interface {
 }
 
 type MetadataEngine interface {
-	GetDirMetadata(ctx context.Context, id string) (*DirMetadata, error)
-	SetDirMetadata(ctx context.Context, id string, metadata *DirMetadata) error
-	GetFileMetadata(ctx context.Context, id string) (*FileMetadata, error)
-	SetFileMetadata(ctx context.Context, id string, metadata *FileMetadata) error
+	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
+	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
+	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
+	AddFsNodeChild(ctx context.Context, pid, id string) error
+	RemoveFsNodeChild(ctx context.Context, id string) error
 }

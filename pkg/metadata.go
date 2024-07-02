@@ -105,27 +105,8 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
-func (m *BlobCacheMetadata) SetFileMetadata(ctx context.Context, id string, metadata *FileMetadata) error {
-	key := MetadataKeys.MetadataFsFile(id)
-
-	exists, err := m.rdb.Exists(ctx, key).Result()
-	if err != nil {
-		return err
-	}
-
-	// Entry not found, add it
-	if exists == 0 {
-		err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
-		if err != nil {
-			return fmt.Errorf("failed to set dir metadata <%v>: %w", key, err)
-		}
-	}
-
-	return nil
-}
-
-func (m *BlobCacheMetadata) GetFileMetadata(ctx context.Context, id string) (*FileMetadata, error) {
-	key := MetadataKeys.MetadataFsFile(id)
+func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
+	key := MetadataKeys.MetadataFsNode(id)
 
 	res, err := m.rdb.HGetAll(context.TODO(), key).Result()
 	if err != nil && err != redis.Nil {
@@ -136,18 +117,16 @@ func (m *BlobCacheMetadata) GetFileMetadata(ctx context.Context, id string) (*Fi
 		return nil, &ErrFileNotFound{Id: id}
 	}
 
-	metadata := &FileMetadata{}
+	metadata := &BlobFsMetadata{}
 	if err = ToStruct(res, metadata); err != nil {
-		return nil, fmt.Errorf("failed to deserialize file metadata <%v>: %v", key, err)
+		return nil, fmt.Errorf("failed to deserialize blobfs metadata <%v>: %v", key, err)
 	}
 
 	return metadata, nil
 }
 
-func (m *BlobCacheMetadata) SetDirMetadata(ctx context.Context, id string, metadata *DirMetadata) error {
-	key := MetadataKeys.MetadataFsDir(id)
-
-	m.rdb.Ping(ctx)
+func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
+	key := MetadataKeys.MetadataFsNode(id)
 
 	exists, err := m.rdb.Exists(ctx, key).Result()
 	if err != nil {
@@ -165,35 +144,26 @@ func (m *BlobCacheMetadata) SetDirMetadata(ctx context.Context, id string, metad
 	return nil
 }
 
-func (m *BlobCacheMetadata) GetDirMetadata(ctx context.Context, id string) (*DirMetadata, error) {
-	key := MetadataKeys.MetadataFsDir(id)
+func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
+	return nil, nil
+}
 
-	res, err := m.rdb.HGetAll(ctx, key).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
+func (m *BlobCacheMetadata) AddFsNodeChild(ctx context.Context, pid, id string) error {
+	return nil
+}
 
-	if len(res) == 0 {
-		return nil, &ErrDirNotFound{Id: id}
-	}
-
-	metadata := &DirMetadata{}
-	if err = ToStruct(res, metadata); err != nil {
-		return nil, fmt.Errorf("failed to deserialize dir metadata <%v>: %v", key, err)
-	}
-
-	return metadata, nil
+func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) error {
+	return nil
 }
 
 // Metadata key storage format
 var (
-	metadataPrefix       string = "blobcache"
-	metadataEntry        string = "blobcache:entry:%s"
-	metadataLocation     string = "blobcache:location:%s"
-	metadataRef          string = "blobcache:ref:%s"
-	metadataFsDir        string = "blobcache:fs:dir:%s"
-	metadataFsDirEntries string = "blobcache:fs:dir_entries:%s"
-	metadataFsFile       string = "blobcache:fs:file:%s"
+	metadataPrefix         string = "blobcache"
+	metadataEntry          string = "blobcache:entry:%s"
+	metadataLocation       string = "blobcache:location:%s"
+	metadataRef            string = "blobcache:ref:%s"
+	metadataFsNode         string = "blobcache:fs:node:%s"
+	metadataFsNodeChildren string = "blobcache:fs:node:%s:children"
 )
 
 // Metadata keys
@@ -213,16 +183,12 @@ func (k *metadataKeys) MetadataRef(hash string) string {
 	return fmt.Sprintf(metadataRef, hash)
 }
 
-func (k *metadataKeys) MetadataFsDir(id string) string {
-	return fmt.Sprintf(metadataFsDir, id)
+func (k *metadataKeys) MetadataFsNode(id string) string {
+	return fmt.Sprintf(metadataFsNode, id)
 }
 
-func (k *metadataKeys) MetadataFsDirEntries(id string) string {
-	return fmt.Sprintf(metadataFsDirEntries, id)
-}
-
-func (k *metadataKeys) MetadataFsFile(id string) string {
-	return fmt.Sprintf(metadataFsFile, id)
+func (k *metadataKeys) MetadataFsNodeChildren(id string) string {
+	return fmt.Sprintf(metadataFsNodeChildren, id)
 }
 
 var MetadataKeys = &metadataKeys{}

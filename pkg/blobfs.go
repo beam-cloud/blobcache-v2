@@ -13,18 +13,10 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-type DirMetadata struct {
+type BlobFsMetadata struct {
 	Inode uint64 `redis:"inode" json:"inode"`
 	PID   string `redis:"pid" json:"pid"`
 	ID    string `redis:"id" json:"id"`
-	Name  string `redis:"name" json:"name"`
-	Mode  uint32 `redis:"mode" json:"mode"`
-}
-
-type FileMetadata struct {
-	Inode uint64 `redis:"inode" json:"inode"`
-	ID    string `redis:"pid" json:"pid"`
-	PID   string `redis:"id" json:"id"`
 	Name  string `redis:"name" json:"name"`
 	Mode  uint32 `redis:"mode" json:"mode"`
 }
@@ -121,13 +113,13 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 	rootID := GenerateFsID("", "/")
 	rootPID := "" // Root node has no parent
 
-	dirMeta, err := metadata.GetDirMetadata(bfs.ctx, rootID)
+	dirMeta, err := metadata.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
 		log.Printf("Root node metadata not found, creating it now...\n")
 
-		dirMeta = &DirMetadata{PID: rootPID, ID: rootID, Mode: fuse.S_IFDIR | 0755, Inode: 1}
+		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Mode: fuse.S_IFDIR | 0755, Inode: 1}
 
-		err := metadata.SetDirMetadata(bfs.ctx, rootID, dirMeta)
+		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
 			log.Fatalf("Unable to create blobfs root node dir metdata: %+v\n", err)
 		}
