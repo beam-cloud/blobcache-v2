@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"log"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	redis "github.com/redis/go-redis/v9"
@@ -105,6 +106,11 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
+func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, fsPath string) error {
+	log.Println("storing content in blobfs...")
+	return nil
+}
+
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	key := MetadataKeys.MetadataFsNode(id)
 
@@ -114,12 +120,12 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 	}
 
 	if len(res) == 0 {
-		return nil, &ErrFileNotFound{Id: id}
+		return nil, &ErrNodeNotFound{Id: id}
 	}
 
 	metadata := &BlobFsMetadata{}
 	if err = ToStruct(res, metadata); err != nil {
-		return nil, fmt.Errorf("failed to deserialize blobfs metadata <%v>: %v", key, err)
+		return nil, fmt.Errorf("failed to deserialize blobfs node metadata <%v>: %v", key, err)
 	}
 
 	return metadata, nil
@@ -128,17 +134,9 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	key := MetadataKeys.MetadataFsNode(id)
 
-	exists, err := m.rdb.Exists(ctx, key).Result()
+	err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
 	if err != nil {
-		return err
-	}
-
-	// Metadata not found, add it
-	if exists == 0 {
-		err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
-		if err != nil {
-			return fmt.Errorf("failed to set dir metadata <%v>: %w", key, err)
-		}
+		return fmt.Errorf("failed to set blobfs node metadata <%v>: %w", key, err)
 	}
 
 	return nil

@@ -117,20 +117,12 @@ func (e *ErrEntryNotFound) Error() string {
 	return fmt.Sprintf("entry not found: %s", e.Hash)
 }
 
-type ErrDirNotFound struct {
+type ErrNodeNotFound struct {
 	Id string
 }
 
-func (e *ErrDirNotFound) Error() string {
-	return fmt.Sprintf("dir metadata not found: %s", e.Id)
-}
-
-type ErrFileNotFound struct {
-	Id string
-}
-
-func (e *ErrFileNotFound) Error() string {
-	return fmt.Sprintf("file metadata not found: %s", e.Id)
+func (e *ErrNodeNotFound) Error() string {
+	return fmt.Sprintf("blobfs node not found: %s", e.Id)
 }
 
 // BlobFS types

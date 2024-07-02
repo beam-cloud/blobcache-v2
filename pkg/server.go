@@ -53,7 +53,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	// Mount cache as a FUSE filesystem if enabled
+	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if cfg.BlobFs.Enabled {
 		startServer, _, err := Mount(ctx, BlobFsSystemOpts{
 			Verbose:    cfg.DebugMode,
@@ -134,15 +134,15 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
-	objectName := ""
+	fsPath := ""
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 
-		if req.ObjectName != "" && objectName == "" {
-			objectName = req.ObjectName
+		if req.FsPath != "" && fsPath == "" {
+			fsPath = req.FsPath
 		}
 
 		if err != nil {
@@ -172,8 +172,14 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
-	// TODO: write metadata entries for directory access
-	// we now have the object name
+	// Store references in blobfs if it's enabled (for disk access to the cached content)
+	if cs.cfg.BlobFs.Enabled && fsPath != "" {
+		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath)
+		if err != nil {
+			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, fsPath, err)
+			return status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
+		}
+	}
 
 	Logger.Infof("STORE - [%s]", hash)
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})

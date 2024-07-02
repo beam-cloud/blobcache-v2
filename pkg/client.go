@@ -283,7 +283,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	return client, nil
 }
 
-func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, fsPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -301,7 +301,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk}
+		req := &proto.StoreContentRequest{Content: chunk, FsPath: fsPath}
 		if err := stream.Send(req); err != nil {
 			return "", err
 		}

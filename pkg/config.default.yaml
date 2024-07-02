@@ -7,6 +7,9 @@ maxCacheSizeMb: 100 # 100MB
 grpcMessageSizeBytes: 1000000000
 grpcDialTimeoutS: 1
 discoveryIntervalS: 5
+blobfs:
+  enabled: false
+  mountPoint: /tmp/test
 tailscale:
   controlUrl:
   user:
