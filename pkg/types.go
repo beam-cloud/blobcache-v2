@@ -25,6 +25,7 @@ type BlobCacheConfig struct {
 	Tailscale                      TailscaleConfig `key:"tailscale" json:"tailscale"`
 	Metadata                       MetadataConfig  `key:"metadata" json:"metadata"`
 	DiscoveryIntervalS             int             `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	BlobFs                         BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
 type TailscaleConfig struct {
@@ -72,6 +73,11 @@ type RedisConfig struct {
 	RouteByLatency     bool          `key:"routeByLatency" json:"route_by_latency"`
 }
 
+type BlobFsConfig struct {
+	Enabled    bool   `key:"enabled" json:"enabled"`
+	MountPoint string `key:"mountPoint" json:"mount_point"`
+}
+
 type BlobCacheHost struct {
 	RTT  time.Duration
 	Addr string
@@ -116,7 +122,7 @@ type ErrDirNotFound struct {
 }
 
 func (e *ErrDirNotFound) Error() string {
-	return fmt.Sprintf("dir not found: %s", e.Id)
+	return fmt.Sprintf("dir metadata not found: %s", e.Id)
 }
 
 type ErrFileNotFound struct {
@@ -124,7 +130,7 @@ type ErrFileNotFound struct {
 }
 
 func (e *ErrFileNotFound) Error() string {
-	return fmt.Sprintf("file not found: %s", e.Id)
+	return fmt.Sprintf("file metadata not found: %s", e.Id)
 }
 
 // BlobFS types

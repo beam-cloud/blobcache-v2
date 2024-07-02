@@ -187,12 +187,13 @@ func (m *BlobCacheMetadata) GetDirMetadata(ctx context.Context, id string) (*Dir
 
 // Metadata key storage format
 var (
-	metadataPrefix   string = "blobcache"
-	metadataEntry    string = "blobcache:entry:%s"
-	metadataLocation string = "blobcache:location:%s"
-	metadataRef      string = "blobcache:ref:%s"
-	metadataFsDir    string = "blobcache:fs:dir:%s"
-	metadataFsFile   string = "blobcache:fs:file:%s"
+	metadataPrefix       string = "blobcache"
+	metadataEntry        string = "blobcache:entry:%s"
+	metadataLocation     string = "blobcache:location:%s"
+	metadataRef          string = "blobcache:ref:%s"
+	metadataFsDir        string = "blobcache:fs:dir:%s"
+	metadataFsDirEntries string = "blobcache:fs:dir_entries:%s"
+	metadataFsFile       string = "blobcache:fs:file:%s"
 )
 
 // Metadata keys
@@ -214,6 +215,10 @@ func (k *metadataKeys) MetadataRef(hash string) string {
 
 func (k *metadataKeys) MetadataFsDir(id string) string {
 	return fmt.Sprintf(metadataFsDir, id)
+}
+
+func (k *metadataKeys) MetadataFsDirEntries(id string) string {
+	return fmt.Sprintf(metadataFsDirEntries, id)
 }
 
 func (k *metadataKeys) MetadataFsFile(id string) string {

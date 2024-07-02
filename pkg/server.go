@@ -53,19 +53,21 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	// TODO: connect to config
-	startServer, _, err := Mount(ctx, BlobFsSystemOpts{
-		Verbose:    true,
-		Metadata:   metadata,
-		MountPoint: "/tmp/test",
-	})
-	if err != nil {
-		return nil, err
-	}
+	// Mount cache as a FUSE filesystem if enabled
+	if cfg.BlobFs.Enabled {
+		startServer, _, err := Mount(ctx, BlobFsSystemOpts{
+			Verbose:    cfg.DebugMode,
+			Metadata:   metadata,
+			MountPoint: cfg.BlobFs.MountPoint,
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	err = startServer()
-	if err != nil {
-		return nil, err
+		err = startServer()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	hostMap := NewHostMap(nil)
