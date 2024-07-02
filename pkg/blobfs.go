@@ -18,6 +18,7 @@ type BlobFsMetadata struct {
 	PID   string `redis:"pid" json:"pid"`
 	ID    string `redis:"id" json:"id"`
 	Name  string `redis:"name" json:"name"`
+	Path  string `redis:"path" json:"path"`
 	Mode  uint32 `redis:"mode" json:"mode"`
 }
 
@@ -112,13 +113,13 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 	rootID := GenerateFsID("", "/")
 	rootPID := "" // Root node has no parent
+	rootPath := "/"
 
 	dirMeta, err := metadata.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
 		log.Printf("Root node metadata not found, creating it now...\n")
 
-		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Mode: fuse.S_IFDIR | 0755, Inode: 1}
-
+		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Mode: fuse.S_IFDIR | 0755, Inode: 1, Path: rootPath}
 		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
 			log.Fatalf("Unable to create blobfs root node dir metdata: %+v\n", err)
@@ -135,7 +136,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 		bfsNode: &BlobFsNode{
 			NodeType: DirNode,
-			Path:     "/",
+			Path:     dirMeta.Path,
 			ID:       dirMeta.ID,
 			PID:      dirMeta.PID,
 		},
