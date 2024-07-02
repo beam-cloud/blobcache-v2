@@ -79,7 +79,11 @@ func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOu
 func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	n.log("Lookup called with name: %s", name)
 
-	directoryId := GenerateDirectoryID("", name, 0)
+	// Construct the full path from the root
+	fullPath := path.Join(n.bfsNode.Path, name)
+	log.Println("Full path: ", fullPath)
+
+	directoryId := GenerateFsID("", name)
 	log.Println("directory id: ", directoryId)
 
 	childPath := path.Join(n.bfsNode.Path, name)
@@ -136,14 +140,7 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
-
-	dirEntries := []fuse.DirEntry{} // make([]fuse.DirEntry, len(contentMetadata.EntryList))
-	// contentMetadata.EntryList = append(contentMetadata.EntryList, "somefile.txt")
-	// for i, entryName := range contentMetadata.EntryList {
-	// 	// Populate dirEntries with the actual entries, possibly with additional metadata such as inode numbers
-	// 	dirEntries[i] = fuse.DirEntry{Name: entryName, Mode: fuse.S_IFDIR}
-	// }
-
+	dirEntries := []fuse.DirEntry{}
 	return fs.NewListDirStream(dirEntries), fs.OK
 }
 

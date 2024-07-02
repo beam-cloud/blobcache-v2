@@ -105,8 +105,84 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
-func (m *BlobCacheMetadata) GetFileMetadata(pid, name string) (*FileMetadata, error) {
-	return &FileMetadata{}, nil
+func (m *BlobCacheMetadata) SetFileMetadata(ctx context.Context, id string, metadata *FileMetadata) error {
+	key := MetadataKeys.MetadataFsFile(id)
+
+	exists, err := m.rdb.Exists(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+
+	// Entry not found, add it
+	if exists == 0 {
+		err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
+		if err != nil {
+			return fmt.Errorf("failed to set dir metadata <%v>: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+func (m *BlobCacheMetadata) GetFileMetadata(ctx context.Context, id string) (*FileMetadata, error) {
+	key := MetadataKeys.MetadataFsFile(id)
+
+	res, err := m.rdb.HGetAll(context.TODO(), key).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	if len(res) == 0 {
+		return nil, &ErrFileNotFound{Id: id}
+	}
+
+	metadata := &FileMetadata{}
+	if err = ToStruct(res, metadata); err != nil {
+		return nil, fmt.Errorf("failed to deserialize file metadata <%v>: %v", key, err)
+	}
+
+	return metadata, nil
+}
+
+func (m *BlobCacheMetadata) SetDirMetadata(ctx context.Context, id string, metadata *DirMetadata) error {
+	key := MetadataKeys.MetadataFsDir(id)
+
+	m.rdb.Ping(ctx)
+
+	exists, err := m.rdb.Exists(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+
+	// Metadata not found, add it
+	if exists == 0 {
+		err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
+		if err != nil {
+			return fmt.Errorf("failed to set dir metadata <%v>: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+func (m *BlobCacheMetadata) GetDirMetadata(ctx context.Context, id string) (*DirMetadata, error) {
+	key := MetadataKeys.MetadataFsDir(id)
+
+	res, err := m.rdb.HGetAll(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	if len(res) == 0 {
+		return nil, &ErrDirNotFound{Id: id}
+	}
+
+	metadata := &DirMetadata{}
+	if err = ToStruct(res, metadata); err != nil {
+		return nil, fmt.Errorf("failed to deserialize dir metadata <%v>: %v", key, err)
+	}
+
+	return metadata, nil
 }
 
 // Metadata key storage format
@@ -115,6 +191,8 @@ var (
 	metadataEntry    string = "blobcache:entry:%s"
 	metadataLocation string = "blobcache:location:%s"
 	metadataRef      string = "blobcache:ref:%s"
+	metadataFsDir    string = "blobcache:fs:dir:%s"
+	metadataFsFile   string = "blobcache:fs:file:%s"
 )
 
 // Metadata keys
@@ -132,6 +210,14 @@ func (k *metadataKeys) MetadataLocation(hash string) string {
 
 func (k *metadataKeys) MetadataRef(hash string) string {
 	return fmt.Sprintf(metadataRef, hash)
+}
+
+func (k *metadataKeys) MetadataFsDir(id string) string {
+	return fmt.Sprintf(metadataFsDir, id)
+}
+
+func (k *metadataKeys) MetadataFsFile(id string) string {
+	return fmt.Sprintf(metadataFsFile, id)
 }
 
 var MetadataKeys = &metadataKeys{}

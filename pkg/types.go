@@ -1,6 +1,7 @@
 package blobcache
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -110,6 +111,22 @@ func (e *ErrEntryNotFound) Error() string {
 	return fmt.Sprintf("entry not found: %s", e.Hash)
 }
 
+type ErrDirNotFound struct {
+	Id string
+}
+
+func (e *ErrDirNotFound) Error() string {
+	return fmt.Sprintf("dir not found: %s", e.Id)
+}
+
+type ErrFileNotFound struct {
+	Id string
+}
+
+func (e *ErrFileNotFound) Error() string {
+	return fmt.Sprintf("file not found: %s", e.Id)
+}
+
 // BlobFS types
 type FileSystemOpts struct {
 	MountPoint string
@@ -130,5 +147,8 @@ type FileSystemStorage interface {
 }
 
 type MetadataEngine interface {
-	GetFileMetadata(pid, name string) (*FileMetadata, error)
+	GetDirMetadata(ctx context.Context, id string) (*DirMetadata, error)
+	SetDirMetadata(ctx context.Context, id string, metadata *DirMetadata) error
+	GetFileMetadata(ctx context.Context, id string) (*FileMetadata, error)
+	SetFileMetadata(ctx context.Context, id string, metadata *FileMetadata) error
 }
