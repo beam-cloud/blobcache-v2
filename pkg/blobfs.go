@@ -57,24 +57,26 @@ func SHA1StringToUint64(hash string) (uint64, error) {
 }
 
 type BlobFsSystemOpts struct {
-	Verbose    bool
-	Metadata   MetadataEngine
-	MountPoint string
+	Verbose  bool
+	Metadata *BlobCacheMetadata
+	Config   BlobCacheConfig
 }
 
 type BlobFs struct {
 	ctx      context.Context
 	root     *FSNode
 	verbose  bool
-	Metadata MetadataEngine
-	Storage  StorageLayer
+	Metadata *BlobCacheMetadata
+	Client   *BlobCacheClient
+	Config   BlobCacheConfig
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, error) {
-	Logger.Infof("Mounting to %s\n", opts.MountPoint)
+	mountPoint := opts.Config.BlobFs.MountPoint
+	Logger.Infof("Mounting to %s\n", mountPoint)
 
-	if _, err := os.Stat(opts.MountPoint); os.IsNotExist(err) {
-		err = os.MkdirAll(opts.MountPoint, 0755)
+	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
+		err = os.MkdirAll(mountPoint, 0755)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create mount point directory: %v", err)
 		}
@@ -94,7 +96,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		AttrTimeout:  &attrTimeout,
 		EntryTimeout: &entryTimeout,
 	}
-	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), opts.MountPoint, &fuse.MountOptions{
+	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
 		MaxBackground:        512,
 		DisableXAttrs:        true,
 		EnableSymlinkCaching: true,
@@ -129,11 +131,18 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 // NewFileSystem initializes a new BlobFs with root metadata.
 func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) {
 	metadata := opts.Metadata
+
+	client, err := NewBlobCacheClient(ctx, opts.Config)
+	if err != nil {
+		return nil, err
+	}
+
 	bfs := &BlobFs{
 		verbose:  opts.Verbose,
-		Metadata: metadata,
 		ctx:      ctx,
-		// Storage:  storage,
+		Config:   opts.Config,
+		Metadata: metadata,
+		Client:   client,
 	}
 
 	rootID := GenerateFsID("/")

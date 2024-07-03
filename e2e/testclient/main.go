@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	filePath := "e2e/testclient/testdata/test2.bin"
+	filePath := "e2e/testclient/testdata/newfile.txt"
 	b, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatalf("err: %v\n", err)

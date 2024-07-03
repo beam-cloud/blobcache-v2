@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"path"
 	"syscall"
 
@@ -13,11 +12,12 @@ import (
 
 type BlobFsNode struct {
 	Path   string
-	ID     string // The unique identifier for the directory, used for content metadata.
-	PID    string // The ID of the parent directory, used for access and file metadata.
-	Name   string // The name of the node, used together with PID for access and file metadata.
+	ID     string
+	PID    string // The ID of the parent directory
+	Name   string // The name of the node
 	Attr   fuse.Attr
 	Target string
+	Hash   string
 }
 type FSNode struct {
 	fs.Inode
@@ -90,8 +90,6 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return nil, syscall.ENOENT
 	}
 
-	log.Printf("METADATA: %+v\n", metadata)
-
 	// Fill out the child node's attributes
 	attr := metaToAttr(metadata)
 	out.Attr = attr
@@ -105,6 +103,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			Name:   metadata.Name,
 			Attr:   attr,
 			Target: "",
+			Hash:   metadata.Hash,
 		}, attr: attr},
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
 	)
@@ -125,18 +124,17 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n.log("Read called with offset: %v", off)
 
-	nRead := 0
-
 	// Don't  try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
-		return fuse.ReadResultData(dest[:nRead]), fs.OK
+		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	// nRead, err := n.filesystem.Storage.ReadFile(n.bfsNode, dest, off)
-	// if err != nil {
-	// 	return nil, syscall.EIO
-	// }
+	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+	if err != nil {
+		return nil, syscall.EIO
+	}
 
+	nRead := copy(dest, buffer)
 	return fuse.ReadResultData(dest[:nRead]), fs.OK
 }
 
@@ -157,23 +155,18 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
 
-	log.Println("hey: ", n.bfsNode.Path)
 	children, err := n.filesystem.Metadata.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
 	if err != nil {
 		return nil, fs.ENOATTR
 	}
 
-	log.Println("children: ", children)
 	dirEntries := []fuse.DirEntry{}
 	for _, child := range children {
-		log.Printf("child: %+v\n", child)
-
-		entry := fuse.DirEntry{
+		dirEntries = append(dirEntries, fuse.DirEntry{
 			Mode: child.Mode,
 			Name: child.Name,
 			Ino:  child.Ino,
-		}
-		dirEntries = append(dirEntries, entry)
+		})
 	}
 
 	return fs.NewListDirStream(dirEntries), fs.OK

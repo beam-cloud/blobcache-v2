@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
@@ -129,7 +128,7 @@ func (e *ErrNodeNotFound) Error() string {
 type FileSystemOpts struct {
 	MountPoint string
 	Verbose    bool
-	Metadata   MetadataEngine
+	Metadata   *BlobCacheMetadata
 }
 
 type FileSystem interface {
@@ -142,12 +141,4 @@ type FileSystemStorage interface {
 	Metadata()
 	Get(string)
 	ReadFile(interface{} /* This could be any sort of FS node type, depending on the implementation */, []byte, int64)
-}
-
-type MetadataEngine interface {
-	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
-	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
-	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
-	AddFsNodeChild(ctx context.Context, pid, id string) error
-	RemoveFsNodeChild(ctx context.Context, id string) error
 }

@@ -27,13 +27,11 @@ type CacheServiceOpts struct {
 type CacheService struct {
 	ctx context.Context
 	proto.UnimplementedBlobCacheServer
-	hostname        string
-	cas             *ContentAddressableStorage
-	cfg             BlobCacheConfig
-	tailscale       *Tailscale
-	metadata        *BlobCacheMetadata
-	discoveryClient *DiscoveryClient
-	hostMap         *HostMap
+	hostname  string
+	cas       *ContentAddressableStorage
+	cfg       BlobCacheConfig
+	tailscale *Tailscale
+	metadata  *BlobCacheMetadata
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
@@ -56,9 +54,8 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if cfg.BlobFs.Enabled {
 		startServer, _, err := Mount(ctx, BlobFsSystemOpts{
-			Verbose:    cfg.DebugMode,
-			Metadata:   metadata,
-			MountPoint: cfg.BlobFs.MountPoint,
+			Config:   cfg,
+			Metadata: metadata,
 		})
 		if err != nil {
 			return nil, err
@@ -70,18 +67,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		}
 	}
 
-	hostMap := NewHostMap(nil)
 	tailscale := NewTailscale(hostname, cfg)
 
 	return &CacheService{
-		ctx:             ctx,
-		hostname:        hostname,
-		cas:             cas,
-		cfg:             cfg,
-		tailscale:       tailscale,
-		metadata:        metadata,
-		discoveryClient: NewDiscoveryClient(cfg, tailscale, hostMap),
-		hostMap:         hostMap,
+		ctx:       ctx,
+		hostname:  hostname,
+		cas:       cas,
+		cfg:       cfg,
+		tailscale: tailscale,
+		metadata:  metadata,
 	}, nil
 }
 
@@ -104,7 +98,6 @@ func (cs *CacheService) StartServer(port uint) error {
 	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(ln)
-	go cs.discoveryClient.StartInBackground(context.TODO())
 
 	// Block until a termination signal is received
 	terminationChan := make(chan os.Signal, 1)
