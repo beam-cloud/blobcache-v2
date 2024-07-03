@@ -84,7 +84,6 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 	// Construct the full of this file path from root
 	fullPath := path.Join(n.bfsNode.Path, name)
-	log.Println("Full path: ", fullPath)
 
 	id := GenerateFsID(fullPath)
 	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, id)
@@ -94,17 +93,16 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 	log.Printf("METADATA: %+v\n", metadata)
 
-	childPath := path.Join(n.bfsNode.Path, name)
-	log.Println("childPath: ", childPath)
-
 	// Fill out the child node's attributes
 	attr := metaToAttr(metadata)
 	out.Attr = attr
 
+	log.Println("attr:", attr)
+	log.Println("fullPath: ", fullPath)
 	// Create a new Inode on lookup
 	node := n.NewInode(ctx,
 		&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
-			Path:    fullPath,
+			Path:    metadata.Path,
 			ID:      id,
 			PID:     metadata.PID,
 			Name:    metadata.Name,
@@ -163,7 +161,26 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
+
+	log.Println("hey: ", n.bfsNode.Path)
+	children, err := n.filesystem.Metadata.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
+	if err != nil {
+		return nil, fs.ENOATTR
+	}
+
+	log.Println("children: ", children)
 	dirEntries := []fuse.DirEntry{}
+	for _, child := range children {
+		log.Printf("child: %+v\n", child)
+
+		entry := fuse.DirEntry{
+			Mode: child.Mode,
+			Name: child.Name,
+			Ino:  child.Ino,
+		}
+		dirEntries = append(dirEntries, entry)
+	}
+
 	return fs.NewListDirStream(dirEntries), fs.OK
 }
 

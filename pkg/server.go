@@ -174,7 +174,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
 	if cs.cfg.BlobFs.Enabled && fsPath != "" {
-		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath)
+		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath, hash)
 		if err != nil {
 			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, fsPath, err)
 			return status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)

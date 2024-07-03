@@ -19,6 +19,7 @@ type BlobFsMetadata struct {
 	ID        string `redis:"id" json:"id"`
 	Name      string `redis:"name" json:"name"`
 	Path      string `redis:"path" json:"path"`
+	Hash      string `redis:"hash" json:"hash"`
 	Ino       uint64 `redis:"ino" json:"ino"`
 	Size      uint64 `redis:"size" json:"size"`
 	Blocks    uint64 `redis:"blocks" json:"blocks"`

@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -109,7 +108,7 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
-func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string) error {
+func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string) error {
 	path = filepath.Join("/", filepath.Clean(path))
 	parts := strings.Split(path, string(filepath.Separator))
 
@@ -129,7 +128,6 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			currentPath = filepath.Join(currentPath, part)
 		}
 
-		log.Println("generating fs id with: ", currentPath)
 		currentNodeId := GenerateFsID(currentPath)
 		inode, err := SHA1StringToUint64(currentNodeId)
 		if err != nil {
@@ -139,7 +137,7 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 		metadata := &BlobFsMetadata{
 			PID:  previousParentId,
 			ID:   currentNodeId,
-			Name: currentPath,
+			Name: part,
 			Path: currentPath,
 			Ino:  inode,
 			Mode: fuse.S_IFDIR | 0755,
@@ -155,15 +153,12 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			return err
 		}
 
-		if path != currentPath {
-			err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
-			if err != nil {
-				return err
-			}
+		err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
+		if err != nil {
+			return err
 		}
 
 		previousParentId = currentNodeId
-		log.Println("currentPath: ", currentPath)
 	}
 
 	return nil
