@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -14,21 +15,44 @@ import (
 )
 
 type BlobFsMetadata struct {
-	Inode uint64 `redis:"inode" json:"inode"`
-	PID   string `redis:"pid" json:"pid"`
-	ID    string `redis:"id" json:"id"`
-	Name  string `redis:"name" json:"name"`
-	Path  string `redis:"path" json:"path"`
-	Mode  uint32 `redis:"mode" json:"mode"`
+	PID       string `redis:"pid" json:"pid"`
+	ID        string `redis:"id" json:"id"`
+	Name      string `redis:"name" json:"name"`
+	Path      string `redis:"path" json:"path"`
+	Ino       uint64 `redis:"ino" json:"ino"`
+	Size      uint64 `redis:"size" json:"size"`
+	Blocks    uint64 `redis:"blocks" json:"blocks"`
+	Atime     uint64 `redis:"atime" json:"atime"`
+	Mtime     uint64 `redis:"mtime" json:"mtime"`
+	Ctime     uint64 `redis:"ctime" json:"ctime"`
+	Atimensec uint32 `redis:"atimensec" json:"atimensec"`
+	Mtimensec uint32 `redis:"mtimensec" json:"mtimensec"`
+	Ctimensec uint32 `redis:"ctimensec" json:"ctimensec"`
+	Mode      uint32 `redis:"mode" json:"mode"`
+	Nlink     uint32 `redis:"nlink" json:"nlink"`
+	Rdev      uint32 `redis:"rdev" json:"rdev"`
+	Blksize   uint32 `redis:"blksize" json:"blksize"`
+	Padding   uint32 `redis:"padding" json:"padding"`
+	Uid       uint32 `redis:"uid" json:"uid"`
+	Gid       uint32 `redis:"gid" json:"gid"`
 }
 
 type StorageLayer interface {
 }
 
 // Generates a directory ID based on parent ID and name.
-func GenerateFsID(parentID, name string) string {
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%s", parentID, name)))
+func GenerateFsID(name string) string {
+	hash := sha256.Sum256([]byte(name))
 	return hex.EncodeToString(hash[:])
+}
+
+// SHA1StringToUint64 converts the first 8 bytes of a SHA-1 hash string to a uint64
+func SHA1StringToUint64(hash string) (uint64, error) {
+	bytes, err := hex.DecodeString(hash[:16]) // first 8 bytes (16 hex characters)
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint64(bytes), nil
 }
 
 type BlobFsSystemOpts struct {
@@ -111,7 +135,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 		// Storage:  storage,
 	}
 
-	rootID := GenerateFsID("", "/")
+	rootID := GenerateFsID("/")
 	rootPID := "" // Root node has no parent
 	rootPath := "/"
 
@@ -119,7 +143,8 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 	if err != nil || dirMeta == nil {
 		log.Printf("Root node metadata not found, creating it now...\n")
 
-		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Mode: fuse.S_IFDIR | 0755, Inode: 1, Path: rootPath}
+		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Path: rootPath, Ino: 1, Mode: fuse.S_IFDIR | 0755}
+
 		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
 			log.Fatalf("Unable to create blobfs root node dir metdata: %+v\n", err)
@@ -127,18 +152,20 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 	}
 
 	// Create the actual root filesystem node required by FUSE
+	attr := fuse.Attr{
+		Ino:  1,
+		Mode: dirMeta.Mode,
+	}
+
 	rootNode := &FSNode{
 		filesystem: bfs,
-		attr: fuse.Attr{
-			Ino:  1,
-			Mode: dirMeta.Mode,
-		},
+		attr:       attr,
 
 		bfsNode: &BlobFsNode{
-			NodeType: DirNode,
-			Path:     dirMeta.Path,
-			ID:       dirMeta.ID,
-			PID:      dirMeta.PID,
+			Path: dirMeta.Path,
+			ID:   dirMeta.ID,
+			PID:  dirMeta.PID,
+			Attr: attr,
 		},
 	}
 

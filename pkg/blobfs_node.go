@@ -11,35 +11,15 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-type BlobFsNodeType string
-
-const (
-	DirNode     BlobFsNodeType = "dir"
-	FileNode    BlobFsNodeType = "file"
-	SymLinkNode BlobFsNodeType = "symlink"
-)
-
 type BlobFsNode struct {
-	NodeType BlobFsNodeType
-	Path     string
-	ID       string // The unique identifier for the directory, used for content metadata.
-	PID      string // The ID of the parent directory, used for access and file metadata.
-	Name     string // The name of the node, used together with PID for access and file metadata.
-	Attr     fuse.Attr
-	Target   string
-	DataLen  int64 // Length of the node's data, used for file metadata.
+	Path    string
+	ID      string // The unique identifier for the directory, used for content metadata.
+	PID     string // The ID of the parent directory, used for access and file metadata.
+	Name    string // The name of the node, used together with PID for access and file metadata.
+	Attr    fuse.Attr
+	Target  string
+	DataLen int64 // Length of the node's data, used for file metadata.
 }
-
-// IsDir returns true if the BlobFsNode represents a directory.
-func (n *BlobFsNode) IsDir() bool {
-	return n.NodeType == DirNode
-}
-
-// IsSymlink returns true if the BlobFsNode represents a symlink.
-func (n *BlobFsNode) IsSymlink() bool {
-	return n.NodeType == SymLinkNode
-}
-
 type FSNode struct {
 	fs.Inode
 	filesystem *BlobFs
@@ -76,23 +56,66 @@ func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOu
 	return fs.OK
 }
 
+func metaToAttr(metadata *BlobFsMetadata) fuse.Attr {
+	return fuse.Attr{
+		Ino:       metadata.Ino,
+		Size:      metadata.Size,
+		Blocks:    metadata.Blocks,
+		Atime:     metadata.Atime,
+		Mtime:     metadata.Mtime,
+		Ctime:     metadata.Ctime,
+		Atimensec: metadata.Atimensec,
+		Mtimensec: metadata.Mtimensec,
+		Ctimensec: metadata.Ctimensec,
+		Mode:      metadata.Mode,
+		Nlink:     metadata.Nlink,
+		Owner: fuse.Owner{
+			Uid: metadata.Uid,
+			Gid: metadata.Gid,
+		},
+		Rdev:    metadata.Rdev,
+		Blksize: metadata.Blksize,
+		Padding: metadata.Padding,
+	}
+}
+
 func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	n.log("Lookup called with name: %s", name)
 
-	// Construct the full path from the root
+	// Construct the full of this file path from root
 	fullPath := path.Join(n.bfsNode.Path, name)
 	log.Println("Full path: ", fullPath)
 
-	directoryId := GenerateFsID("", name)
-	log.Println("directory id: ", directoryId)
+	id := GenerateFsID(fullPath)
+	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, id)
+	if err != nil {
+		return nil, syscall.ENOENT
+	}
+
+	log.Printf("METADATA: %+v\n", metadata)
 
 	childPath := path.Join(n.bfsNode.Path, name)
 	log.Println("childPath: ", childPath)
 
-	// out.Attr = child.Attr
-	// childInode := n.NewInode(ctx, &FSNode{filesystem: n.filesystem, bfsNode: child, attr: child.Attr}, fs.StableAttr{Mode: child.Attr.Mode, Ino: child.Attr.Ino})
+	// Fill out the child node's attributes
+	attr := metaToAttr(metadata)
+	out.Attr = attr
 
-	return nil, syscall.ENOENT
+	// Create a new Inode on lookup
+	node := n.NewInode(ctx,
+		&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
+			Path:    fullPath,
+			ID:      id,
+			PID:     metadata.PID,
+			Name:    metadata.Name,
+			Attr:    attr,
+			Target:  "",
+			DataLen: 0,
+		}, attr: attr},
+		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
+	)
+
+	return node, fs.OK
 }
 
 func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
@@ -127,9 +150,9 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	n.log("Readlink called")
 
-	if n.bfsNode.NodeType != SymLinkNode {
-		return nil, syscall.EINVAL
-	}
+	// if n.bfsNode.NodeType != SymLinkNode {
+	// 	return nil, syscall.EINVAL
+	// }
 
 	// Use the symlink target path directly
 	symlinkTarget := n.bfsNode.Target

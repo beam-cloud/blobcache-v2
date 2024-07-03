@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -106,8 +109,63 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
-func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, fsPath string) error {
-	log.Println("storing content in blobfs...")
+func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string) error {
+	path = filepath.Join("/", filepath.Clean(path))
+	parts := strings.Split(path, string(filepath.Separator))
+
+	rootParentId := GenerateFsID("/")
+
+	// Iterate over the components and construct the path hierarchy
+	currentPath := "/"
+	previousParentId := rootParentId // start with the root ID
+	for i, part := range parts {
+		if i == 0 && part == "" {
+			continue // Skip the empty part for root
+		}
+
+		if currentPath == "/" {
+			currentPath = filepath.Join("/", part)
+		} else {
+			currentPath = filepath.Join(currentPath, part)
+		}
+
+		log.Println("generating fs id with: ", currentPath)
+		currentNodeId := GenerateFsID(currentPath)
+		inode, err := SHA1StringToUint64(currentNodeId)
+		if err != nil {
+			return err
+		}
+
+		metadata := &BlobFsMetadata{
+			PID:  previousParentId,
+			ID:   currentNodeId,
+			Name: currentPath,
+			Path: currentPath,
+			Ino:  inode,
+			Mode: fuse.S_IFDIR | 0755,
+		}
+
+		// Since this is the last file, store as a file, not a dir
+		if path == currentPath {
+			metadata.Mode = fuse.S_IFREG | 0755
+		}
+
+		err = m.SetFsNode(ctx, currentNodeId, metadata)
+		if err != nil {
+			return err
+		}
+
+		if path != currentPath {
+			err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
+			if err != nil {
+				return err
+			}
+		}
+
+		previousParentId = currentNodeId
+		log.Println("currentPath: ", currentPath)
+	}
+
 	return nil
 }
 
@@ -143,10 +201,29 @@ func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *
 }
 
 func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
-	return nil, nil
+	nodeIds, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataFsNodeChildren(id)).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	entries := []*BlobFsMetadata{}
+	for _, nodeId := range nodeIds {
+		node, err := m.GetFsNode(ctx, nodeId)
+		if err != nil {
+			continue
+		}
+
+		entries = append(entries, node)
+	}
+
+	return entries, nil
 }
 
 func (m *BlobCacheMetadata) AddFsNodeChild(ctx context.Context, pid, id string) error {
+	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataFsNodeChildren(pid), id).Err()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
