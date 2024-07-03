@@ -108,7 +108,7 @@ func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, h
 	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
-func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string) error {
+func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
 	path = filepath.Join("/", filepath.Clean(path))
 	parts := strings.Split(path, string(filepath.Separator))
 
@@ -147,6 +147,7 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 		if path == currentPath {
 			metadata.Mode = fuse.S_IFREG | 0755
 			metadata.Hash = hash
+			metadata.Size = size
 		}
 
 		err = m.SetFsNode(ctx, currentNodeId, metadata)

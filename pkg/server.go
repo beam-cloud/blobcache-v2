@@ -158,8 +158,9 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	content := buffer.Bytes()
+	size := len(content)
 
-	Logger.Debugf("STORE rx (%d bytes)", len(content))
+	Logger.Debugf("STORE rx (%d bytes)", size)
 
 	source := "s3://mock-bucket/key,0-1000" // TODO: replace with real source
 	hashBytes := sha256.Sum256(content)
@@ -174,7 +175,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
 	if cs.cfg.BlobFs.Enabled && fsPath != "" {
-		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath, hash)
+		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath, hash, uint64(size))
 		if err != nil {
 			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, fsPath, err)
 			return status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)

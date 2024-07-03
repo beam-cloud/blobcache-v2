@@ -12,13 +12,12 @@ import (
 )
 
 type BlobFsNode struct {
-	Path    string
-	ID      string // The unique identifier for the directory, used for content metadata.
-	PID     string // The ID of the parent directory, used for access and file metadata.
-	Name    string // The name of the node, used together with PID for access and file metadata.
-	Attr    fuse.Attr
-	Target  string
-	DataLen int64 // Length of the node's data, used for file metadata.
+	Path   string
+	ID     string // The unique identifier for the directory, used for content metadata.
+	PID    string // The ID of the parent directory, used for access and file metadata.
+	Name   string // The name of the node, used together with PID for access and file metadata.
+	Attr   fuse.Attr
+	Target string
 }
 type FSNode struct {
 	fs.Inode
@@ -97,18 +96,15 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 	attr := metaToAttr(metadata)
 	out.Attr = attr
 
-	log.Println("attr:", attr)
-	log.Println("fullPath: ", fullPath)
 	// Create a new Inode on lookup
 	node := n.NewInode(ctx,
 		&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
-			Path:    metadata.Path,
-			ID:      id,
-			PID:     metadata.PID,
-			Name:    metadata.Name,
-			Attr:    attr,
-			Target:  "",
-			DataLen: 0,
+			Path:   metadata.Path,
+			ID:     id,
+			PID:    metadata.PID,
+			Name:   metadata.Name,
+			Attr:   attr,
+			Target: "",
 		}, attr: attr},
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
 	)
@@ -129,13 +125,12 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n.log("Read called with offset: %v", off)
 
-	// Don't even try to read 0 byte files
-	if n.bfsNode.DataLen == 0 {
-		nRead := 0
+	nRead := 0
+
+	// Don't  try to read 0 byte files
+	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:nRead]), fs.OK
 	}
-
-	nRead := 0
 
 	// nRead, err := n.filesystem.Storage.ReadFile(n.bfsNode, dest, off)
 	// if err != nil {
