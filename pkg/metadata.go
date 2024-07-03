@@ -146,6 +146,7 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 		// Since this is the last file, store as a file, not a dir
 		if path == currentPath {
 			metadata.Mode = fuse.S_IFREG | 0755
+			metadata.Hash = hash
 		}
 
 		err = m.SetFsNode(ctx, currentNodeId, metadata)
