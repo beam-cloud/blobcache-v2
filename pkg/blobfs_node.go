@@ -15,9 +15,9 @@ type BlobFsNode struct {
 	ID     string
 	PID    string // The ID of the parent directory
 	Name   string // The name of the node
-	Attr   fuse.Attr
 	Target string
 	Hash   string
+	Attr   fuse.Attr
 }
 type FSNode struct {
 	fs.Inode
@@ -98,12 +98,12 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 	node := n.NewInode(ctx,
 		&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
 			Path:   metadata.Path,
-			ID:     id,
+			ID:     metadata.ID,
 			PID:    metadata.PID,
 			Name:   metadata.Name,
+			Hash:   metadata.Hash,
 			Attr:   attr,
 			Target: "",
-			Hash:   metadata.Hash,
 		}, attr: attr},
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
 	)
@@ -141,15 +141,12 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 	n.log("Readlink called")
 
-	// if n.bfsNode.NodeType != SymLinkNode {
-	// 	return nil, syscall.EINVAL
-	// }
-
-	// Use the symlink target path directly
-	symlinkTarget := n.bfsNode.Target
+	if n.bfsNode.Target == "" {
+		return nil, syscall.EINVAL
+	}
 
 	// In this case, we don't need to read the file
-	return []byte(symlinkTarget), fs.OK
+	return []byte(n.bfsNode.Target), fs.OK
 }
 
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {

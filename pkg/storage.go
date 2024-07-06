@@ -63,7 +63,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		}
 
 		chunk := content[offset:end]
-
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
