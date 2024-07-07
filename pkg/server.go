@@ -183,3 +183,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
 	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }
+
+func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
+	return &proto.StoreContentFromSourceResponse{Ok: true}, nil
+}

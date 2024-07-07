@@ -251,7 +251,40 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
 			if intersection.Cardinality() == 0 {
-				return nil, errors.New("no host found")
+				entry, err := c.metadata.RetrieveEntry(c.ctx, request.hash)
+				if err != nil {
+					return nil, err
+				}
+
+				// Attempt to populate this server with the content from the original source
+				if entry.Source != "" {
+					Logger.Infof("Content not available in any nearby cache, repopulating from: %s\n", entry.Source)
+
+					host, err = c.hostMap.Closest(closestHostTimeout)
+					if err != nil {
+						return nil, err
+					}
+
+					closestClient, exists := c.grpcClients[host.Addr]
+					if !exists {
+						return nil, errors.New("client not found")
+					}
+
+					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
+						Hash: entry.Hash,
+					})
+					if err != nil {
+						return nil, err
+					}
+
+					if resp.Ok {
+						return closestClient, nil
+					}
+
+					return nil, errors.New("unable to populate original source")
+				} else {
+					return nil, errors.New("no host found")
+				}
 			}
 
 			host = c.findClosestHost(intersection)
