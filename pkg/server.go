@@ -169,8 +169,9 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		Logger.Debugf("Store - rx chunk (%d bytes)", len(req.Content))
+
 		if _, err := buffer.Write(req.Content); err != nil {
-			Logger.Debugf("STORE - failed to write to buffer: %v", err)
+			Logger.Debugf("Store - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
 		}
 	}
