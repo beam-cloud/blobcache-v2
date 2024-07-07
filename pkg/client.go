@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -248,14 +250,14 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			}
 
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
-			addr, ok := intersection.Pop()
-			if !ok {
+			if intersection.Cardinality() == 0 {
 				return nil, errors.New("no host found")
 			}
 
-			// TODO: pick the closest one in the intersection of these sets (lowest RTT)
-
-			host = c.hostMap.Get(addr)
+			host = c.findClosestHost(intersection)
+			if host == nil {
+				return nil, errors.New("no host found")
+			}
 
 			c.mu.Lock()
 			c.localHostCache[request.hash] = &localClientCache{
@@ -263,6 +265,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				timestamp: time.Now(),
 			}
 			c.mu.Unlock()
+
 		}
 	default:
 	}
@@ -281,6 +284,22 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	}
 
 	return client, nil
+}
+
+func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *BlobCacheHost {
+	var closestHost *BlobCacheHost
+	closestRTT := time.Duration(math.MaxInt64)
+
+	for addr := range intersection.Iter() {
+		host := c.hostMap.Get(addr)
+
+		if host != nil && host.RTT < closestRTT {
+			closestHost = host
+			closestRTT = host.RTT
+		}
+	}
+
+	return closestHost
 }
 
 func (c *BlobCacheClient) StoreContent(chunks chan []byte, fsPath string) (string, error) {

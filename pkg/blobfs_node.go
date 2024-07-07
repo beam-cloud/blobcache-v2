@@ -13,8 +13,8 @@ import (
 type BlobFsNode struct {
 	Path   string
 	ID     string
-	PID    string // The ID of the parent directory
-	Name   string // The name of the node
+	PID    string
+	Name   string
 	Target string
 	Hash   string
 	Attr   fuse.Attr

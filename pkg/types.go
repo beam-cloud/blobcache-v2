@@ -8,7 +8,7 @@ import (
 const (
 	BlobCacheHostPrefix   string = "blobcache-host"
 	BlobCacheClientPrefix string = "blobcache-client"
-	BlobCacheVersion      string = "v0.1.0"
+	BlobCacheVersion      string = "dev"
 )
 
 type BlobCacheConfig struct {
@@ -92,13 +92,6 @@ type ClientRequestType int
 const (
 	ClientRequestTypeStorage ClientRequestType = iota
 	ClientRequestTypeRetrieval
-)
-
-type ContentSource string
-
-const (
-	ContentSourceS3      ContentSource = "s3://"
-	ContentSourceJuiceFS ContentSource = "jfs://"
 )
 
 type BlobCacheEntry struct {
