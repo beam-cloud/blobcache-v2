@@ -188,14 +188,14 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 }
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
-	entry, err := cs.metadata.RetrieveEntry(ctx, req.Hash)
-	if err != nil || entry == nil {
-		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
-	}
+	// entry, err := cs.metadata.RetrieveEntry(ctx, req.Hash)
+	// if err != nil || entry == nil {
+	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	// }
 
-	if entry.SourcePath == "" {
-		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
-	}
+	// if entry.SourcePath == "" {
+	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	// }
 
 	log.Println("here we go...")
 

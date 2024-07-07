@@ -271,7 +271,8 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 					}
 
 					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
-						Hash: entry.Hash,
+						SourcePath:   entry.SourcePath,
+						SourceOffset: entry.SourceOffset,
 					})
 					if err != nil {
 						return nil, err
@@ -365,6 +366,25 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	}
 
 	Logger.Debugf("Elapsed time to send content: %v\n", time.Since(start))
+	return resp.Hash, nil
+}
+
+func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
+	defer cancel()
+
+	client, err := c.getGRPCClient(&ClientRequest{
+		rt: ClientRequestTypeStorage,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
+	if err != nil {
+		return "", err
+	}
+
 	return resp.Hash, nil
 }
 

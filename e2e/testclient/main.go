@@ -65,7 +65,7 @@ func main() {
 			close(chunks)
 		}()
 
-		hash, err := client.StoreContent(chunks, filePath)
+		hash, err := client.StoreContent(chunks)
 		if err != nil {
 			log.Fatalf("err storing content: %v\n", err)
 		}
@@ -85,4 +85,14 @@ func main() {
 	averageTime := totalTime / 10
 	mbPerSecond := (float64(len(b)) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
+
+	_, err = client.StoreContentFromSource("/images/test.rclip", 0)
+	if err != nil {
+		log.Fatalf("err storing content: %v\n", err)
+	}
+
+	if err != nil {
+		log.Fatalf("err: %v\n", err)
+	}
+
 }

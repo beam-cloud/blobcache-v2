@@ -39,11 +39,11 @@ message GetStateResponse {
 
 
 message StoreContentFromSourceRequest {
-  string hash = 1;
-  string source_path = 2;
-  int64 source_offset = 3;
+  string source_path = 1;
+  int64 source_offset = 2;
 }
 
 message StoreContentFromSourceResponse {
   bool ok = 1;
+  string hash = 2;
 }
