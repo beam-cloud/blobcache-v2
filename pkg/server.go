@@ -128,6 +128,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	var buffer bytes.Buffer
 
 	sourcePath := ""
+	sourceOffset := int64(0)
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
@@ -136,6 +137,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 		if req.SourcePath != "" && sourcePath == "" {
 			sourcePath = req.SourcePath
+			sourceOffset = req.SourceOffset
 		}
 
 		if err != nil {
@@ -155,12 +157,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 
 	Logger.Debugf("STORE rx (%d bytes)", size)
 
-	source := "s3://mock-bucket/key,0-1000" // TODO: replace with real source
 	hashBytes := sha256.Sum256(content)
 	hash := hex.EncodeToString(hashBytes[:])
 
 	// Store in local in-memory cache
-	err := cs.cas.Add(ctx, hash, content, source)
+	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
 	if err != nil {
 		Logger.Infof("STORE - [%s] - %v", hash, err)
 		return status.Errorf(codes.Internal, "Failed to add content: %v", err)

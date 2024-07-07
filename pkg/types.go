@@ -123,10 +123,11 @@ const (
 )
 
 type BlobCacheEntry struct {
-	Hash    string `redis:"hash" json:"hash"`
-	Size    int64  `redis:"size" json:"size"`
-	Content []byte `redis:"content" json:"content"`
-	Source  string `redis:"source" json:"source"`
+	Hash         string `redis:"hash" json:"hash"`
+	Size         int64  `redis:"size" json:"size"`
+	Content      []byte `redis:"content" json:"content"`
+	Source       string `redis:"source" json:"source"`
+	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
 }
 
 type ErrEntryNotFound struct {
