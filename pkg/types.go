@@ -8,7 +8,7 @@ import (
 const (
 	BlobCacheHostPrefix   string = "blobcache-host"
 	BlobCacheClientPrefix string = "blobcache-client"
-	BlobCacheVersion      string = "v0.1.0"
+	BlobCacheVersion      string = "dev"
 )
 
 type BlobCacheConfig struct {
@@ -24,6 +24,7 @@ type BlobCacheConfig struct {
 	Tailscale                      TailscaleConfig `key:"tailscale" json:"tailscale"`
 	Metadata                       MetadataConfig  `key:"metadata" json:"metadata"`
 	DiscoveryIntervalS             int             `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	BlobFs                         BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
 type TailscaleConfig struct {
@@ -71,6 +72,39 @@ type RedisConfig struct {
 	RouteByLatency     bool          `key:"routeByLatency" json:"route_by_latency"`
 }
 
+type BlobFsConfig struct {
+	Enabled    bool           `key:"enabled" json:"enabled"`
+	MountPoint string         `key:"mountPoint" json:"mount_point"`
+	Sources    []SourceConfig `key:"sources" json:"sources"`
+}
+
+type SourceConfig struct {
+	Mode           string           `key:"mode" json:"mode"`
+	FilesystemName string           `key:"fsName" json:"filesystem_name"`
+	FilesystemPath string           `key:"fsPath" json:"filesystem_path"`
+	JuiceFS        JuiceFSConfig    `key:"juicefs" json:"juicefs"`
+	MountPoint     MountPointConfig `key:"mountpoint" json:"mountpoint"`
+}
+
+type JuiceFSConfig struct {
+	RedisURI   string `key:"redisURI" json:"redis_uri"`
+	Bucket     string `key:"bucket" json:"bucket"`
+	AccessKey  string `key:"accessKey" json:"access_key"`
+	SecretKey  string `key:"secretKey" json:"secret_key"`
+	CacheSize  int64  `key:"cacheSize" json:"cache_size"`
+	BlockSize  int64  `key:"blockSize" json:"block_size"`
+	Prefetch   int64  `key:"prefetch" json:"prefetch"`
+	BufferSize int64  `key:"bufferSize" json:"buffer_size"`
+}
+
+type MountPointConfig struct {
+	BucketName  string `key:"bucketName" json:"bucketName"`
+	AccessKey   string `key:"accessKey" json:"access_key"`
+	SecretKey   string `key:"secretKey" json:"secret_key"`
+	Region      string `key:"region" json:"region"`
+	EndpointURL string `key:"endpointUrl" json:"endpoint_url"`
+}
+
 type BlobCacheHost struct {
 	RTT  time.Duration
 	Addr string
@@ -88,18 +122,11 @@ const (
 	ClientRequestTypeRetrieval
 )
 
-type ContentSource string
-
-const (
-	ContentSourceS3      ContentSource = "s3://"
-	ContentSourceJuiceFS ContentSource = "jfs://"
-)
-
 type BlobCacheEntry struct {
-	Hash    string `redis:"hash" json:"hash"`
-	Size    int64  `redis:"size" json:"size"`
-	Content []byte `redis:"content" json:"content"`
-	Source  string `redis:"source" json:"source"`
+	Hash         string `redis:"hash" json:"hash"`
+	Size         int64  `redis:"size" json:"size"`
+	SourcePath   string `redis:"source_path" json:"source_path"`
+	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
 }
 
 type ErrEntryNotFound struct {
@@ -108,4 +135,31 @@ type ErrEntryNotFound struct {
 
 func (e *ErrEntryNotFound) Error() string {
 	return fmt.Sprintf("entry not found: %s", e.Hash)
+}
+
+type ErrNodeNotFound struct {
+	Id string
+}
+
+func (e *ErrNodeNotFound) Error() string {
+	return fmt.Sprintf("blobfs node not found: %s", e.Id)
+}
+
+// BlobFS types
+type FileSystemOpts struct {
+	MountPoint string
+	Verbose    bool
+	Metadata   *BlobCacheMetadata
+}
+
+type FileSystem interface {
+	Mount(opts FileSystemOpts) (func() error, <-chan error, error)
+	Unmount() error
+	Format() error
+}
+
+type FileSystemStorage interface {
+	Metadata()
+	Get(string)
+	ReadFile(interface{} /* This could be any sort of FS node type, depending on the implementation */, []byte, int64)
 }

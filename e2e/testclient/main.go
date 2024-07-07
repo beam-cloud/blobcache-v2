@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("err: %v\n", err)
 	}
 
-	filePath := "e2e/testclient/testdata/test1.bin"
+	filePath := "e2e/testclient/testdata/newfile.txt"
 	b, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatalf("err: %v\n", err)
@@ -39,7 +39,7 @@ func main() {
 	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
 	var totalTime float64
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1; i++ {
 		chunks := make(chan []byte, 1)
 
 		// Read file in chunks and dump into channel for StoreContent RPC calls
@@ -85,4 +85,14 @@ func main() {
 	averageTime := totalTime / 10
 	mbPerSecond := (float64(len(b)) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
+
+	_, err = client.StoreContentFromSource("images/john.pem", 0)
+	if err != nil {
+		log.Fatalf("err storing content: %v\n", err)
+	}
+
+	if err != nil {
+		log.Fatalf("err: %v\n", err)
+	}
+
 }

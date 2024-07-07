@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/dgraph-io/ristretto"
 )
@@ -16,7 +15,6 @@ type ContentAddressableStorage struct {
 	currentHost *BlobCacheHost
 	cache       *ristretto.Cache
 	config      BlobCacheConfig
-	mu          sync.RWMutex
 	metadata    *BlobCacheMetadata
 }
 
@@ -37,6 +35,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
 		OnEvict:     cas.onEvict,
+		Metrics:     true,
 	})
 	if err != nil {
 		return nil, err
@@ -51,7 +50,7 @@ type cacheValue struct {
 	Content []byte
 }
 
-func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, source string) error {
+func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, sourcePath string, sourceOffset int64) error {
 	size := int64(len(content))
 	chunkKeys := []string{}
 
@@ -64,7 +63,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		}
 
 		chunk := content[offset:end]
-
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
@@ -83,10 +81,10 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 
 	// Store entry
 	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
-		Hash:    hash,
-		Size:    size,
-		Content: nil,
-		Source:  source,
+		Hash:         hash,
+		Size:         size,
+		SourcePath:   sourcePath,
+		SourceOffset: sourceOffset,
 	}, cas.currentHost)
 	if err != nil {
 		return err
