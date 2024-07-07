@@ -41,7 +41,7 @@ func (s *JuiceFsSource) Mount(localPath string) error {
 		s.config.RedisURI,
 		localPath,
 		"-d",
-		"--bucket", s.config.AWSS3Bucket,
+		"--bucket", s.config.Bucket,
 		"--cache-size", cacheSize,
 		"--prefetch", prefetch,
 		"--buffer-size", bufferSize,
@@ -95,18 +95,18 @@ func (s *JuiceFsSource) Format(fsName string) error {
 		"juicefs",
 		"format",
 		"--storage", "s3",
-		"--bucket", s.config.AWSS3Bucket,
+		"--bucket", s.config.Bucket,
 		"--block-size", blockSize,
 		s.config.RedisURI,
 		fsName,
 		"--no-update",
 	)
 
-	if s.config.AWSAccessKey != "" || s.config.AWSSecretKey != "" {
+	if s.config.AccessKey != "" || s.config.SecretKey != "" {
 		cmd.Args = append(
 			cmd.Args,
-			"--access-key", s.config.AWSAccessKey,
-			"--secret-key", s.config.AWSSecretKey,
+			"--access-key", s.config.AccessKey,
+			"--secret-key", s.config.SecretKey,
 		)
 	}
 

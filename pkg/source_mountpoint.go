@@ -25,14 +25,19 @@ func (s *MountPointSource) Mount(localPath string) error {
 
 	s.mountCmd = exec.Command(
 		"mount-s3",
-		s.config.AWSS3Bucket,
+		s.config.BucketName,
 		localPath,
+		"--region",
+		s.config.Region,
+		"--endpoint-url",
+		s.config.EndpointURL,
+		"--read-only",
 	)
 
-	if s.config.AWSAccessKey != "" || s.config.AWSSecretKey != "" {
+	if s.config.AccessKey != "" || s.config.SecretKey != "" {
 		s.mountCmd.Env = append(s.mountCmd.Env,
-			fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", s.config.AWSAccessKey),
-			fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", s.config.AWSSecretKey),
+			fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", s.config.AccessKey),
+			fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", s.config.SecretKey),
 		)
 	}
 

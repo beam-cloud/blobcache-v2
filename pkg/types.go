@@ -87,20 +87,22 @@ type SourceConfig struct {
 }
 
 type JuiceFSConfig struct {
-	RedisURI     string `key:"redisURI" json:"redis_uri"`
-	AWSS3Bucket  string `key:"awsS3Bucket" json:"aws_s3_bucket"`
-	AWSAccessKey string `key:"awsAccessKey" json:"aws_access_key"`
-	AWSSecretKey string `key:"awsSecretKey" json:"aws_secret_key"`
-	CacheSize    int64  `key:"cacheSize" json:"cache_size"`
-	BlockSize    int64  `key:"blockSize" json:"block_size"`
-	Prefetch     int64  `key:"prefetch" json:"prefetch"`
-	BufferSize   int64  `key:"bufferSize" json:"buffer_size"`
+	RedisURI   string `key:"redisURI" json:"redis_uri"`
+	Bucket     string `key:"bucket" json:"bucket"`
+	AccessKey  string `key:"accessKey" json:"access_key"`
+	SecretKey  string `key:"secretKey" json:"secret_key"`
+	CacheSize  int64  `key:"cacheSize" json:"cache_size"`
+	BlockSize  int64  `key:"blockSize" json:"block_size"`
+	Prefetch   int64  `key:"prefetch" json:"prefetch"`
+	BufferSize int64  `key:"bufferSize" json:"buffer_size"`
 }
 
 type MountPointConfig struct {
-	AWSS3Bucket  string `key:"awsS3Bucket" json:"aws_s3_bucket"`
-	AWSAccessKey string `key:"awsAccessKey" json:"aws_access_key"`
-	AWSSecretKey string `key:"awsSecretKey" json:"aws_secret_key"`
+	BucketName  string `key:"bucketName" json:"bucketName"`
+	AccessKey   string `key:"accessKey" json:"access_key"`
+	SecretKey   string `key:"secretKey" json:"secret_key"`
+	Region      string `key:"region" json:"region"`
+	EndpointURL string `key:"endpointUrl" json:"endpoint_url"`
 }
 
 type BlobCacheHost struct {
