@@ -89,6 +89,16 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
 	}
 
+	for _, sourceConfig := range opts.Config.BlobFs.Sources {
+		_, err := NewSource(sourceConfig)
+		if err != nil {
+			Logger.Errorf("Failed to configure content source: %+v\n", err)
+			continue
+		}
+
+		Logger.Infof("Configured and mounted source: %+v\n", sourceConfig.FilesystemName)
+	}
+
 	root, _ := blobfs.Root()
 	attrTimeout := time.Second * 60
 	entryTimeout := time.Second * 60

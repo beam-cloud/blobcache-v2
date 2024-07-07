@@ -127,15 +127,15 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
-	fsPath := ""
+	sourcePath := ""
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 
-		if req.FsPath != "" && fsPath == "" {
-			fsPath = req.FsPath
+		if req.SourcePath != "" && sourcePath == "" {
+			sourcePath = req.SourcePath
 		}
 
 		if err != nil {
@@ -167,10 +167,10 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	if cs.cfg.BlobFs.Enabled && fsPath != "" {
-		err := cs.metadata.StoreContentInBlobFs(ctx, fsPath, hash, uint64(size))
+	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
+		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
 		if err != nil {
-			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, fsPath, err)
+			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
 			return status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
 		}
 	}

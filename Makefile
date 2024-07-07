@@ -8,7 +8,7 @@ protocol:
 	cd proto && ./gen.sh
 
 build:
-	docker build --target build --tag localhost:5001/blobcache:$(imageVersion) .
+	docker build --target build --platform=linux/amd64 --tag localhost:5001/blobcache:$(imageVersion) .
 	docker push localhost:5001/blobcache:$(imageVersion)
 
 start:

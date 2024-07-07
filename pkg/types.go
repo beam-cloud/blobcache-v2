@@ -73,8 +73,34 @@ type RedisConfig struct {
 }
 
 type BlobFsConfig struct {
-	Enabled    bool   `key:"enabled" json:"enabled"`
-	MountPoint string `key:"mountPoint" json:"mount_point"`
+	Enabled    bool           `key:"enabled" json:"enabled"`
+	MountPoint string         `key:"mountPoint" json:"mount_point"`
+	Sources    []SourceConfig `key:"sources" json:"sources"`
+}
+
+type SourceConfig struct {
+	Mode           string           `key:"mode" json:"mode"`
+	FilesystemName string           `key:"fsName" json:"filesystem_name"`
+	FilesystemPath string           `key:"fsPath" json:"filesystem_path"`
+	JuiceFS        JuiceFSConfig    `key:"juicefs" json:"juicefs"`
+	MountPoint     MountPointConfig `key:"mountpoint" json:"mountpoint"`
+}
+
+type JuiceFSConfig struct {
+	RedisURI     string `key:"redisURI" json:"redis_uri"`
+	AWSS3Bucket  string `key:"awsS3Bucket" json:"aws_s3_bucket"`
+	AWSAccessKey string `key:"awsAccessKey" json:"aws_access_key"`
+	AWSSecretKey string `key:"awsSecretKey" json:"aws_secret_key"`
+	CacheSize    int64  `key:"cacheSize" json:"cache_size"`
+	BlockSize    int64  `key:"blockSize" json:"block_size"`
+	Prefetch     int64  `key:"prefetch" json:"prefetch"`
+	BufferSize   int64  `key:"bufferSize" json:"buffer_size"`
+}
+
+type MountPointConfig struct {
+	AWSS3Bucket  string `key:"awsS3Bucket" json:"aws_s3_bucket"`
+	AWSAccessKey string `key:"awsAccessKey" json:"aws_access_key"`
+	AWSSecretKey string `key:"awsSecretKey" json:"aws_secret_key"`
 }
 
 type BlobCacheHost struct {

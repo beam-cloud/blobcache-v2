@@ -302,7 +302,7 @@ func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *Blob
 	return closestHost
 }
 
-func (c *BlobCacheClient) StoreContent(chunks chan []byte, fsPath string) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, sourcePath string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -320,7 +320,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, fsPath string) (strin
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk, FsPath: fsPath}
+		req := &proto.StoreContentRequest{Content: chunk, SourcePath: sourcePath}
 		if err := stream.Send(req); err != nil {
 			return "", err
 		}

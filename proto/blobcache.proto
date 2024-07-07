@@ -22,8 +22,9 @@ message GetContentResponse {
 }
 
 message StoreContentRequest {
-  bytes content = 1; // Content bytes to store
-  string fs_path = 2; // Name is a path mapped to disk
+  bytes content = 1;
+  string source_path = 2;
+  int64 source_offset = 3;
 }
 
 message StoreContentResponse {
