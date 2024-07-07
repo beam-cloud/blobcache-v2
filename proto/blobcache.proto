@@ -24,8 +24,6 @@ message GetContentResponse {
 
 message StoreContentRequest {
   bytes content = 1;
-  string source_path = 2;
-  int64 source_offset = 3;
 }
 
 message StoreContentResponse {
@@ -42,6 +40,8 @@ message GetStateResponse {
 
 message StoreContentFromSourceRequest {
   string hash = 1;
+  string source_path = 2;
+  int64 source_offset = 3;
 }
 
 message StoreContentFromSourceResponse {

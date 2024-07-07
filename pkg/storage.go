@@ -50,7 +50,7 @@ type cacheValue struct {
 	Content []byte
 }
 
-func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, source string, sourceOffset int64) error {
+func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, sourcePath string, sourceOffset int64) error {
 	size := int64(len(content))
 	chunkKeys := []string{}
 
@@ -83,8 +83,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
 		Hash:         hash,
 		Size:         size,
-		Content:      nil,
-		Source:       source,
+		SourcePath:   sourcePath,
 		SourceOffset: sourceOffset,
 	}, cas.currentHost)
 	if err != nil {

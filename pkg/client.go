@@ -257,8 +257,8 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				}
 
 				// Attempt to populate this server with the content from the original source
-				if entry.Source != "" {
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.Source)
+				if entry.SourcePath != "" {
+					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
 
 					host, err = c.hostMap.Closest(closestHostTimeout)
 					if err != nil {
@@ -335,7 +335,7 @@ func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *Blob
 	return closestHost
 }
 
-func (c *BlobCacheClient) StoreContent(chunks chan []byte, sourcePath string) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -353,7 +353,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, sourcePath string) (s
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk, SourcePath: sourcePath}
+		req := &proto.StoreContentRequest{Content: chunk}
 		if err := stream.Send(req); err != nil {
 			return "", err
 		}

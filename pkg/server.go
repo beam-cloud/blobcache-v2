@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
@@ -156,17 +157,10 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
-	sourcePath := ""
-	sourceOffset := int64(0)
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			break
-		}
-
-		if req.SourcePath != "" && sourcePath == "" {
-			sourcePath = req.SourcePath
-			sourceOffset = req.SourceOffset
 		}
 
 		if err != nil {
@@ -181,7 +175,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 	}
 
-	hash, err := cs.store(ctx, &buffer, sourcePath, sourceOffset)
+	hash, err := cs.store(ctx, &buffer, "", 0)
 	if err != nil {
 		return err
 	}
@@ -199,9 +193,11 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
-	if entry.Source == "" {
+	if entry.SourcePath == "" {
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
+
+	log.Println("here we go...")
 
 	// err, hash := cs.store(ctx, buffer, entry.Source, entry.SourceOffset)
 	// if err != nil {
