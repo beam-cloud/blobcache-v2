@@ -258,7 +258,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 				// Attempt to populate this server with the content from the original source
 				if entry.Source != "" {
-					Logger.Infof("Content not available in any nearby cache, repopulating from: %s\n", entry.Source)
+					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.Source)
 
 					host, err = c.hostMap.Closest(closestHostTimeout)
 					if err != nil {
@@ -281,7 +281,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 						return closestClient, nil
 					}
 
-					return nil, errors.New("unable to populate original source")
+					return nil, errors.New("unable to populate content from original source")
 				} else {
 					return nil, errors.New("no host found")
 				}

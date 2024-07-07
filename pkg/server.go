@@ -123,6 +123,35 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
+func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
+	content := buffer.Bytes()
+	size := len(content)
+
+	Logger.Debugf("STORE rx (%d bytes)", size)
+
+	hashBytes := sha256.Sum256(content)
+	hash := hex.EncodeToString(hashBytes[:])
+
+	// Store in local in-memory cache
+	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
+	if err != nil {
+		Logger.Infof("STORE - [%s] - %v", hash, err)
+		return "", status.Errorf(codes.Internal, "Failed to add content: %v", err)
+	}
+
+	// Store references in blobfs if it's enabled (for disk access to the cached content)
+	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
+		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
+		if err != nil {
+			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
+			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
+		}
+	}
+
+	Logger.Infof("STORE - [%s]", hash)
+	return hash, nil
+}
+
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
 	ctx := stream.Context()
 	var buffer bytes.Buffer
@@ -152,31 +181,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 	}
 
-	content := buffer.Bytes()
-	size := len(content)
-
-	Logger.Debugf("STORE rx (%d bytes)", size)
-
-	hashBytes := sha256.Sum256(content)
-	hash := hex.EncodeToString(hashBytes[:])
-
-	// Store in local in-memory cache
-	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
+	hash, err := cs.store(ctx, &buffer, sourcePath, sourceOffset)
 	if err != nil {
-		Logger.Infof("STORE - [%s] - %v", hash, err)
-		return status.Errorf(codes.Internal, "Failed to add content: %v", err)
+		return err
 	}
 
-	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
-		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
-		if err != nil {
-			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
-			return status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
-		}
-	}
-
-	Logger.Infof("STORE - [%s]", hash)
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
 }
 
@@ -185,5 +194,19 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 }
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
+	entry, err := cs.metadata.RetrieveEntry(ctx, req.Hash)
+	if err != nil || entry == nil {
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	}
+
+	if entry.Source == "" {
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	}
+
+	// err, hash := cs.store(ctx, buffer, entry.Source, entry.SourceOffset)
+	// if err != nil {
+	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	// }
+
 	return &proto.StoreContentFromSourceResponse{Ok: true}, nil
 }
