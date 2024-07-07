@@ -116,11 +116,11 @@ func (cs *CacheService) StartServer(port uint) error {
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
 	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
 	if err != nil {
-		Logger.Debugf("GET - [%s] - %v", req.Hash, err)
+		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Infof("GET - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
+	Logger.Infof("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
@@ -128,7 +128,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	content := buffer.Bytes()
 	size := len(content)
 
-	Logger.Debugf("STORE rx (%d bytes)", size)
+	Logger.Debugf("Store - rx (%d bytes)", size)
 
 	hashBytes := sha256.Sum256(content)
 	hash := hex.EncodeToString(hashBytes[:])
@@ -136,7 +136,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	// Store in local in-memory cache
 	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
 	if err != nil {
-		Logger.Infof("STORE - [%s] - %v", hash, err)
+		Logger.Infof("Store - [%s] - %v", hash, err)
 		return "", status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
@@ -144,12 +144,12 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
 		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
 		if err != nil {
-			Logger.Infof("STORE - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
+			Logger.Infof("Store - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
 			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
 		}
 	}
 
-	Logger.Infof("STORE - [%s]", hash)
+	Logger.Infof("Store - [%s]", hash)
 	return hash, nil
 }
 
@@ -164,11 +164,11 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		if err != nil {
-			Logger.Infof("STORE - error: %v", err)
+			Logger.Infof("Store - error: %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
-		Logger.Debugf("STORE rx chunk (%d bytes)", len(req.Content))
+		Logger.Debugf("Store - rx chunk (%d bytes)", len(req.Content))
 		if _, err := buffer.Write(req.Content); err != nil {
 			Logger.Debugf("STORE - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
@@ -198,23 +198,24 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	// Open the file
 	file, err := os.Open(localPath)
 	if err != nil {
-		Logger.Infof("STORE FROM CONTENT - error reading source: %v", err)
+		Logger.Infof("StoreFromContent - error reading source: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
 	}
 	defer file.Close()
 
 	var buffer bytes.Buffer
 	if _, err := io.Copy(&buffer, file); err != nil {
-		Logger.Infof("STORE FROM CONTENT - error copying source: %v", err)
+		Logger.Infof("StoreFromContent - error copying source: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	// Store the content
 	hash, err := cs.store(ctx, &buffer, localPath, 0)
 	if err != nil {
-		Logger.Infof("STORE FROM CONTENT - error storing data in cache: %v", err)
+		Logger.Infof("StoreFromContent - error storing data in cache: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, err
 	}
 
+	Logger.Infof("StoreFromContent - [%s]", hash)
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
