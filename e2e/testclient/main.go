@@ -86,7 +86,7 @@ func main() {
 	mbPerSecond := (float64(len(b)) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
 
-	_, err = client.StoreContentFromSource("/images/test.rclip", 0)
+	_, err = client.StoreContentFromSource("images/test-key-5079899", 0)
 	if err != nil {
 		log.Fatalf("err storing content: %v\n", err)
 	}

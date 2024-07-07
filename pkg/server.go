@@ -7,10 +7,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
@@ -188,21 +188,33 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 }
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
-	// entry, err := cs.metadata.RetrieveEntry(ctx, req.Hash)
-	// if err != nil || entry == nil {
-	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
-	// }
+	localPath := filepath.Join("/", req.SourcePath)
 
-	// if entry.SourcePath == "" {
-	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
-	// }
+	// Check if the file exists
+	if _, err := os.Stat(localPath); os.IsNotExist(err) {
+		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
+	}
 
-	log.Println("here we go...")
+	// Open the file
+	file, err := os.Open(localPath)
+	if err != nil {
+		Logger.Infof("STORE FROM CONTENT - error reading source: %v", err)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
+	}
+	defer file.Close()
 
-	// err, hash := cs.store(ctx, buffer, entry.Source, entry.SourceOffset)
-	// if err != nil {
-	// 	return &proto.StoreContentFromSourceResponse{Ok: false}, nil
-	// }
+	var buffer bytes.Buffer
+	if _, err := io.Copy(&buffer, file); err != nil {
+		Logger.Infof("STORE FROM CONTENT - error copying source: %v", err)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	}
 
-	return &proto.StoreContentFromSourceResponse{Ok: true}, nil
+	// Store the content
+	hash, err := cs.store(ctx, &buffer, localPath, 0)
+	if err != nil {
+		Logger.Infof("STORE FROM CONTENT - error storing data in cache: %v", err)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, err
+	}
+
+	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
