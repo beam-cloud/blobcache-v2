@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
@@ -188,6 +189,12 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
 }
 
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
 	localPath := filepath.Join("/", req.SourcePath)
 
@@ -204,14 +211,19 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	}
 	defer file.Close()
 
-	var buffer bytes.Buffer
-	if _, err := io.Copy(&buffer, file); err != nil {
+	buffer := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		buffer.Reset()
+		bufferPool.Put(buffer)
+	}()
+
+	if _, err := io.Copy(buffer, file); err != nil {
 		Logger.Infof("StoreFromContent - error copying source: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	// Store the content
-	hash, err := cs.store(ctx, &buffer, localPath, 0)
+	hash, err := cs.store(ctx, buffer, localPath, req.SourceOffset)
 	if err != nil {
 		Logger.Infof("StoreFromContent - error storing data in cache: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, err
