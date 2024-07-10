@@ -35,8 +35,9 @@ message GetStateRequest {
 
 message GetStateResponse {
   string version = 1;
+  float capacity_usage_pct = 2;
+  string private_ip_addr = 3;
 }
-
 
 message StoreContentFromSourceRequest {
   string source_path = 1;
