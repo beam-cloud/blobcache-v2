@@ -13,6 +13,8 @@ import (
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
 
+var totalIterations int = 1
+
 func main() {
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
@@ -42,7 +44,7 @@ func main() {
 	const chunkSize = 1024 * 1024 * 16 // 4MB chunks
 	var totalTime float64
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < totalIterations; i++ {
 		chunks := make(chan []byte)
 
 		// Read file in chunks and dump into channel for StoreContent RPC calls
@@ -86,7 +88,6 @@ func main() {
 
 		log.Printf("Initial file len: %d\n", len(b))
 		log.Printf("Response content len: %d\n", len(content))
-
 		log.Printf("Hash of initial file: %s\n", fileHash)
 		log.Printf("Hash of stored content: %s\n", hash)
 		log.Printf("Hash of retrieved content: %s\n", responseHash)
@@ -126,7 +127,7 @@ func main() {
 	}
 
 	averageTime := totalTime / 10
-	mbPerSecond := (float64(len(b)) / (1024 * 1024)) / averageTime
+	mbPerSecond := (float64(len(b)*totalIterations) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
 
 	_, err = client.StoreContentFromSource("images/testimage.clip", 0)
