@@ -7,11 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	_ "net/http/pprof"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sync"
+	"runtime"
 	"syscall"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
@@ -29,11 +29,12 @@ type CacheServiceOpts struct {
 type CacheService struct {
 	ctx context.Context
 	proto.UnimplementedBlobCacheServer
-	hostname  string
-	cas       *ContentAddressableStorage
-	cfg       BlobCacheConfig
-	tailscale *Tailscale
-	metadata  *BlobCacheMetadata
+	hostname      string
+	privateIpAddr string
+	cas           *ContentAddressableStorage
+	cfg           BlobCacheConfig
+	tailscale     *Tailscale
+	metadata      *BlobCacheMetadata
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
@@ -46,6 +47,11 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
 		return nil, err
+	}
+
+	privateIpAddr, _ := GetPrivateIpAddr()
+	if privateIpAddr != "" {
+		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
 
 	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
@@ -72,12 +78,13 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	tailscale := NewTailscale(hostname, cfg)
 
 	return &CacheService{
-		ctx:       ctx,
-		hostname:  hostname,
-		cas:       cas,
-		cfg:       cfg,
-		tailscale: tailscale,
-		metadata:  metadata,
+		ctx:           ctx,
+		hostname:      hostname,
+		cas:           cas,
+		cfg:           cfg,
+		tailscale:     tailscale,
+		metadata:      metadata,
+		privateIpAddr: privateIpAddr,
 	}, nil
 }
 
@@ -85,7 +92,14 @@ func (cs *CacheService) StartServer(port uint) error {
 	addr := fmt.Sprintf(":%d", port)
 
 	server := cs.tailscale.GetOrCreateServer()
-	ln, err := server.Listen("tcp", addr)
+
+	// Bind both to tailnet and locally
+	tailscaleListener, err := server.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	localListener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -99,7 +113,8 @@ func (cs *CacheService) StartServer(port uint) error {
 
 	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
-	go s.Serve(ln)
+	go s.Serve(localListener)
+	go s.Serve(tailscaleListener)
 
 	// Block until a termination signal is received
 	terminationChan := make(chan os.Signal, 1)
@@ -127,7 +142,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
 	content := buffer.Bytes()
-	size := len(content)
+	size := buffer.Len()
 
 	Logger.Debugf("Store - rx (%d bytes)", size)
 
@@ -151,6 +166,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	}
 
 	Logger.Infof("Store - [%s]", hash)
+	content = nil
 	return hash, nil
 }
 
@@ -182,17 +198,21 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		return err
 	}
 
+	buffer.Reset()
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
-	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
-}
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	memoryUsage := float64(memStats.Alloc) / (1024 * 1024)
+	capacityUsagePct := memoryUsage / float64(cs.cfg.MaxCacheSizeMb)
 
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
+	return &proto.GetStateResponse{
+		Version:          BlobCacheVersion,
+		PrivateIpAddr:    cs.privateIpAddr,
+		CapacityUsagePct: float32(capacityUsagePct),
+	}, nil
 }
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
@@ -211,11 +231,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	}
 	defer file.Close()
 
-	buffer := bufferPool.Get().(*bytes.Buffer)
-	defer func() {
-		buffer.Reset()
-		bufferPool.Put(buffer)
-	}()
+	var buffer *bytes.Buffer
 
 	if _, err := io.Copy(buffer, file); err != nil {
 		Logger.Infof("StoreFromContent - error copying source: %v", err)
@@ -229,6 +245,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 		return &proto.StoreContentFromSourceResponse{Ok: false}, err
 	}
 
+	buffer.Reset()
 	Logger.Infof("StoreFromContent - [%s]", hash)
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }

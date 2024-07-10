@@ -9,3 +9,5 @@ dev:
       BUILD_COMMAND: "umount -l /cache; go build -o /workspace/bin/blobcache /workspace/cmd/main.go"
       BUILD_BINARY_PATH: "/workspace/bin/blobcache"
       CONFIG_PATH: /workspace/config.yaml
+    forward:
+    - 6060:6060

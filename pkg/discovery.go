@@ -113,8 +113,10 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 // checkService attempts to connect to the gRPC service and verifies its availability
 func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobCacheHost, error) {
 	host := BlobCacheHost{
-		Addr: addr,
-		RTT:  0,
+		Addr:             addr,
+		RTT:              0,
+		PrivateAddr:      "",
+		CapacityUsagePct: 0.0,
 	}
 
 	var dialOpts = []grpc.DialOption{
@@ -135,7 +137,18 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	if err != nil {
 		return nil, err
 	}
+
 	host.RTT = time.Since(startTime)
+	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
+
+	if resp.PrivateIpAddr != "" {
+		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.Port)
+		privateConn, privateErr := DialWithTimeout(ctx, privateAddr)
+		if privateErr == nil {
+			privateConn.Close()
+			host.PrivateAddr = privateAddr
+		}
+	}
 
 	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
 	if host.RTT > threshold {

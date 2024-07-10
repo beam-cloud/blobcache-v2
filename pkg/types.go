@@ -106,8 +106,10 @@ type MountPointConfig struct {
 }
 
 type BlobCacheHost struct {
-	RTT  time.Duration
-	Addr string
+	RTT              time.Duration
+	Addr             string
+	PrivateAddr      string
+	CapacityUsagePct float64
 }
 
 type ClientRequest struct {

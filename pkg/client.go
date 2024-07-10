@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"sync"
 	"time"
 
@@ -102,10 +103,18 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
+	var dialFunc func(context.Context, string) (net.Conn, error) = nil
+	addr := host.Addr
+	dialFunc = c.tailscale.DialWithTimeout
+	if host.PrivateAddr != "" {
+		dialFunc = DialWithTimeout
+		addr = host.PrivateAddr
+	}
+
 	maxMessageSize := c.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
-		grpc.WithContextDialer(c.tailscale.DialWithTimeout),
+		grpc.WithContextDialer(dialFunc),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
@@ -116,7 +125,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.cfg.Token)))
 	}
 
-	conn, err := grpc.Dial(host.Addr, dialOpts...)
+	conn, err := grpc.Dial(addr, dialOpts...)
 	if err != nil {
 		return err
 	}
