@@ -90,6 +90,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		return err
 	}
 
+	content = nil
 	return nil
 }
 

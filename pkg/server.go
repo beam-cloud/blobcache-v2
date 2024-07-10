@@ -7,11 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sync"
 	"syscall"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
@@ -127,7 +125,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
 	content := buffer.Bytes()
-	size := len(content)
+	size := buffer.Len()
 
 	Logger.Debugf("Store - rx (%d bytes)", size)
 
@@ -182,17 +180,12 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		return err
 	}
 
+	buffer.Reset()
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
 	return &proto.GetStateResponse{Version: BlobCacheVersion}, nil
-}
-
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
 }
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
@@ -211,11 +204,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	}
 	defer file.Close()
 
-	buffer := bufferPool.Get().(*bytes.Buffer)
-	defer func() {
-		buffer.Reset()
-		bufferPool.Put(buffer)
-	}()
+	var buffer *bytes.Buffer
 
 	if _, err := io.Copy(buffer, file); err != nil {
 		Logger.Infof("StoreFromContent - error copying source: %v", err)
@@ -229,6 +218,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 		return &proto.StoreContentFromSourceResponse{Ok: false}, err
 	}
 
+	buffer.Reset()
 	Logger.Infof("StoreFromContent - [%s]", hash)
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
