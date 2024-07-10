@@ -36,6 +36,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to read input file: %v\n", err)
 	}
+	hashBytes := sha256.Sum256(b)
+	fileHash := hex.EncodeToString(hashBytes[:])
 
 	const chunkSize = 1024 * 1024 * 16 // 4MB chunks
 	var totalTime float64
@@ -84,8 +86,10 @@ func main() {
 
 		log.Printf("Initial file len: %d\n", len(b))
 		log.Printf("Response content len: %d\n", len(content))
-		log.Printf("Requested hash: %s\n", hash)
-		log.Printf("Response hash: %s\n", responseHash)
+
+		log.Printf("Hash of initial file: %s\n", fileHash)
+		log.Printf("Hash of stored content: %s\n", hash)
+		log.Printf("Hash of retrieved content: %s\n", responseHash)
 
 		elapsedTime := time.Since(startTime).Seconds()
 		totalTime += elapsedTime
