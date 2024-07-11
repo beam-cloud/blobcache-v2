@@ -142,11 +142,14 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
 
 	if resp.PrivateIpAddr != "" {
+		Logger.Debugf("Host found with private addr: %s", resp.PrivateIpAddr)
+
 		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.Port)
 		privateConn, privateErr := DialWithTimeout(ctx, privateAddr)
 		if privateErr == nil {
 			privateConn.Close()
 			host.PrivateAddr = privateAddr
+			Logger.Debugf("Connected to host using private addr: %s", privateAddr)
 		}
 	}
 
