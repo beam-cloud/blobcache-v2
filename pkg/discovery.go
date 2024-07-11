@@ -149,6 +149,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 		if privateErr == nil {
 			privateConn.Close()
 			host.PrivateAddr = privateAddr
+			host.RTT = time.Duration(0)
 			Logger.Debugf("Connected to host using private addr: %s", privateAddr)
 		}
 	}
