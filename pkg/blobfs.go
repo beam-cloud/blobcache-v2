@@ -60,6 +60,7 @@ type BlobFsSystemOpts struct {
 	Verbose  bool
 	Metadata *BlobCacheMetadata
 	Config   BlobCacheConfig
+	Client   *BlobCacheClient
 }
 
 type BlobFs struct {
@@ -87,16 +88,6 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	blobfs, err := NewFileSystem(ctx, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
-	}
-
-	for _, sourceConfig := range opts.Config.BlobFs.Sources {
-		_, err := NewSource(sourceConfig)
-		if err != nil {
-			Logger.Errorf("Failed to configure content source: %+v\n", err)
-			continue
-		}
-
-		Logger.Infof("Configured and mounted source: %+v\n", sourceConfig.FilesystemName)
 	}
 
 	root, _ := blobfs.Root()
@@ -142,17 +133,12 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) {
 	metadata := opts.Metadata
 
-	client, err := NewBlobCacheClient(ctx, opts.Config)
-	if err != nil {
-		return nil, err
-	}
-
 	bfs := &BlobFs{
-		verbose:  opts.Verbose,
 		ctx:      ctx,
+		verbose:  opts.Verbose,
 		Config:   opts.Config,
+		Client:   opts.Client,
 		Metadata: metadata,
-		Client:   client,
 	}
 
 	rootID := GenerateFsID("/")
