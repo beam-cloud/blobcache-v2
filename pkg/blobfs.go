@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -83,6 +85,10 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		}
 
 		Logger.Info("Mount point directory created.")
+	} else if isFuseMount(mountPoint) {
+		if err := forceUnmount(mountPoint); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmount existing FUSE mount: %v", err)
+		}
 	}
 
 	blobfs, err := NewFileSystem(ctx, opts)
@@ -184,4 +190,21 @@ func (bfs *BlobFs) Root() (fs.InodeEmbedder, error) {
 		return nil, fmt.Errorf("root not initialized")
 	}
 	return bfs.root, nil
+}
+
+func isFuseMount(mountPoint string) bool {
+	cmd := exec.Command("findmnt", "-n", "-o", "FSTYPE", mountPoint)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(output), "fuse")
+}
+
+func forceUnmount(mountPoint string) error {
+	cmd := exec.Command("fusermount", "-uz", mountPoint)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return err
+	}
+	return nil
 }
