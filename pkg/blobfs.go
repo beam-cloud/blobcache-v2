@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -60,6 +62,7 @@ type BlobFsSystemOpts struct {
 	Verbose  bool
 	Metadata *BlobCacheMetadata
 	Config   BlobCacheConfig
+	Client   *BlobCacheClient
 }
 
 type BlobFs struct {
@@ -82,21 +85,15 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		}
 
 		Logger.Info("Mount point directory created.")
+	} else if isFuseMount(mountPoint) {
+		if err := forceUnmount(mountPoint); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmount existing FUSE mount: %v", err)
+		}
 	}
 
 	blobfs, err := NewFileSystem(ctx, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
-	}
-
-	for _, sourceConfig := range opts.Config.BlobFs.Sources {
-		_, err := NewSource(sourceConfig)
-		if err != nil {
-			Logger.Errorf("Failed to configure content source: %+v\n", err)
-			continue
-		}
-
-		Logger.Infof("Configured and mounted source: %+v\n", sourceConfig.FilesystemName)
 	}
 
 	root, _ := blobfs.Root()
@@ -106,13 +103,24 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		AttrTimeout:  &attrTimeout,
 		EntryTimeout: &entryTimeout,
 	}
+
+	maxReadAheadKB := opts.Config.BlobFs.MaxReadAheadKB
+	if maxReadAheadKB <= 0 {
+		maxReadAheadKB = 128
+	}
+
+	maxBackgroundTasks := opts.Config.BlobFs.MaxBackgroundTasks
+	if maxBackgroundTasks <= 0 {
+		maxBackgroundTasks = 512
+	}
+
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
-		MaxBackground:        512,
+		MaxBackground:        maxBackgroundTasks,
 		DisableXAttrs:        true,
 		EnableSymlinkCaching: true,
 		SyncRead:             false,
 		RememberInodes:       true,
-		MaxReadAhead:         1 << 17,
+		MaxReadAhead:         maxReadAheadKB * 1024,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create server: %v", err)
@@ -142,17 +150,12 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) {
 	metadata := opts.Metadata
 
-	client, err := NewBlobCacheClient(ctx, opts.Config)
-	if err != nil {
-		return nil, err
-	}
-
 	bfs := &BlobFs{
-		verbose:  opts.Verbose,
 		ctx:      ctx,
+		verbose:  opts.Verbose,
 		Config:   opts.Config,
+		Client:   opts.Client,
 		Metadata: metadata,
-		Client:   client,
 	}
 
 	rootID := GenerateFsID("/")
@@ -198,4 +201,21 @@ func (bfs *BlobFs) Root() (fs.InodeEmbedder, error) {
 		return nil, fmt.Errorf("root not initialized")
 	}
 	return bfs.root, nil
+}
+
+func isFuseMount(mountPoint string) bool {
+	cmd := exec.Command("findmnt", "-n", "-o", "FSTYPE", mountPoint)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(output), "fuse")
+}
+
+func forceUnmount(mountPoint string) error {
+	cmd := exec.Command("fusermount", "-uz", mountPoint)
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return err
+	}
+	return nil
 }

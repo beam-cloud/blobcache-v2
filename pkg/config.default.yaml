@@ -10,6 +10,8 @@ discoveryIntervalS: 5
 blobfs:
   enabled: false
   mountPoint: /tmp/test
+  maxBackgroundTasks: 512
+  maxReadAheadKB: 128
 tailscale:
   controlUrl:
   user:

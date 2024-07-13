@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -134,13 +135,23 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			return err
 		}
 
+		now := time.Now()
+		nowSec := uint64(now.Unix())
+		nowNsec := uint32(now.Nanosecond())
+
 		metadata := &BlobFsMetadata{
-			PID:  previousParentId,
-			ID:   currentNodeId,
-			Name: part,
-			Path: currentPath,
-			Ino:  inode,
-			Mode: fuse.S_IFDIR | 0755,
+			PID:       previousParentId,
+			ID:        currentNodeId,
+			Name:      part,
+			Path:      currentPath,
+			Ino:       inode,
+			Mode:      fuse.S_IFDIR | 0755,
+			Atime:     nowSec,
+			Mtime:     nowSec,
+			Ctime:     nowSec,
+			Atimensec: nowNsec,
+			Mtimensec: nowNsec,
+			Ctimensec: nowNsec,
 		}
 
 		// Since this is the last file, store as a file, not a dir
