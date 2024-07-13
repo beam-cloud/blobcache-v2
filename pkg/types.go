@@ -73,9 +73,11 @@ type RedisConfig struct {
 }
 
 type BlobFsConfig struct {
-	Enabled    bool           `key:"enabled" json:"enabled"`
-	MountPoint string         `key:"mountPoint" json:"mount_point"`
-	Sources    []SourceConfig `key:"sources" json:"sources"`
+	Enabled            bool           `key:"enabled" json:"enabled"`
+	MountPoint         string         `key:"mountPoint" json:"mount_point"`
+	Sources            []SourceConfig `key:"sources" json:"sources"`
+	MaxBackgroundTasks int            `key:"maxBackgroundTasks" json:"max_background_tasks"`
+	MaxReadAheadKB     int            `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
 }
 
 type SourceConfig struct {

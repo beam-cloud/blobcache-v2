@@ -103,13 +103,24 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		AttrTimeout:  &attrTimeout,
 		EntryTimeout: &entryTimeout,
 	}
+
+	maxReadAheadKB := opts.Config.BlobFs.MaxReadAheadKB
+	if maxReadAheadKB <= 0 {
+		maxReadAheadKB = 128
+	}
+
+	maxBackgroundTasks := opts.Config.BlobFs.MaxBackgroundTasks
+	if maxBackgroundTasks <= 0 {
+		maxBackgroundTasks = 512
+	}
+
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
-		MaxBackground:        512,
+		MaxBackground:        maxBackgroundTasks,
 		DisableXAttrs:        true,
 		EnableSymlinkCaching: true,
 		SyncRead:             false,
 		RememberInodes:       true,
-		MaxReadAhead:         1 << 17,
+		MaxReadAhead:         maxReadAheadKB * 1024,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create server: %v", err)
