@@ -91,6 +91,23 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	// Monitor and cleanup local client cache
 	go bc.manageLocalClientCache(localClientCacheCleanupInterval, localClientCacheTTL)
 
+	// Mount cache as a FUSE filesystem if blobfs is enabled
+	if cfg.BlobFs.Enabled {
+		startServer, _, err := Mount(ctx, BlobFsSystemOpts{
+			Config:   cfg,
+			Metadata: metadata,
+			Client:   bc,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		err = startServer()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return bc, nil
 }
 
