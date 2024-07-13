@@ -119,7 +119,7 @@ func (s *JuiceFsSource) Format(fsName string) error {
 }
 
 func (s *JuiceFsSource) Unmount(localPath string) error {
-	cmd := exec.Command("juicefs", "umount", localPath)
+	cmd := exec.Command("juicefs", "umount", "--force", localPath)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
