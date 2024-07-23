@@ -1,0 +1,10 @@
+todo:
+- optimize mem usage
+- sort hosts by memory usage so we store new content on emptiest instances - DONE
+- add client method to allow caching of a specific object in a provider/pool
+- add default object ttls to save on memory
+- 
+
+
+builds:
+- any way to decrease the size of clips?
