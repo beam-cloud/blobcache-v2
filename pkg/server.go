@@ -217,6 +217,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
+		Logger.Infof("StoreFromContent - source not found: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
 	}
 

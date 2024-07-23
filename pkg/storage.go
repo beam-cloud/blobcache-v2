@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dgraph-io/ristretto"
 )
@@ -65,7 +66,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		chunk := content[offset:end]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
-		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
+		added := cas.cache.SetWithTTL(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)), time.Duration(cas.config.ObjectTtlS)*time.Second)
 		if !added {
 			return errors.New("unable to cache: set dropped")
 		}
@@ -74,7 +75,9 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	}
 
 	chunks := strings.Join(chunkKeys, ",")
-	added := cas.cache.Set(hash, chunks, int64(len(chunks)))
+
+	added := cas.cache.SetWithTTL(hash, chunks, int64(len(chunks)), time.Duration(cas.config.ObjectTtlS)*time.Second)
+
 	if !added {
 		return errors.New("unable to cache: set dropped")
 	}

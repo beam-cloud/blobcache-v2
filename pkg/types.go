@@ -17,6 +17,7 @@ type BlobCacheConfig struct {
 	TLSEnabled                      bool            `key:"tlsEnabled" json:"tls_enabled"`
 	Port                            uint            `key:"port" json:"port"`
 	HostStorageCapacityThresholdPct float64         `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
+	ObjectTtlS                      int             `key:"objectTtlS" json:"object_ttl_s"`
 	RoundTripThresholdMilliseconds  uint            `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
 	MaxCacheSizeMb                  int64           `key:"maxCacheSizeMb" json:"max_cache_size_mb"`
 	PageSizeBytes                   int64           `key:"pageSizeBytes" json:"page_size_bytes"`
