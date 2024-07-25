@@ -177,12 +177,6 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 					return errors.New("invalid host version")
 				}
 
-				if resp.CapacityUsagePct > float32(c.cfg.HostStorageCapacityThresholdPct) {
-					if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
-						c.closestHostWithCapacity = nil
-					}
-				}
-
 				return nil
 			}()
 
