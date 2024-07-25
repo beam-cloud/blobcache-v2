@@ -9,11 +9,12 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
-func NewHostMap(onHostAdded func(*BlobCacheHost) error) *HostMap {
+func NewHostMap(cfg BlobCacheConfig, onHostAdded func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
 		hosts:       make(map[string]*BlobCacheHost),
 		mu:          sync.Mutex{},
 		onHostAdded: onHostAdded,
+		cfg:         cfg,
 	}
 }
 
@@ -21,6 +22,7 @@ type HostMap struct {
 	hosts       map[string]*BlobCacheHost
 	mu          sync.Mutex
 	onHostAdded func(*BlobCacheHost) error
+	cfg         BlobCacheConfig
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {
@@ -92,6 +94,42 @@ func (hm *HostMap) Closest(timeout time.Duration) (*BlobCacheHost, error) {
 
 			// Sort by rount-trip time, return closest
 			sort.Slice(hosts, func(i, j int) bool { return hosts[i].RTT < hosts[j].RTT })
+			return hosts[0], nil
+		}
+
+		elapsed := time.Since(start)
+
+		// We reached the timeout
+		if elapsed > timeout {
+			return nil, errors.New("no hosts found")
+		}
+
+		time.Sleep(time.Second)
+	}
+}
+
+// ClosestWithCapacity finds the nearest host with available storage capacity within a given timeout
+// If no hosts are found, it will error out
+func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, error) {
+	start := time.Now()
+	for {
+		// If there are hosts, find the closet one
+		if len(hm.hosts) > 0 {
+
+			hm.mu.Lock()
+			hosts := make([]*BlobCacheHost, 0, len(hm.hosts)) // Convert map into slice of hosts
+			for _, host := range hm.hosts {
+				if host.CapacityUsagePct > hm.cfg.HostStorageCapacityThresholdPct {
+					continue
+				}
+
+				hosts = append(hosts, host)
+			}
+			hm.mu.Unlock()
+
+			// Sort by rount-trip time and capacity usage
+			sort.Slice(hosts, func(i, j int) bool { return hosts[i].RTT < hosts[j].RTT })
+			sort.Slice(hosts, func(i, j int) bool { return hosts[i].CapacityUsagePct < hosts[j].CapacityUsagePct })
 			return hosts[0], nil
 		}
 

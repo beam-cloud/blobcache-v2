@@ -1,0 +1,3 @@
+todo:
+- add client method to allow caching of a specific object in a provider/pool
+- garbage collection of old host locations and references... need a spec for this

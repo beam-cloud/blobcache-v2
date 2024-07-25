@@ -1,11 +1,11 @@
 package blobcache
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dgraph-io/ristretto"
 )
@@ -65,7 +65,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		chunk := content[offset:end]
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
-		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
+		added := cas.cache.SetWithTTL(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)), time.Duration(cas.config.ObjectTtlS)*time.Second)
 		if !added {
 			return errors.New("unable to cache: set dropped")
 		}
@@ -74,7 +74,9 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	}
 
 	chunks := strings.Join(chunkKeys, ",")
-	added := cas.cache.Set(hash, chunks, int64(len(chunks)))
+
+	added := cas.cache.SetWithTTL(hash, chunks, int64(len(chunks)), time.Duration(cas.config.ObjectTtlS)*time.Second)
+
 	if !added {
 		return errors.New("unable to cache: set dropped")
 	}
@@ -94,7 +96,8 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := make([]byte, 0, length)
+
 	remainingLength := length
 	o := offset
 
@@ -124,15 +127,14 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		if _, err := buffer.Write(chunkBytes[start:end]); err != nil {
-			return nil, fmt.Errorf("failed to write to buffer: %v", err)
-		}
+		// Append directly to the preallocated buffer
+		buffer = append(buffer, chunkBytes[start:end]...)
 
 		remainingLength -= readLength
 		o += readLength
 	}
 
-	return buffer.Bytes(), nil
+	return buffer, nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {

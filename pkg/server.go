@@ -39,6 +39,12 @@ type CacheService struct {
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+
+	// If HostStorageCapacityThresholdPct is not set, make sure a sensible default is set
+	if cfg.HostStorageCapacityThresholdPct <= 0 {
+		cfg.HostStorageCapacityThresholdPct = defaultHostStorageCapacityThresholdPct
+	}
+
 	currentHost := &BlobCacheHost{
 		Addr: fmt.Sprintf("%s.%s:%d", hostname, cfg.Tailscale.HostName, cfg.Port),
 		RTT:  0,
@@ -217,6 +223,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
+		Logger.Infof("StoreFromContent - source not found: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
 	}
 
@@ -244,5 +251,9 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	buffer.Reset()
 	Logger.Infof("StoreFromContent - [%s]", hash)
+
+	// HOTFIX: Manually trigger garbage collection
+	go runtime.GC()
+
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }

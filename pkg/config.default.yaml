@@ -2,6 +2,7 @@ port: 2049
 token:
 tlsEnabled: false
 rttThresholdMilliseconds: 100
+hostStorageCapacityThresholdPct: 0.95
 pageSizeBytes: 4000000 # 4MB
 maxCacheSizeMb: 100 # 100MB
 grpcMessageSizeBytes: 1000000000

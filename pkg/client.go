@@ -34,18 +34,18 @@ func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 }
 
 type BlobCacheClient struct {
-	ctx             context.Context
-	cfg             BlobCacheConfig
-	tailscale       *Tailscale
-	hostname        string
-	discoveryClient *DiscoveryClient
-	tailscaleClient *tailscale.LocalClient
-	grpcClients     map[string]proto.BlobCacheClient
-	hostMap         *HostMap
-	mu              sync.Mutex
-	metadata        *BlobCacheMetadata
-	closestHost     *BlobCacheHost
-	localHostCache  map[string]*localClientCache
+	ctx                     context.Context
+	cfg                     BlobCacheConfig
+	tailscale               *Tailscale
+	hostname                string
+	discoveryClient         *DiscoveryClient
+	tailscaleClient         *tailscale.LocalClient
+	grpcClients             map[string]proto.BlobCacheClient
+	hostMap                 *HostMap
+	mu                      sync.Mutex
+	metadata                *BlobCacheMetadata
+	closestHostWithCapacity *BlobCacheHost
+	localHostCache          map[string]*localClientCache
 }
 
 type localClientCache struct {
@@ -71,18 +71,18 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	}
 
 	bc := &BlobCacheClient{
-		ctx:             ctx,
-		cfg:             cfg,
-		hostname:        hostname,
-		tailscale:       tailscale,
-		tailscaleClient: tailscaleClient,
-		grpcClients:     make(map[string]proto.BlobCacheClient),
-		localHostCache:  make(map[string]*localClientCache),
-		mu:              sync.Mutex{},
-		metadata:        metadata,
-		closestHost:     nil,
+		ctx:                     ctx,
+		cfg:                     cfg,
+		hostname:                hostname,
+		tailscale:               tailscale,
+		tailscaleClient:         tailscaleClient,
+		grpcClients:             make(map[string]proto.BlobCacheClient),
+		localHostCache:          make(map[string]*localClientCache),
+		mu:                      sync.Mutex{},
+		metadata:                metadata,
+		closestHostWithCapacity: nil,
 	}
-	bc.hostMap = NewHostMap(bc.addHost)
+	bc.hostMap = NewHostMap(cfg, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap)
 
 	// Start searching for nearby blobcache hosts
@@ -177,6 +177,12 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 					return errors.New("invalid host version")
 				}
 
+				if resp.CapacityUsagePct > float32(c.cfg.HostStorageCapacityThresholdPct) {
+					if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
+						c.closestHostWithCapacity = nil
+					}
+				}
+
 				return nil
 			}()
 
@@ -187,8 +193,8 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 
 				c.hostMap.Remove(host)
 
-				if c.closestHost != nil && c.closestHost.Addr == host.Addr {
-					c.closestHost = nil
+				if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
+					c.closestHostWithCapacity = nil
 				}
 
 				delete(c.grpcClients, host.Addr)
@@ -255,15 +261,15 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		if c.closestHost != nil {
-			host = c.closestHost
+		if c.closestHostWithCapacity != nil {
+			host = c.closestHostWithCapacity
 		} else {
-			host, err = c.hostMap.Closest(closestHostTimeout)
+			host, err = c.hostMap.ClosestWithCapacity(closestHostTimeout)
 			if err != nil {
 				return nil, err
 			}
 
-			c.closestHost = host
+			c.closestHostWithCapacity = host
 		}
 	case ClientRequestTypeRetrieval:
 		cachedHost, hostFound := c.localHostCache[request.hash]
