@@ -119,10 +119,6 @@ func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, e
 			hm.mu.Lock()
 			hosts := make([]*BlobCacheHost, 0, len(hm.hosts)) // Convert map into slice of hosts
 			for _, host := range hm.hosts {
-				if host.CapacityUsagePct > hm.cfg.HostStorageCapacityThresholdPct {
-					continue
-				}
-
 				hosts = append(hosts, host)
 			}
 			hm.mu.Unlock()
@@ -134,6 +130,10 @@ func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, e
 				}
 				return hosts[i].CapacityUsagePct < hosts[j].CapacityUsagePct
 			})
+
+			if len(hosts) == 0 {
+				return nil, errors.New("no hosts found")
+			}
 
 			return hosts[0], nil
 		}
