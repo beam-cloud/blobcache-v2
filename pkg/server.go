@@ -245,5 +245,9 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	buffer.Reset()
 	Logger.Infof("StoreFromContent - [%s]", hash)
+
+	// HOTFIX: Manually trigger garbage collection
+	go runtime.GC()
+
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
