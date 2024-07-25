@@ -128,8 +128,13 @@ func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, e
 			hm.mu.Unlock()
 
 			// Sort by rount-trip time and capacity usage
-			sort.Slice(hosts, func(i, j int) bool { return hosts[i].RTT < hosts[j].RTT })
-			sort.Slice(hosts, func(i, j int) bool { return hosts[i].CapacityUsagePct < hosts[j].CapacityUsagePct })
+			sort.Slice(hosts, func(i, j int) bool {
+				if hosts[i].RTT != hosts[j].RTT {
+					return hosts[i].RTT < hosts[j].RTT
+				}
+				return hosts[i].CapacityUsagePct < hosts[j].CapacityUsagePct
+			})
+
 			return hosts[0], nil
 		}
 
