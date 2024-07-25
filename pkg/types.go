@@ -11,6 +11,10 @@ const (
 	BlobCacheVersion      string = "dev"
 )
 
+const (
+	defaultHostStorageCapacityThresholdPct float64 = 0.95
+)
+
 type BlobCacheConfig struct {
 	Token                           string          `key:"token" json:"token"`
 	DebugMode                       bool            `key:"debugMode" json:"debug_mode"`

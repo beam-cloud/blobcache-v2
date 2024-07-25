@@ -39,6 +39,12 @@ type CacheService struct {
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+
+	// If HostStorageCapacityThresholdPct is not set, make sure a sensible default is set
+	if cfg.HostStorageCapacityThresholdPct <= 0 {
+		cfg.HostStorageCapacityThresholdPct = defaultHostStorageCapacityThresholdPct
+	}
+
 	currentHost := &BlobCacheHost{
 		Addr: fmt.Sprintf("%s.%s:%d", hostname, cfg.Tailscale.HostName, cfg.Port),
 		RTT:  0,
