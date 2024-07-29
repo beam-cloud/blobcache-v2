@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"sync"
@@ -24,7 +25,7 @@ const getContentRequestTimeout = 30 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
 const closestHostTimeout = 30 * time.Second
 const localClientCacheCleanupInterval = 5 * time.Second
-const localClientCacheTTL = 30 * time.Second
+const localClientCacheTTL = 300 * time.Second
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -266,10 +267,14 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			c.closestHostWithCapacity = host
 		}
 	case ClientRequestTypeRetrieval:
+		log.Println("getting client")
+
 		cachedHost, hostFound := c.localHostCache[request.hash]
 		if hostFound {
 			host = cachedHost.host
+			log.Println("used cached client")
 		} else {
+			log.Println("looking up client")
 			hostAddrs, err := c.metadata.GetEntryLocations(c.ctx, request.hash)
 			if err != nil {
 				return nil, err
@@ -277,6 +282,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
 			if intersection.Cardinality() == 0 {
+				log.Println("client not found")
 				entry, err := c.metadata.RetrieveEntry(c.ctx, request.hash)
 				if err != nil {
 					return nil, err
@@ -310,12 +316,14 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 					return nil, errors.New("unable to populate content from original source")
 				} else {
+					log.Println("no host found")
 					return nil, errors.New("no host found")
 				}
 			}
 
 			host = c.findClosestHost(intersection)
 			if host == nil {
+				log.Println("no closest host found")
 				return nil, errors.New("no host found")
 			}
 
@@ -324,6 +332,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				host:      host,
 				timestamp: time.Now(),
 			}
+			log.Println("set local host cache")
 			c.mu.Unlock()
 
 		}
