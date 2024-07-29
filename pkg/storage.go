@@ -1,6 +1,7 @@
 package blobcache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -96,7 +97,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {
-	buffer := make([]byte, 0, length)
+	buffer := bytes.NewBuffer(make([]byte, 0, length))
 
 	remainingLength := length
 	o := offset
@@ -127,14 +128,15 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		// Append directly to the preallocated buffer
-		buffer = append(buffer, chunkBytes[start:end]...)
+		if _, err := buffer.Write(chunkBytes[start:end]); err != nil {
+			return nil, fmt.Errorf("failed to write to buffer: %v", err)
+		}
 
 		remainingLength -= readLength
 		o += readLength
 	}
 
-	return buffer, nil
+	return buffer.Bytes(), nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {

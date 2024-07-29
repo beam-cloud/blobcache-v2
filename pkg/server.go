@@ -111,6 +111,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.MaxConcurrentStreams(10000),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -139,7 +140,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Infof("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
+	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
 	return &proto.GetContentResponse{Content: content, Ok: true}, nil
 }
 
