@@ -207,6 +207,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
+	log.Println("getting client!")
 	client, err := c.getGRPCClient(&ClientRequest{
 		rt:   ClientRequestTypeRetrieval,
 		hash: hash,
@@ -214,12 +215,15 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	if err != nil {
 		return nil, err
 	}
+	log.Println("got client")
 
+	log.Println("making call to get")
 	start := time.Now()
 	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 	if err != nil {
 		return nil, err
 	}
+	log.Println("got it....")
 
 	Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
 	return getContentResponse.Content, nil
@@ -327,6 +331,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				return nil, errors.New("no host found")
 			}
 
+			log.Println("waiting for mutex")
 			c.mu.Lock()
 			c.localHostCache[request.hash] = &localClientCache{
 				host:      host,
@@ -334,6 +339,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 			}
 			log.Println("set local host cache")
 			c.mu.Unlock()
+			log.Println("mutex unlocked")
 
 		}
 	default:
@@ -345,11 +351,12 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 	client, exists := c.grpcClients[host.Addr]
 	if !exists {
+		log.Println("waiting for mutex (!exists)")
 		c.mu.Lock()
-		defer c.mu.Unlock()
 		delete(c.localHostCache, request.hash)
+		c.mu.Unlock()
+		log.Println("mutex unlocked (!exists)")
 		return nil, errors.New("host not found")
-
 	}
 
 	return client, nil
