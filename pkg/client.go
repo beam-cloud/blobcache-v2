@@ -24,7 +24,7 @@ const getContentRequestTimeout = 30 * time.Second
 const storeContentRequestTimeout = 60 * time.Second
 const closestHostTimeout = 30 * time.Second
 const localClientCacheCleanupInterval = 5 * time.Second
-const localClientCacheTTL = 30 * time.Second
+const localClientCacheTTL = 300 * time.Second
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -337,10 +337,9 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	client, exists := c.grpcClients[host.Addr]
 	if !exists {
 		c.mu.Lock()
-		defer c.mu.Unlock()
 		delete(c.localHostCache, request.hash)
+		c.mu.Unlock()
 		return nil, errors.New("host not found")
-
 	}
 
 	return client, nil
