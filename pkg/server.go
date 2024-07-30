@@ -111,7 +111,6 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		grpc.MaxConcurrentStreams(10000),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
