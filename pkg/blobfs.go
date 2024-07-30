@@ -152,7 +152,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 	bfs := &BlobFs{
 		ctx:      ctx,
-		verbose:  true, //opts.Verbose,
+		verbose:  opts.Verbose,
 		Config:   opts.Config,
 		Client:   opts.Client,
 		Metadata: metadata,
