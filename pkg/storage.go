@@ -63,9 +63,12 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 			end = size
 		}
 
-		chunk := content[offset:end]
+		// Copy the chunk into a new buffer
+		chunk := make([]byte, end-offset)
+		copy(chunk, content[offset:end])
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
+		// Store the chunk
 		added := cas.cache.SetWithTTL(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)), time.Duration(cas.config.ObjectTtlS)*time.Second)
 		if !added {
 			return errors.New("unable to cache: set dropped")
@@ -74,10 +77,12 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		chunkKeys = append(chunkKeys, chunkKey)
 	}
 
+	// Release the large initial buffer
+	content = nil
+
+	// Store chunk keys in cache
 	chunks := strings.Join(chunkKeys, ",")
-
 	added := cas.cache.SetWithTTL(hash, chunks, int64(len(chunks)), time.Duration(cas.config.ObjectTtlS)*time.Second)
-
 	if !added {
 		return errors.New("unable to cache: set dropped")
 	}
