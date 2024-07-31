@@ -74,26 +74,26 @@ type BlobFs struct {
 	Config   BlobCacheConfig
 }
 
-func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, error) {
+func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
 	mountPoint := opts.Config.BlobFs.MountPoint
 	Logger.Infof("Mounting to %s\n", mountPoint)
 
 	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
 		err = os.MkdirAll(mountPoint, 0755)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create mount point directory: %v", err)
+			return nil, nil, nil, fmt.Errorf("failed to create mount point directory: %v", err)
 		}
 
 		Logger.Info("Mount point directory created.")
 	} else if isFuseMount(mountPoint) {
 		if err := forceUnmount(mountPoint); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmount existing FUSE mount: %v", err)
+			return nil, nil, nil, fmt.Errorf("failed to unmount existing FUSE mount: %v", err)
 		}
 	}
 
 	blobfs, err := NewFileSystem(ctx, opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create filesystem: %v", err)
+		return nil, nil, nil, fmt.Errorf("could not create filesystem: %v", err)
 	}
 
 	root, _ := blobfs.Root()
@@ -123,7 +123,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		MaxReadAhead:         maxReadAheadKB * 1024,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create server: %v", err)
+		return nil, nil, nil, fmt.Errorf("could not create server: %v", err)
 	}
 
 	serverError := make(chan error, 1)
@@ -143,7 +143,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		return nil
 	}
 
-	return startServer, serverError, nil
+	return startServer, serverError, server, nil
 }
 
 // NewFileSystem initializes a new BlobFs with root metadata.

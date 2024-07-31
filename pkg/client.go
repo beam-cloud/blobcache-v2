@@ -13,6 +13,7 @@ import (
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -46,6 +47,7 @@ type BlobCacheClient struct {
 	metadata                *BlobCacheMetadata
 	closestHostWithCapacity *BlobCacheHost
 	localHostCache          map[string]*localClientCache
+	blobfsServer            *fuse.Server
 }
 
 type localClientCache struct {
@@ -93,7 +95,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if cfg.BlobFs.Enabled {
-		startServer, _, err := Mount(ctx, BlobFsSystemOpts{
+		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
 			Config:   cfg,
 			Metadata: metadata,
 			Client:   bc,
@@ -106,9 +108,19 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		if err != nil {
 			return nil, err
 		}
+
+		bc.blobfsServer = server
 	}
 
 	return bc, nil
+}
+
+func (c *BlobCacheClient) Cleanup() error {
+	if c.cfg.BlobFs.Enabled && c.blobfsServer != nil {
+		return c.blobfsServer.Unmount()
+	}
+
+	return nil
 }
 
 func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
