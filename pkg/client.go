@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -117,7 +118,16 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 func (c *BlobCacheClient) Cleanup() error {
 	if c.cfg.BlobFs.Enabled && c.blobfsServer != nil {
-		return c.blobfsServer.Unmount()
+		err := c.blobfsServer.Unmount()
+		if err != nil {
+			if err := exec.Command("fuser", "-k", c.cfg.BlobFs.MountPoint).Run(); err != nil {
+				return err
+			}
+
+			if err := exec.Command("umount", "-l", c.cfg.BlobFs.MountPoint).Run(); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
