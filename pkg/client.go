@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"sync"
@@ -217,17 +218,20 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
+	log.Println("trying to get content")
 	client, err := c.getGRPCClient(&ClientRequest{
 		rt:   ClientRequestTypeRetrieval,
 		hash: hash,
 	})
 	if err != nil {
+		log.Println("client not found")
 		return nil, err
 	}
 
 	start := time.Now()
 	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 	if err != nil {
+		log.Println("called get content, err: ", err)
 		return nil, err
 	}
 
