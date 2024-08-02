@@ -36,7 +36,7 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 
 	hm.hosts[host.Addr] = host
 	if hm.onHostAdded != nil {
-		Logger.Infof("Added new host @ %s", host.Addr)
+		Logger.Infof("Added new host @ %s (PrivateAddr=%s, RTT=%s)", host.Addr, host.PrivateAddr, host.RTT)
 		hm.onHostAdded(host)
 	}
 }
