@@ -19,7 +19,6 @@ type Tailscale struct {
 	server   *tsnet.Server
 	mu       sync.Mutex
 	hostname string
-	authCond *sync.Cond
 	authDone bool
 }
 
@@ -33,7 +32,6 @@ func NewTailscale(ctx context.Context, hostname string, cfg BlobCacheConfig) *Ta
 		authDone: false,
 	}
 
-	ts.authCond = sync.NewCond(&sync.Mutex{})
 	return ts
 }
 
@@ -96,7 +94,6 @@ func (t *Tailscale) WaitForAuth(ctx context.Context, timeout time.Duration) erro
 
 			if status.BackendState == ipn.Running.String() {
 				t.authDone = true
-				t.authCond.Broadcast() // Notify that ts auth was successful
 				log.Println("blobcache: tailscale auth completed")
 				return nil
 			}
