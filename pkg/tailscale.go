@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -80,6 +81,7 @@ func (t *Tailscale) WaitForAuth(ctx context.Context) {
 		return
 	}
 
+	log.Println("blobcache: waiting for tailscale auth")
 	for {
 		status, err := tailscaleClient.Status(ctx)
 		if err != nil {
@@ -89,6 +91,7 @@ func (t *Tailscale) WaitForAuth(ctx context.Context) {
 		if status.BackendState == ipn.Running.String() {
 			t.authDone = true
 			t.authCond.Broadcast() // Notify that ts auth was successful
+			log.Println("blobcache: tailscale auth completed")
 			return
 		}
 

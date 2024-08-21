@@ -71,6 +71,9 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
+	// Block until tailscale is authenticated
+	tailscale.WaitForAuth(ctx)
+
 	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
 		return nil, err
@@ -292,9 +295,8 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 			nearbyHosts := c.hostMap.Members()
 
-			// If no hosts have been discovered, wait a few seconds
-			if nearbyHosts.Cardinality() == 0 && !c.tailscale.authDone {
-				c.tailscale.WaitForAuth(c.ctx)
+			// If no hosts have been discovered, wait a few seconds and try again
+			if nearbyHosts.Cardinality() == 0 {
 				time.Sleep(time.Second * 5)
 				nearbyHosts = c.hostMap.Members()
 			}
