@@ -71,8 +71,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
-	// Block until tailscale is authenticated
-	tailscale.WaitForAuth(ctx)
+	// Block until tailscale is authenticated (or the timeout is reached)
+	err = tailscale.WaitForAuth(ctx, time.Second*30)
+	if err != nil {
+		return nil, err
+	}
 
 	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {

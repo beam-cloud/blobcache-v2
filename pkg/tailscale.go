@@ -66,36 +66,43 @@ func (t *Tailscale) GetOrCreateServer() (*tsnet.Server, error) {
 		return nil, err
 	}
 
-	go t.WaitForAuth(t.ctx)
-
 	return t.server, nil
 }
 
-func (t *Tailscale) WaitForAuth(ctx context.Context) {
+func (t *Tailscale) WaitForAuth(ctx context.Context, timeout time.Duration) error {
 	if t.authDone {
-		return
+		return nil
 	}
 
 	tailscaleClient, err := t.server.LocalClient()
 	if err != nil {
-		return
+		return err
 	}
 
 	log.Println("blobcache: waiting for tailscale auth")
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	for {
-		status, err := tailscaleClient.Status(ctx)
-		if err != nil {
-			return
-		}
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("blobcache: tailscale auth timed out after %v", timeout)
+		default:
+			status, err := tailscaleClient.Status(timeoutCtx)
+			if err != nil {
+				continue
+			}
 
-		if status.BackendState == ipn.Running.String() {
-			t.authDone = true
-			t.authCond.Broadcast() // Notify that ts auth was successful
-			log.Println("blobcache: tailscale auth completed")
-			return
-		}
+			if status.BackendState == ipn.Running.String() {
+				t.authDone = true
+				t.authCond.Broadcast() // Notify that ts auth was successful
+				log.Println("blobcache: tailscale auth completed")
+				return nil
+			}
 
-		time.Sleep(500 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 }
 
