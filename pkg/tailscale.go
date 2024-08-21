@@ -101,19 +101,17 @@ func (t *Tailscale) DialWithTimeout(ctx context.Context, addr string) (net.Conn,
 
 	// Wait for authentication or timeout
 	if !t.authDone {
+		done := make(chan struct{})
+
+		go func() {
+			t.authCond.Wait()
+			close(done)
+		}()
+
 		select {
 		case <-timeoutCtx.Done():
 			return nil, errors.New("timeout waiting for authentication")
-		case <-func() chan struct{} {
-			done := make(chan struct{})
-
-			go func() {
-				t.authCond.Wait()
-				close(done)
-			}()
-
-			return done
-		}():
+		case <-done:
 		}
 	}
 
