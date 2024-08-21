@@ -115,22 +115,6 @@ func (t *Tailscale) DialWithTimeout(ctx context.Context, addr string) (net.Conn,
 		return nil, errors.New("server not initialized")
 	}
 
-	// Wait for authentication or timeout
-	if !t.authDone {
-		done := make(chan struct{})
-
-		go func() {
-			t.authCond.Wait()
-			close(done)
-		}()
-
-		select {
-		case <-timeoutCtx.Done():
-			return nil, errors.New("timeout waiting for authentication")
-		case <-done:
-		}
-	}
-
 	conn, err := t.server.Dial(timeoutCtx, "tcp", addr)
 	if err != nil {
 		return nil, err
