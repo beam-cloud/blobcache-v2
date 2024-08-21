@@ -78,7 +78,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		}
 	}
 
-	tailscale := NewTailscale(hostname, cfg)
+	tailscale := NewTailscale(ctx, hostname, cfg)
 
 	return &CacheService{
 		ctx:           ctx,

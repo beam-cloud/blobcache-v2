@@ -57,7 +57,7 @@ type localClientCache struct {
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
-	tailscale := NewTailscale(hostname, cfg)
+	tailscale := NewTailscale(ctx, hostname, cfg)
 
 	InitLogger(cfg.DebugMode)
 

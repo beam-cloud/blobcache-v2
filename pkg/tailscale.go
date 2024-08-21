@@ -13,6 +13,7 @@ import (
 )
 
 type Tailscale struct {
+	ctx      context.Context
 	cfg      BlobCacheConfig
 	server   *tsnet.Server
 	mu       sync.Mutex
@@ -22,15 +23,16 @@ type Tailscale struct {
 }
 
 // NewTailscale creates a new Tailscale instance using tsnet
-func NewTailscale(hostname string, cfg BlobCacheConfig) *Tailscale {
+func NewTailscale(ctx context.Context, hostname string, cfg BlobCacheConfig) *Tailscale {
 	ts := &Tailscale{
+		ctx:      ctx,
 		hostname: hostname,
 		cfg:      cfg,
 		mu:       sync.Mutex{},
 		authDone: false,
 	}
 
-	ts.authCond = sync.NewCond(&ts.mu)
+	ts.authCond = sync.NewCond(&sync.Mutex{})
 	return ts
 }
 
@@ -63,7 +65,7 @@ func (t *Tailscale) GetOrCreateServer() (*tsnet.Server, error) {
 		return nil, err
 	}
 
-	go t.waitForAuth(context.Background())
+	go t.waitForAuth(t.ctx)
 
 	return t.server, nil
 }
