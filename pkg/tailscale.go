@@ -4,27 +4,37 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"time"
 
+	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
 )
 
 type Tailscale struct {
+	ctx      context.Context
 	cfg      BlobCacheConfig
 	server   *tsnet.Server
 	mu       sync.Mutex
 	hostname string
+	authCond *sync.Cond
+	authDone bool
 }
 
 // NewTailscale creates a new Tailscale instance using tsnet
-func NewTailscale(hostname string, cfg BlobCacheConfig) *Tailscale {
-	return &Tailscale{
+func NewTailscale(ctx context.Context, hostname string, cfg BlobCacheConfig) *Tailscale {
+	ts := &Tailscale{
+		ctx:      ctx,
 		hostname: hostname,
 		cfg:      cfg,
 		mu:       sync.Mutex{},
+		authDone: false,
 	}
+
+	ts.authCond = sync.NewCond(&sync.Mutex{})
+	return ts
 }
 
 func (t *Tailscale) logF(format string, v ...interface{}) {
@@ -33,11 +43,12 @@ func (t *Tailscale) logF(format string, v ...interface{}) {
 	}
 }
 
-func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
+func (t *Tailscale) GetOrCreateServer() (*tsnet.Server, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
 	if t.server != nil {
-		return t.server
+		return t.server, nil
 	}
 
 	t.server = &tsnet.Server{
@@ -49,7 +60,43 @@ func (t *Tailscale) GetOrCreateServer() *tsnet.Server {
 	}
 
 	t.server.Logf = t.logF
-	return t.server
+	t.server.UserLogf = t.logF
+
+	if err := t.server.Start(); err != nil {
+		return nil, err
+	}
+
+	go t.WaitForAuth(t.ctx)
+
+	return t.server, nil
+}
+
+func (t *Tailscale) WaitForAuth(ctx context.Context) {
+	if t.authDone {
+		return
+	}
+
+	tailscaleClient, err := t.server.LocalClient()
+	if err != nil {
+		return
+	}
+
+	log.Println("blobcache: waiting for tailscale auth")
+	for {
+		status, err := tailscaleClient.Status(ctx)
+		if err != nil {
+			return
+		}
+
+		if status.BackendState == ipn.Running.String() {
+			t.authDone = true
+			t.authCond.Broadcast() // Notify that ts auth was successful
+			log.Println("blobcache: tailscale auth completed")
+			return
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
 }
 
 // DialWithTimeout returns a TCP connection to a tailscale service but times out after GRPCDialTimeoutS
@@ -59,6 +106,22 @@ func (t *Tailscale) DialWithTimeout(ctx context.Context, addr string) (net.Conn,
 
 	if t.server == nil {
 		return nil, errors.New("server not initialized")
+	}
+
+	// Wait for authentication or timeout
+	if !t.authDone {
+		done := make(chan struct{})
+
+		go func() {
+			t.authCond.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-timeoutCtx.Done():
+			return nil, errors.New("timeout waiting for authentication")
+		case <-done:
+		}
 	}
 
 	conn, err := t.server.Dial(timeoutCtx, "tcp", addr)

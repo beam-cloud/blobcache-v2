@@ -36,7 +36,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
 		OnEvict:     cas.onEvict,
-		Metrics:     true,
+		Metrics:     false,
 	})
 	if err != nil {
 		return nil, err

@@ -78,7 +78,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		}
 	}
 
-	tailscale := NewTailscale(hostname, cfg)
+	tailscale := NewTailscale(ctx, hostname, cfg)
 
 	return &CacheService{
 		ctx:           ctx,
@@ -94,7 +94,10 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 func (cs *CacheService) StartServer(port uint) error {
 	addr := fmt.Sprintf(":%d", port)
 
-	server := cs.tailscale.GetOrCreateServer()
+	server, err := cs.tailscale.GetOrCreateServer()
+	if err != nil {
+		return err
+	}
 
 	// Bind both to tailnet and locally
 	tailscaleListener, err := server.Listen("tcp", addr)
