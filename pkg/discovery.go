@@ -37,7 +37,11 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
-	server := d.tailscale.GetOrCreateServer()
+	server, err := d.tailscale.GetOrCreateServer()
+	if err != nil {
+		return err
+	}
+
 	client, err := server.LocalClient()
 	if err != nil {
 		return err

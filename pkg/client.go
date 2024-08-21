@@ -61,7 +61,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	InitLogger(cfg.DebugMode)
 
-	server := tailscale.GetOrCreateServer()
+	server, err := tailscale.GetOrCreateServer()
+	if err != nil {
+		return nil, err
+	}
+
 	tailscaleClient, err := server.LocalClient()
 	if err != nil {
 		return nil, err
