@@ -65,12 +65,16 @@ func (t *Tailscale) GetOrCreateServer() (*tsnet.Server, error) {
 		return nil, err
 	}
 
-	go t.waitForAuth(t.ctx)
+	go t.WaitForAuth(t.ctx)
 
 	return t.server, nil
 }
 
-func (t *Tailscale) waitForAuth(ctx context.Context) {
+func (t *Tailscale) WaitForAuth(ctx context.Context) {
+	if t.authDone {
+		return
+	}
+
 	tailscaleClient, err := t.server.LocalClient()
 	if err != nil {
 		return

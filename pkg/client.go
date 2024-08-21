@@ -290,7 +290,16 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 				return nil, err
 			}
 
-			intersection := hostAddrs.Intersect(c.hostMap.Members())
+			hosts := c.hostMap.Members()
+
+			// If no hosts have been discovered, wait a few seconds
+			if hosts.Cardinality() == 0 && !c.tailscale.authDone {
+				c.tailscale.WaitForAuth(c.ctx)
+				time.Sleep(time.Second * 5)
+				hosts = c.hostMap.Members()
+			}
+
+			intersection := hostAddrs.Intersect(hosts)
 			if intersection.Cardinality() == 0 {
 				entry, err := c.metadata.RetrieveEntry(c.ctx, request.hash)
 				if err != nil {
