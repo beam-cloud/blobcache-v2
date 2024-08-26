@@ -50,6 +50,7 @@ func (hm *HostMap) Remove(host *BlobCacheHost) {
 		return
 	}
 
+	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.Addr, host.PrivateAddr, host.RTT)
 	delete(hm.hosts, host.Addr)
 }
 
