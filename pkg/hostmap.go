@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -50,6 +49,7 @@ func (hm *HostMap) Remove(host *BlobCacheHost) {
 		return
 	}
 
+	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.Addr, host.PrivateAddr, host.RTT)
 	delete(hm.hosts, host.Addr)
 }
 
@@ -101,7 +101,7 @@ func (hm *HostMap) Closest(timeout time.Duration) (*BlobCacheHost, error) {
 
 		// We reached the timeout
 		if elapsed > timeout {
-			return nil, errors.New("no hosts found")
+			return nil, ErrHostNotFound
 		}
 
 		time.Sleep(time.Second)
@@ -132,7 +132,7 @@ func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, e
 			})
 
 			if len(hosts) == 0 {
-				return nil, errors.New("no hosts found")
+				return nil, ErrHostNotFound
 			}
 
 			return hosts[0], nil
@@ -142,7 +142,7 @@ func (hm *HostMap) ClosestWithCapacity(timeout time.Duration) (*BlobCacheHost, e
 
 		// We reached the timeout
 		if elapsed > timeout {
-			return nil, errors.New("no hosts found")
+			return nil, ErrHostNotFound
 		}
 
 		time.Sleep(time.Second)

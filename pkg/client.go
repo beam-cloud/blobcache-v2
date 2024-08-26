@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -186,16 +185,16 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 			err := func() error {
 				client, exists := c.grpcClients[host.Addr]
 				if !exists {
-					return errors.New("host not found")
+					return ErrHostNotFound
 				}
 
 				resp, err := client.GetState(c.ctx, &proto.GetStateRequest{})
 				if err != nil {
-					return errors.New("unable to reach host")
+					return ErrInvalidHostVersion
 				}
 
 				if resp.GetVersion() != BlobCacheVersion {
-					return errors.New("invalid host version")
+					return ErrInvalidHostVersion
 				}
 
 				return nil
@@ -227,22 +226,33 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient(&ClientRequest{
-		rt:   ClientRequestTypeRetrieval,
-		hash: hash,
-	})
-	if err != nil {
-		return nil, err
+	for attempt := 0; attempt < 3; attempt += 1 {
+		client, host, err := c.getGRPCClient(&ClientRequest{
+			rt:   ClientRequestTypeRetrieval,
+			hash: hash,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		start := time.Now()
+		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
+		if err != nil {
+			// If we had an issue getting the content, remove this location from metadata
+			c.metadata.RemoveEntryLocation(ctx, hash, host)
+
+			c.mu.Lock()
+			delete(c.localHostCache, hash)
+			c.mu.Unlock()
+
+			continue
+		}
+
+		Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
+		return getContentResponse.Content, nil
 	}
 
-	start := time.Now()
-	getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
-	if err != nil {
-		return nil, err
-	}
-
-	Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
-	return getContentResponse.Content, nil
+	return nil, ErrContentNotFound
 }
 
 func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval time.Duration) {
@@ -270,7 +280,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 	}()
 }
 
-func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, error) {
+func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
 	var err error = nil
 
@@ -281,7 +291,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		} else {
 			host, err = c.hostMap.ClosestWithCapacity(closestHostTimeout)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			c.closestHostWithCapacity = host
@@ -293,28 +303,33 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		} else {
 			hostAddrs, err := c.metadata.GetEntryLocations(c.ctx, request.hash)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
 			if intersection.Cardinality() == 0 {
 				entry, err := c.metadata.RetrieveEntry(c.ctx, request.hash)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 
 				// Attempt to populate this server with the content from the original source
 				if entry.SourcePath != "" {
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
+					locked := c.mu.TryLock()
+					if !locked {
+						return nil, nil, ErrCacheLockHeld
+					}
+					defer c.mu.Unlock()
 
+					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
 					host, err = c.hostMap.Closest(closestHostTimeout)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 
 					closestClient, exists := c.grpcClients[host.Addr]
 					if !exists {
-						return nil, errors.New("client not found")
+						return nil, nil, ErrClientNotFound
 					}
 
 					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
@@ -322,22 +337,22 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 						SourceOffset: entry.SourceOffset,
 					})
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 
 					if resp.Ok {
-						return closestClient, nil
+						return closestClient, host, nil
 					}
 
-					return nil, errors.New("unable to populate content from original source")
+					return nil, nil, ErrUnableToPopulateContent
 				} else {
-					return nil, errors.New("no host found")
+					return nil, nil, ErrHostNotFound
 				}
 			}
 
 			host = c.findClosestHost(intersection)
 			if host == nil {
-				return nil, errors.New("no host found")
+				return nil, nil, ErrHostNotFound
 			}
 
 			c.mu.Lock()
@@ -352,7 +367,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	}
 
 	if host == nil {
-		return nil, errors.New("no host found")
+		return nil, nil, ErrHostNotFound
 	}
 
 	client, exists := c.grpcClients[host.Addr]
@@ -360,10 +375,10 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)
 		c.mu.Unlock()
-		return nil, errors.New("host not found")
+		return nil, nil, ErrHostNotFound
 	}
 
-	return client, nil
+	return client, host, nil
 }
 
 func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *BlobCacheHost {
@@ -386,7 +401,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient(&ClientRequest{
+	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt: ClientRequestTypeStorage,
 	})
 	if err != nil {
@@ -419,7 +434,7 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient(&ClientRequest{
+	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt: ClientRequestTypeStorage,
 	})
 	if err != nil {
@@ -434,11 +449,15 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
+func (c *BlobCacheClient) HostsAvailable() bool {
+	return c.hostMap.Members().Cardinality() > 0
+}
+
 func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval})
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval})
 	if err != nil {
 		return err
 	}
