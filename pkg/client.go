@@ -449,6 +449,10 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
+func (c *BlobCacheClient) HostsAvailable() bool {
+	return c.hostMap.Members().Cardinality() > 0
+}
+
 func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
