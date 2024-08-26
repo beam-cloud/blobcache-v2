@@ -129,6 +129,11 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
+	// If there are no nearby hosts, don't try to read from cache
+	if !n.filesystem.Client.HostsAvailable() {
+		return nil, syscall.EIO
+	}
+
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
 	if err != nil {
 		return nil, syscall.EIO
