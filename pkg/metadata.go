@@ -13,7 +13,8 @@ import (
 )
 
 type BlobCacheMetadata struct {
-	rdb *RedisClient
+	rdb  *RedisClient
+	lock *RedisLock
 }
 
 const (
@@ -32,8 +33,10 @@ func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
 		return nil, err
 	}
 
+	lock := NewRedisLock(rdb)
 	return &BlobCacheMetadata{
-		rdb: rdb,
+		rdb:  rdb,
+		lock: lock,
 	}, nil
 }
 
@@ -84,6 +87,19 @@ func (m *BlobCacheMetadata) RemoveEntryLocation(ctx context.Context, hash string
 	}
 
 	return m.rdb.Decr(ctx, MetadataKeys.MetadataRef(hash)).Err()
+}
+
+func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash string) error {
+	err := m.lock.Acquire(ctx, MetadataKeys.MetadataClientLock(clientId, hash), RedisLockOptions{TtlS: 300, Retries: 0})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *BlobCacheMetadata) RemoveClientLock(ctx context.Context, clientId, hash string) error {
+	return m.lock.Release(MetadataKeys.MetadataClientLock(clientId, hash))
 }
 
 func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
@@ -243,6 +259,7 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 var (
 	metadataPrefix         string = "blobcache"
 	metadataEntry          string = "blobcache:entry:%s"
+	metadataClientLock     string = "blobcache:client_lock:%s:%s"
 	metadataLocation       string = "blobcache:location:%s"
 	metadataRef            string = "blobcache:ref:%s"
 	metadataFsNode         string = "blobcache:fs:node:%s"
@@ -272,6 +289,10 @@ func (k *metadataKeys) MetadataFsNode(id string) string {
 
 func (k *metadataKeys) MetadataFsNodeChildren(id string) string {
 	return fmt.Sprintf(metadataFsNodeChildren, id)
+}
+
+func (k *metadataKeys) MetadataClientLock(hostname, hash string) string {
+	return fmt.Sprintf(metadataClientLock, hostname, hash)
 }
 
 var MetadataKeys = &metadataKeys{}
