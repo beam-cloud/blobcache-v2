@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -186,16 +185,16 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 			err := func() error {
 				client, exists := c.grpcClients[host.Addr]
 				if !exists {
-					return errors.New("host not found")
+					return ErrHostNotFound
 				}
 
 				resp, err := client.GetState(c.ctx, &proto.GetStateRequest{})
 				if err != nil {
-					return errors.New("unable to reach host")
+					return ErrInvalidHostVersion
 				}
 
 				if resp.GetVersion() != BlobCacheVersion {
-					return errors.New("invalid host version")
+					return ErrInvalidHostVersion
 				}
 
 				return nil
@@ -253,7 +252,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		return getContentResponse.Content, nil
 	}
 
-	return nil, errors.New("content not found")
+	return nil, ErrContentNotFound
 }
 
 func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval time.Duration) {
@@ -316,8 +315,13 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 				// Attempt to populate this server with the content from the original source
 				if entry.SourcePath != "" {
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
+					locked := c.mu.TryLock()
+					if !locked {
+						return nil, nil, ErrCacheLockHeld
+					}
+					defer c.mu.Unlock()
 
+					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
 					host, err = c.hostMap.Closest(closestHostTimeout)
 					if err != nil {
 						return nil, nil, err
@@ -325,7 +329,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 
 					closestClient, exists := c.grpcClients[host.Addr]
 					if !exists {
-						return nil, nil, errors.New("client not found")
+						return nil, nil, ErrClientNotFound
 					}
 
 					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
@@ -340,15 +344,15 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 						return closestClient, host, nil
 					}
 
-					return nil, nil, errors.New("unable to populate content from original source")
+					return nil, nil, ErrUnableToPopulateContent
 				} else {
-					return nil, nil, errors.New("no host found")
+					return nil, nil, ErrHostNotFound
 				}
 			}
 
 			host = c.findClosestHost(intersection)
 			if host == nil {
-				return nil, nil, errors.New("no host found")
+				return nil, nil, ErrHostNotFound
 			}
 
 			c.mu.Lock()
@@ -363,7 +367,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	}
 
 	if host == nil {
-		return nil, nil, errors.New("no host found")
+		return nil, nil, ErrHostNotFound
 	}
 
 	client, exists := c.grpcClients[host.Addr]
@@ -371,7 +375,7 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)
 		c.mu.Unlock()
-		return nil, nil, errors.New("host not found")
+		return nil, nil, ErrHostNotFound
 	}
 
 	return client, host, nil
