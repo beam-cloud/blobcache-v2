@@ -124,7 +124,7 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n.log("Read called with offset: %v", off)
 
-	// Don't  try to read 0 byte files
+	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
