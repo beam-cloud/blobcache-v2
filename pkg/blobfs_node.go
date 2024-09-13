@@ -88,16 +88,43 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 	log.Println("LOOKING UP USING FULL PATH: ", fullPath)
 	if strings.Contains(fullPath, "%") {
+		if !n.filesystem.Client.HostsAvailable() {
+			return nil, syscall.ENOENT
+		}
+
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
-		log.Println("storing content from source with path: ", sourcePath)
-		hash, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		log.Println("Storing content from source with path: ", sourcePath)
+
+		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
 
-		log.Println("hash: ", hash)
-		return nil, fs.OK
+		metadata, err := n.filesystem.Metadata.GetFsNode(ctx, GenerateFsID(fullPath))
+		if err != nil {
+			return nil, syscall.ENOENT
+		}
+
+		// Fill out the child node's attributes
+		attr := metaToAttr(metadata)
+		out.Attr = attr
+
+		// Create a new Inode on lookup
+		node := n.NewInode(ctx,
+			&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
+				Path:   metadata.Path,
+				ID:     metadata.ID,
+				PID:    metadata.PID,
+				Name:   metadata.Name,
+				Hash:   metadata.Hash,
+				Attr:   attr,
+				Target: "",
+			}, attr: attr},
+			fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
+		)
+
+		return node, fs.OK
 	}
 
 	id := GenerateFsID(fullPath)
