@@ -3,12 +3,14 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/djherbis/atime"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -180,16 +182,20 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 
 			// Update metadata fields with actual file info values
 			modTime := fileInfo.ModTime()
+			accessTime := atime.Get(fileInfo)
 			metadata.Mode = uint32(fileInfo.Mode())
-			metadata.Atime = uint64(modTime.Unix())
+			metadata.Atime = uint64(accessTime.Unix())
+			metadata.Atimensec = uint32(accessTime.Nanosecond())
 			metadata.Mtime = uint64(modTime.Unix())
-			metadata.Ctime = uint64(modTime.Unix())
-			metadata.Atimensec = uint32(modTime.Nanosecond())
 			metadata.Mtimensec = uint32(modTime.Nanosecond())
+
+			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
+			metadata.Ctime = uint64(modTime.Unix())
 			metadata.Ctimensec = uint32(modTime.Nanosecond())
 
+			metadata.Size = uint64(fileInfo.Size())
 			if fileInfo.IsDir() {
-				metadata.Hash = GenerateFsID(currentPath) // Hash for directory
+				metadata.Hash = GenerateFsID(currentPath)
 				metadata.Size = 0
 			} else {
 				metadata.Hash = hash
@@ -237,6 +243,8 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 
 func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	key := MetadataKeys.MetadataFsNode(id)
+
+	log.Printf("setting fs mode: %+v\n", metadata)
 
 	err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
 	if err != nil {
