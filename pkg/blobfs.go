@@ -119,7 +119,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		DisableXAttrs:        true,
 		EnableSymlinkCaching: false,
 		SyncRead:             false,
-		RememberInodes:       true,
+		RememberInodes:       false,
 		MaxReadAhead:         maxReadAheadKB * 1024,
 	})
 	if err != nil {
