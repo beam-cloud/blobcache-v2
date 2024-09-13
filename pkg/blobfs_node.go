@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"log"
 	"path"
 	"syscall"
 
@@ -84,9 +85,12 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 	// Construct the full of this file path from root
 	fullPath := path.Join(n.bfsNode.Path, name)
 
+	log.Println("LOOKING UP USING FULL PATH: ", fullPath)
+
 	id := GenerateFsID(fullPath)
 	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, id)
 	if err != nil {
+		// n.filesystem.Client.StoreContentFromSource(fullPath, )
 		return nil, syscall.ENOENT
 	}
 
