@@ -37,6 +37,30 @@ func (n *FSNode) OnAdd(ctx context.Context) {
 	n.log("OnAdd called")
 }
 
+func (n *FSNode) Ioctl(ctx context.Context, fd uint32, cmd uint32, arg []byte) (uintptr, syscall.Errno) {
+	log.Println("called ioctl")
+
+	// Define a custom command for direct lookup (use a unique command number)
+	const DIRECT_LOOKUP_CMD = 0xABCDEFFF
+
+	if cmd == DIRECT_LOOKUP_CMD {
+		// Assume 'arg' contains the path in a byte slice
+		fullPath := string(arg)
+
+		log.Println("hey there: ", fullPath)
+		// // Perform the direct lookup
+		// inode, err := n.filesystem.DirectLookup(ctx, fullPath)
+		// if err != fs.OK {
+		//     return 0, err
+		// }
+
+		// Optionally return the inode number or other information
+		// return uintptr(inode.StableAttr().Ino), fs.OK
+	}
+
+	return 0, syscall.ENOSYS
+}
+
 func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	n.log("Getattr called")
 
