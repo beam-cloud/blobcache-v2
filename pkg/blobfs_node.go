@@ -135,6 +135,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 	// Fill out the child node's attributes
 	attr := metaToAttr(metadata)
+	log.Printf("attr: %+v\n", attr)
 	out.Attr = attr
 
 	// Create a new Inode on lookup
