@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -86,11 +87,22 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 	fullPath := path.Join(n.bfsNode.Path, name)
 
 	log.Println("LOOKING UP USING FULL PATH: ", fullPath)
+	if strings.Contains(fullPath, "%") {
+		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
+
+		log.Println("storing content from source with path: ", sourcePath)
+		hash, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		if err != nil {
+			return nil, syscall.ENOENT
+		}
+
+		log.Println("hash: ", hash)
+		return nil, fs.OK
+	}
 
 	id := GenerateFsID(fullPath)
 	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, id)
 	if err != nil {
-		// n.filesystem.Client.StoreContentFromSource(fullPath, )
 		return nil, syscall.ENOENT
 	}
 
@@ -122,6 +134,11 @@ func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
 
 func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Open called with flags: %v", flags)
+
+	if !n.filesystem.Client.HostsAvailable() {
+		return nil, 0, syscall.EIO
+	}
+
 	return nil, 0, fs.OK
 }
 
@@ -180,7 +197,6 @@ func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 
 func (n *FSNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Create called with name: %s, flags: %v, mode: %v", name, flags, mode)
-	log.Println("TOUCH ME!!!!")
 	return nil, nil, 0, syscall.EROFS
 }
 
