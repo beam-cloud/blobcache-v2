@@ -151,6 +151,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
 	)
 
+	log.Printf("node metadata attr: %+v", attr)
+
 	return node, fs.OK
 }
 

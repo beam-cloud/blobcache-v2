@@ -117,7 +117,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
 		MaxBackground:        maxBackgroundTasks,
 		DisableXAttrs:        true,
-		EnableSymlinkCaching: true,
+		EnableSymlinkCaching: false,
 		SyncRead:             false,
 		RememberInodes:       true,
 		MaxReadAhead:         maxReadAheadKB * 1024,
