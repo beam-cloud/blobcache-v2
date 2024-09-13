@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -151,10 +152,10 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			return err
 		}
 
+		// Initialize default metadata
 		now := time.Now()
 		nowSec := uint64(now.Unix())
 		nowNsec := uint32(now.Nanosecond())
-
 		metadata := &BlobFsMetadata{
 			PID:       previousParentId,
 			ID:        currentNodeId,
@@ -170,18 +171,39 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			Ctimensec: nowNsec,
 		}
 
-		// Since this is the last file, store as a file, not a dir
-		if path == currentPath {
-			metadata.Mode = fuse.S_IFREG | 0755
-			metadata.Hash = hash
-			metadata.Size = size
+		// If currentPath matches the input path, use the actual file info
+		if currentPath == path {
+			fileInfo, err := os.Stat(currentPath)
+			if err != nil {
+				return err
+			}
+
+			// Update metadata fields with actual file info values
+			modTime := fileInfo.ModTime()
+			metadata.Mode = uint32(fileInfo.Mode())
+			metadata.Atime = uint64(modTime.Unix())
+			metadata.Mtime = uint64(modTime.Unix())
+			metadata.Ctime = uint64(modTime.Unix())
+			metadata.Atimensec = uint32(modTime.Nanosecond())
+			metadata.Mtimensec = uint32(modTime.Nanosecond())
+			metadata.Ctimensec = uint32(modTime.Nanosecond())
+
+			if fileInfo.IsDir() {
+				metadata.Hash = GenerateFsID(currentPath) // Hash for directory
+				metadata.Size = 0
+			} else {
+				metadata.Hash = hash
+				metadata.Size = size
+			}
 		}
 
+		// Set metadata
 		err = m.SetFsNode(ctx, currentNodeId, metadata)
 		if err != nil {
 			return err
 		}
 
+		// Add the current node as a child of the previous node
 		err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
 		if err != nil {
 			return err
