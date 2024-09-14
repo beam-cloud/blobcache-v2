@@ -98,8 +98,8 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	}
 
 	root, _ := blobfs.Root()
-	attrTimeout := time.Second * 10
-	entryTimeout := time.Second * 10
+	attrTimeout := time.Second * 5
+	entryTimeout := time.Second * 5
 	fsOptions := &fs.Options{
 		AttrTimeout:  &attrTimeout,
 		EntryTimeout: &entryTimeout,
