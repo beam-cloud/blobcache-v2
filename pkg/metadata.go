@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,8 +242,6 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 
 func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	key := MetadataKeys.MetadataFsNode(id)
-
-	log.Printf("setting fs mode: %+v\n", metadata)
 
 	err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
 	if err != nil {

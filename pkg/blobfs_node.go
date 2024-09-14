@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"path"
 	"strings"
 	"syscall"
@@ -53,6 +52,9 @@ func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOu
 	out.Mode = node.Attr.Mode
 	out.Nlink = node.Attr.Nlink
 	out.Owner = node.Attr.Owner
+	out.Atimensec = node.Attr.Atimensec
+	out.Mtimensec = node.Attr.Mtimensec
+	out.Ctimensec = node.Attr.Ctimensec
 
 	return fs.OK
 }
@@ -123,7 +125,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			return nil, syscall.ENOENT
 		}
 
-		log.Println("Storing content from source with path: ", sourcePath)
+		n.log("Storing content from source with path: ", sourcePath)
 		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
