@@ -3,11 +3,13 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/djherbis/atime"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -151,10 +153,10 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			return err
 		}
 
+		// Initialize default metadata
 		now := time.Now()
 		nowSec := uint64(now.Unix())
 		nowNsec := uint32(now.Nanosecond())
-
 		metadata := &BlobFsMetadata{
 			PID:       previousParentId,
 			ID:        currentNodeId,
@@ -170,18 +172,43 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 			Ctimensec: nowNsec,
 		}
 
-		// Since this is the last file, store as a file, not a dir
-		if path == currentPath {
-			metadata.Mode = fuse.S_IFREG | 0755
-			metadata.Hash = hash
-			metadata.Size = size
+		// If currentPath matches the input path, use the actual file info
+		if currentPath == path {
+			fileInfo, err := os.Stat(currentPath)
+			if err != nil {
+				return err
+			}
+
+			// Update metadata fields with actual file info values
+			modTime := fileInfo.ModTime()
+			accessTime := atime.Get(fileInfo)
+			metadata.Mode = uint32(fileInfo.Mode())
+			metadata.Atime = uint64(accessTime.Unix())
+			metadata.Atimensec = uint32(accessTime.Nanosecond())
+			metadata.Mtime = uint64(modTime.Unix())
+			metadata.Mtimensec = uint32(modTime.Nanosecond())
+
+			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
+			metadata.Ctime = uint64(modTime.Unix())
+			metadata.Ctimensec = uint32(modTime.Nanosecond())
+
+			metadata.Size = uint64(fileInfo.Size())
+			if fileInfo.IsDir() {
+				metadata.Hash = GenerateFsID(currentPath)
+				metadata.Size = 0
+			} else {
+				metadata.Hash = hash
+				metadata.Size = size
+			}
 		}
 
+		// Set metadata
 		err = m.SetFsNode(ctx, currentNodeId, metadata)
 		if err != nil {
 			return err
 		}
 
+		// Add the current node as a child of the previous node
 		err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
 		if err != nil {
 			return err
@@ -196,7 +223,7 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	key := MetadataKeys.MetadataFsNode(id)
 
-	res, err := m.rdb.HGetAll(context.TODO(), key).Result()
+	res, err := m.rdb.HGetAll(ctx, key).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -216,7 +243,22 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	key := MetadataKeys.MetadataFsNode(id)
 
-	err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
+	// If metadata exists, increment inode generation #
+	res, err := m.rdb.HGetAll(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+
+	if len(res) > 0 {
+		existingMetadata := &BlobFsMetadata{}
+		if err = ToStruct(res, existingMetadata); err != nil {
+			return err
+		}
+
+		metadata.Gen = existingMetadata.Gen + 1
+	}
+
+	err = m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
 	if err != nil {
 		return fmt.Errorf("failed to set blobfs node metadata <%v>: %w", key, err)
 	}

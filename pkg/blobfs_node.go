@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -51,6 +52,9 @@ func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOu
 	out.Mode = node.Attr.Mode
 	out.Nlink = node.Attr.Nlink
 	out.Owner = node.Attr.Owner
+	out.Atimensec = node.Attr.Atimensec
+	out.Mtimensec = node.Attr.Mtimensec
+	out.Ctimensec = node.Attr.Ctimensec
 
 	return fs.OK
 }
@@ -78,21 +82,14 @@ func metaToAttr(metadata *BlobFsMetadata) fuse.Attr {
 	}
 }
 
-func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	n.log("Lookup called with name: %s", name)
-
-	// Construct the full of this file path from root
-	fullPath := path.Join(n.bfsNode.Path, name)
-
-	id := GenerateFsID(fullPath)
-	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, id)
+func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fuse.Attr, error) {
+	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, fsId)
 	if err != nil {
-		return nil, syscall.ENOENT
+		return nil, nil, syscall.ENOENT
 	}
 
 	// Fill out the child node's attributes
 	attr := metaToAttr(metadata)
-	out.Attr = attr
 
 	// Create a new Inode on lookup
 	node := n.NewInode(ctx,
@@ -105,9 +102,46 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			Attr:   attr,
 			Target: "",
 		}, attr: attr},
-		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
+		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino, Gen: metadata.Gen},
 	)
 
+	return node, &attr, nil
+}
+
+func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	fullPath := path.Join(n.bfsNode.Path, name) // Construct the full of this file path from root
+	n.log("Lookup called with path: %s", fullPath)
+
+	// Force caching of a specific full path if the path contains a special illegal character '%'
+	// This is a hack to trigger caching from external callers without going through the GRPC service directly
+	if strings.Contains(fullPath, "%") {
+		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
+
+		if !n.filesystem.Client.HostsAvailable() {
+			return nil, syscall.ENOENT
+		}
+
+		n.log("Storing content from source with path: %s", sourcePath)
+		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		if err != nil {
+			return nil, syscall.ENOENT
+		}
+
+		node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(sourcePath))
+		if err != nil {
+			return nil, syscall.ENOENT
+		}
+
+		out.Attr = *attr
+		return node, fs.OK
+	}
+
+	node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(fullPath))
+	if err != nil {
+		return nil, syscall.ENOENT
+	}
+
+	out.Attr = *attr
 	return node, fs.OK
 }
 
@@ -118,6 +152,11 @@ func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
 
 func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Open called with flags: %v", flags)
+
+	if !n.filesystem.Client.HostsAvailable() {
+		return nil, 0, syscall.EIO
+	}
+
 	return nil, 0, fs.OK
 }
 

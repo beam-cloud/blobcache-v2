@@ -108,6 +108,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 			Config:   cfg,
 			Metadata: metadata,
 			Client:   bc,
+			Verbose:  cfg.DebugMode,
 		})
 		if err != nil {
 			return nil, err
