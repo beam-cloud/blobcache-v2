@@ -38,6 +38,7 @@ type BlobFsMetadata struct {
 	Padding   uint32 `redis:"padding" json:"padding"`
 	Uid       uint32 `redis:"uid" json:"uid"`
 	Gid       uint32 `redis:"gid" json:"gid"`
+	Gen       uint64 `redis:"gen" json:"gen"`
 }
 
 type StorageLayer interface {
@@ -97,8 +98,8 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	}
 
 	root, _ := blobfs.Root()
-	attrTimeout := time.Second * 0
-	entryTimeout := time.Second * 0
+	attrTimeout := time.Second * 60
+	entryTimeout := time.Second * 60
 	fsOptions := &fs.Options{
 		AttrTimeout:  &attrTimeout,
 		EntryTimeout: &entryTimeout,

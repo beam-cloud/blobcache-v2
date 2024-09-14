@@ -102,7 +102,7 @@ func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fu
 			Attr:   attr,
 			Target: "",
 		}, attr: attr},
-		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino},
+		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino, Gen: metadata.Gen},
 	)
 
 	return node, &attr, nil

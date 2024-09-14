@@ -223,7 +223,7 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	key := MetadataKeys.MetadataFsNode(id)
 
-	res, err := m.rdb.HGetAll(context.TODO(), key).Result()
+	res, err := m.rdb.HGetAll(ctx, key).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -243,7 +243,22 @@ func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 func (m *BlobCacheMetadata) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	key := MetadataKeys.MetadataFsNode(id)
 
-	err := m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
+	// If metadata exists, increment inode generation #
+	res, err := m.rdb.HGetAll(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return err
+	}
+
+	if len(res) > 0 {
+		existingMetadata := &BlobFsMetadata{}
+		if err = ToStruct(res, existingMetadata); err != nil {
+			return err
+		}
+
+		metadata.Gen = existingMetadata.Gen + 1
+	}
+
+	err = m.rdb.HSet(ctx, key, ToSlice(metadata)).Err()
 	if err != nil {
 		return fmt.Errorf("failed to set blobfs node metadata <%v>: %w", key, err)
 	}
