@@ -109,12 +109,8 @@ func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fu
 }
 
 func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
-	n.log("Lookup called with name: %s", name)
-
-	// Construct the full of this file path from root
-	fullPath := path.Join(n.bfsNode.Path, name)
-
-	n.log("Lookup called with full path: %s", fullPath)
+	fullPath := path.Join(n.bfsNode.Path, name) // Construct the full of this file path from root
+	n.log("Lookup called with path: %s", fullPath)
 
 	// Force caching of a specific full path if the path contains a special illegal character '%'
 	// This is a hack to trigger caching from external callers without going through the GRPC service directly
@@ -125,7 +121,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			return nil, syscall.ENOENT
 		}
 
-		n.log("Storing content from source with path: ", sourcePath)
+		n.log("Storing content from source with path: %s", sourcePath)
 		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
