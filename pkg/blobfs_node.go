@@ -117,10 +117,6 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 	if strings.Contains(fullPath, "%") {
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
-		if !n.filesystem.Client.HostsAvailable() {
-			return nil, syscall.ENOENT
-		}
-
 		n.log("Storing content from source with path: %s", sourcePath)
 		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
@@ -153,10 +149,6 @@ func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
 func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Open called with flags: %v", flags)
 
-	if !n.filesystem.Client.HostsAvailable() {
-		return nil, 0, syscall.EIO
-	}
-
 	return nil, 0, fs.OK
 }
 
@@ -166,11 +158,6 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:0]), fs.OK
-	}
-
-	// If there are no nearby hosts, don't try to read from cache
-	if !n.filesystem.Client.HostsAvailable() {
-		return nil, syscall.EIO
 	}
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
