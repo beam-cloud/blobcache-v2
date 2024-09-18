@@ -5,16 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/dgraph-io/ristretto"
+	"github.com/beam-cloud/ristretto"
 )
 
 type ContentAddressableStorage struct {
 	ctx         context.Context
 	currentHost *BlobCacheHost
-	cache       *ristretto.Cache
+	cache       *ristretto.Cache[string, interface{}]
 	config      BlobCacheConfig
 	metadata    *BlobCacheMetadata
 }
@@ -31,7 +32,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		currentHost: currentHost,
 	}
 
-	cache, err := ristretto.NewCache(&ristretto.Config{
+	cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
 		NumCounters: 1e7,
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
@@ -67,6 +68,11 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		chunk := make([]byte, end-offset)
 		copy(chunk, content[offset:end])
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
+
+		_, exists := cas.cache.GetTTL(chunkKey)
+		if exists {
+			continue
+		}
 
 		// Store the chunk
 		added := cas.cache.SetWithTTL(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)), time.Duration(cas.config.ObjectTtlS)*time.Second)
@@ -117,6 +123,18 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, errors.New("content not found")
 		}
 
+		initialTTL, ok := cas.cache.GetTTL(chunkKey)
+		if ok {
+			log.Printf("Initial TTL: %+v", initialTTL)
+		}
+
+		cas.cache.ResetTTL(chunkKey, time.Duration(cas.config.ObjectTtlS))
+
+		extendedTTL, ok := cas.cache.GetTTL(chunkKey)
+		if ok {
+			log.Printf("Extended TTL: %+v", extendedTTL)
+		}
+
 		v := value.(cacheValue)
 
 		chunkBytes := v.Content
@@ -144,7 +162,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 	return buffer.Bytes(), nil
 }
 
-func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
+func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {
 	hash := ""
 	var chunkKeys []string = []string{}
 
