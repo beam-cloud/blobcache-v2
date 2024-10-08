@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.4
 
 require (
-	github.com/beam-cloud/ristretto v0.0.0-20240918223415-2541fa762c87
+	github.com/beam-cloud/ristretto v0.0.0-20241008201242-87c84f2eec8a
 	github.com/bsm/redislock v0.9.4
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/djherbis/atime v1.1.0

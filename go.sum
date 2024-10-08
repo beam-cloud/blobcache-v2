@@ -38,8 +38,8 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.26.7 h1:NzO4Vrau795RkUdSHKEwiR01FaGz
 github.com/aws/aws-sdk-go-v2/service/sts v1.26.7/go.mod h1:6h2YuIoxaMSCFf5fi1EgZAwdfkGMgDY+DVfa61uLe4U=
 github.com/aws/smithy-go v1.20.0 h1:6+kZsCXZwKxZS9RfISnPc4EXlHoyAkm2hPuM8X2BrrQ=
 github.com/aws/smithy-go v1.20.0/go.mod h1:uo5RKksAl4PzhqaAbjd4rLgFoq5koTsQKYuGe7dklGc=
-github.com/beam-cloud/ristretto v0.0.0-20240918223415-2541fa762c87 h1:vciw7m+GfR2h8kqKwcGBXlf75b8OfcNpNPABldc2JNU=
-github.com/beam-cloud/ristretto v0.0.0-20240918223415-2541fa762c87/go.mod h1:62+lvDbHv0JqIFy0bR8z8TJ7nIxTbDey7TDNMSWQXjA=
+github.com/beam-cloud/ristretto v0.0.0-20241008201242-87c84f2eec8a h1:10mko+RMzTmR/VWlytHm2kAExDZmgDA0bqpnLzZYVxg=
+github.com/beam-cloud/ristretto v0.0.0-20241008201242-87c84f2eec8a/go.mod h1:62+lvDbHv0JqIFy0bR8z8TJ7nIxTbDey7TDNMSWQXjA=
 github.com/bits-and-blooms/bitset v1.13.0 h1:bAQ9OPNFYbGHV6Nez0tmNI0RiEu7/hxlYJRUA0wFAVE=
 github.com/bits-and-blooms/bitset v1.13.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
