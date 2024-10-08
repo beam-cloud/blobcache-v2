@@ -172,7 +172,7 @@ func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}])
 	default:
 	}
 
-	Logger.Infof("Evicted object<%s>", hash)
+	Logger.Infof("Evicted object: %s", hash)
 	Logger.Debugf("Object chunks: %+v", chunkKeys)
 
 	for _, k := range chunkKeys {
