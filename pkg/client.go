@@ -238,7 +238,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
-		if err != nil {
+		if err != nil || !getContentResponse.Ok {
 			// If we had an issue getting the content, remove this location from metadata
 			c.metadata.RemoveEntryLocation(ctx, hash, host)
 

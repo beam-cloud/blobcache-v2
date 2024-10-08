@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dgraph-io/ristretto"
+	"github.com/beam-cloud/ristretto"
 )
 
 type ContentAddressableStorage struct {
 	ctx         context.Context
 	currentHost *BlobCacheHost
-	cache       *ristretto.Cache
+	cache       *ristretto.Cache[string, interface{}]
 	config      BlobCacheConfig
 	metadata    *BlobCacheMetadata
 }
@@ -31,7 +31,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		currentHost: currentHost,
 	}
 
-	cache, err := ristretto.NewCache(&ristretto.Config{
+	cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
 		NumCounters: 1e7,
 		MaxCost:     config.MaxCacheSizeMb * 1e6,
 		BufferItems: 64,
@@ -68,8 +68,13 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		copy(chunk, content[offset:end])
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
+		_, exists := cas.cache.GetTTL(chunkKey)
+		if exists {
+			continue
+		}
+
 		// Store the chunk
-		added := cas.cache.SetWithTTL(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)), time.Duration(cas.config.ObjectTtlS)*time.Second)
+		added := cas.cache.Set(chunkKey, cacheValue{Hash: hash, Content: chunk}, int64(len(chunk)))
 		if !added {
 			return errors.New("unable to cache: set dropped")
 		}
@@ -107,6 +112,8 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 	remainingLength := length
 	o := offset
 
+	cas.cache.ResetTTL(hash, time.Duration(cas.config.ObjectTtlS)*time.Second)
+
 	for remainingLength > 0 {
 		chunkIdx := o / cas.config.PageSizeBytes
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
@@ -114,7 +121,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		// Check cache for chunk
 		value, found := cas.cache.Get(chunkKey)
 		if !found {
-			return nil, errors.New("content not found")
+			return nil, ErrContentNotFound
 		}
 
 		v := value.(cacheValue)
@@ -144,31 +151,29 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 	return buffer.Bytes(), nil
 }
 
-func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item) {
+func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {
 	hash := ""
 	var chunkKeys []string = []string{}
 
 	// We've evicted a chunk of a cached object - extract the hash and evict all the other chunks
-	v, ok := item.Value.(cacheValue)
-	if ok {
+	switch v := item.Value.(type) {
+	case cacheValue:
 		hash = v.Hash
 		chunks, found := cas.cache.Get(hash)
 		if found {
 			chunkKeys = strings.Split(chunks.(string), ",")
 		}
-	} else {
+	case string:
 		// In this case, we evicted the key that stores which chunks are currently present in the cache
 		// the value of which is formatted like this: "<hash>-0,<hash>-1,<hash>-2"
 		// so here we can extract the hash by splitting on '-' and taking the first item
-		v, ok := item.Value.(string)
-		if ok {
-			hash = strings.SplitN(v, "-", 2)[0]
-		}
-
+		hash = strings.SplitN(v, "-", 2)[0]
 		chunkKeys = strings.Split(v, ",")
+	default:
 	}
 
-	Logger.Debugf("Evicted object: %s", hash)
+	Logger.Infof("Evicted object: %s", hash)
+	Logger.Debugf("Object chunks: %+v", chunkKeys)
 
 	for _, k := range chunkKeys {
 		cas.cache.Del(k)
