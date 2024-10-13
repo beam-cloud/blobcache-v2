@@ -94,7 +94,9 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		// Copy the chunk into a new buffer
 		chunk := make([]byte, end-offset)
 		copy(chunk, content[offset:end])
+
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
+		chunkKeys = append(chunkKeys, chunkKey)
 
 		_, exists := cas.cache.GetTTL(chunkKey)
 		if exists {
@@ -107,7 +109,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 			return errors.New("unable to cache: set dropped")
 		}
 
-		chunkKeys = append(chunkKeys, chunkKey)
 	}
 
 	// Release the large initial buffer
