@@ -23,7 +23,7 @@ type BlobCacheConfig struct {
 	HostStorageCapacityThresholdPct float64         `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
 	ObjectTtlS                      int             `key:"objectTtlS" json:"object_ttl_s"`
 	RoundTripThresholdMilliseconds  uint            `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
-	MaxCacheSizeMb                  int64           `key:"maxCacheSizeMb" json:"max_cache_size_mb"`
+	MaxCachePct                     int64           `key:"maxCachePct" json:"max_cache_pct"`
 	PageSizeBytes                   int64           `key:"pageSizeBytes" json:"page_size_bytes"`
 	GRPCDialTimeoutS                int             `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
 	GRPCMessageSizeBytes            int             `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`

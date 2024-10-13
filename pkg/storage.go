@@ -5,22 +5,25 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/beam-cloud/ristretto"
+	"github.com/shirou/gopsutil/mem"
 )
 
 type ContentAddressableStorage struct {
-	ctx         context.Context
-	currentHost *BlobCacheHost
-	cache       *ristretto.Cache[string, interface{}]
-	config      BlobCacheConfig
-	metadata    *BlobCacheMetadata
+	ctx            context.Context
+	currentHost    *BlobCacheHost
+	cache          *ristretto.Cache[string, interface{}]
+	config         BlobCacheConfig
+	metadata       *BlobCacheMetadata
+	maxCacheSizeMb int64
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
-	if config.MaxCacheSizeMb <= 0 || config.PageSizeBytes <= 0 {
+	if config.MaxCachePct <= 0 || config.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
 
@@ -31,19 +34,40 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		currentHost: currentHost,
 	}
 
+	availableMemoryMb := getAvailableMemoryMb()
+	maxCacheSizeMb := (availableMemoryMb * config.MaxCachePct) / 100
+	maxCost := maxCacheSizeMb * 1e6
+
+	Logger.Infof("Total available memory: %dMB", availableMemoryMb)
+	Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
+	Logger.Infof("Max cost: %d", maxCost)
+
+	if maxCacheSizeMb <= 0 {
+		return nil, errors.New("invalid memory limit")
+	}
+
 	cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
 		NumCounters: 1e7,
-		MaxCost:     config.MaxCacheSizeMb * 1e6,
+		MaxCost:     maxCost,
 		BufferItems: 64,
 		OnEvict:     cas.onEvict,
-		Metrics:     false,
+		Metrics:     config.DebugMode,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	cas.cache = cache
+	cas.maxCacheSizeMb = maxCacheSizeMb
 	return cas, nil
+}
+
+func getAvailableMemoryMb() int64 {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		log.Fatalf("Unable to retrieve host memory info: %v", err)
+	}
+	return int64(v.Total / (1024 * 1024))
 }
 
 type cacheValue struct {
@@ -54,6 +78,10 @@ type cacheValue struct {
 func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, sourcePath string, sourceOffset int64) error {
 	size := int64(len(content))
 	chunkKeys := []string{}
+
+	if cas.config.DebugMode {
+		Logger.Debugf("Cost added before Add: %+v", cas.cache.Metrics.CostAdded())
+	}
 
 	// Break content into chunks and store
 	for offset := int64(0); offset < size; offset += cas.config.PageSizeBytes {
@@ -103,6 +131,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		return err
 	}
 
+	Logger.Debugf("Added object: %s, size: %d bytes", hash, size)
 	return nil
 }
 

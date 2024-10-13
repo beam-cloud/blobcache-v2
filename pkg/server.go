@@ -212,7 +212,7 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	memoryUsage := float64(memStats.Alloc) / (1024 * 1024)
-	capacityUsagePct := memoryUsage / float64(cs.cfg.MaxCacheSizeMb)
+	capacityUsagePct := memoryUsage / float64(cs.cas.maxCacheSizeMb)
 
 	return &proto.GetStateResponse{
 		Version:          BlobCacheVersion,

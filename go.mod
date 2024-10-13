@@ -17,6 +17,7 @@ require (
 	github.com/knadh/koanf/providers/rawbytes v0.1.0
 	github.com/knadh/koanf/v2 v2.0.1
 	github.com/redis/go-redis/v9 v9.5.1
+	github.com/shirou/gopsutil v2.21.11+incompatible
 	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.62.0
 	google.golang.org/protobuf v1.33.0
@@ -99,6 +100,7 @@ require (
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org/mem v0.0.0-20220726221520-4f986261bf13 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect

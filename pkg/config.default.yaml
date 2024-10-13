@@ -4,7 +4,7 @@ tlsEnabled: false
 rttThresholdMilliseconds: 100
 hostStorageCapacityThresholdPct: 0.95
 pageSizeBytes: 4000000 # 4MB
-maxCacheSizeMb: 100 # 100MB
+maxCachePct: 60
 grpcMessageSizeBytes: 1000000000
 grpcDialTimeoutS: 1
 discoveryIntervalS: 5
