@@ -298,7 +298,10 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 			c.closestHostWithCapacity = host
 		}
 	case ClientRequestTypeRetrieval:
+		c.mu.Lock()
 		cachedHost, hostFound := c.localHostCache[request.hash]
+		c.mu.Unlock()
+
 		if hostFound {
 			host = cachedHost.host
 		} else {
