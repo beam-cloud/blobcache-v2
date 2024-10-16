@@ -42,7 +42,7 @@ type BlobCacheClient struct {
 	tailscaleClient         *tailscale.LocalClient
 	grpcClients             map[string]proto.BlobCacheClient
 	hostMap                 *HostMap
-	mu                      sync.Mutex
+	mu                      sync.RWMutex
 	metadata                *BlobCacheMetadata
 	closestHostWithCapacity *BlobCacheHost
 	localHostCache          map[string]*localClientCache
@@ -89,7 +89,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		tailscaleClient:         tailscaleClient,
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
-		mu:                      sync.Mutex{},
+		mu:                      sync.RWMutex{},
 		metadata:                metadata,
 		closestHostWithCapacity: nil,
 	}
@@ -298,9 +298,9 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 			c.closestHostWithCapacity = host
 		}
 	case ClientRequestTypeRetrieval:
-		c.mu.Lock()
+		c.mu.RLock()
 		cachedHost, hostFound := c.localHostCache[request.hash]
-		c.mu.Unlock()
+		c.mu.RUnlock()
 
 		if hostFound {
 			host = cachedHost.host
