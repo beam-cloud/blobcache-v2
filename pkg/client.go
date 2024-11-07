@@ -126,10 +126,8 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 }
 
 func (c *BlobCacheClient) Cleanup() error {
-	if c.cfg.BlobFs.Enabled {
-		if c.blobfsServer != nil {
-			return c.blobfsServer.Unmount()
-		}
+	if c.cfg.BlobFs.Enabled && c.blobfsServer != nil {
+		c.blobfsServer.Unmount()
 	}
 	return nil
 }
