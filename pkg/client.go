@@ -457,6 +457,25 @@ func (c *BlobCacheClient) HostsAvailable() bool {
 	return c.hostMap.Members().Cardinality() > 0
 }
 
+func (c *BlobCacheClient) WaitForHosts(timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	Logger.Infof("Waiting for hosts to be available...")
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if c.HostsAvailable() {
+				return nil
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+	}
+}
+
 func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
