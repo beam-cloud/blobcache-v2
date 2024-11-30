@@ -120,9 +120,6 @@ func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*Blo
 				d.mu.Lock()
 				defer d.mu.Unlock()
 				hosts = append(hosts, host)
-
-				Logger.Debugf("Added host to map: %s", host.Addr)
-
 			}(peer.DNSName)
 		}
 	}
