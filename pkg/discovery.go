@@ -254,7 +254,10 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	conn, err := grpc.Dial(privateAddr, dialOpts...)
+	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(dialCtx, privateAddr, dialOpts...)
 	if err != nil {
 		return nil, err
 	}
