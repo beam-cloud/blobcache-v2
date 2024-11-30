@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -140,6 +141,8 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
+			log.Printf("Host addr: %v", host.Addr)
+			log.Printf("Host private address: %s", host.PrivateAddr)
 			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
 
 			// Don't try to get the state on peers we're already aware of

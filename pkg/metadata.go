@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,6 +60,8 @@ func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry,
 			return fmt.Errorf("failed to set entry <%v>: %w", entryKey, err)
 		}
 	}
+
+	log.Printf("Adding entry to host: %v", host.Addr)
 
 	// Add ref to entry
 	return m.addEntryLocation(ctx, entry.Hash, host)
