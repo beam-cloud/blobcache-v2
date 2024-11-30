@@ -18,14 +18,16 @@ type DiscoveryClient struct {
 	tailscale *Tailscale
 	cfg       BlobCacheConfig
 	hostMap   *HostMap
+	metadata  *BlobCacheMetadata
 	mu        sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:       cfg,
 		tailscale: tailscale,
 		hostMap:   hostMap,
+		metadata:  metadata,
 	}
 }
 
@@ -68,7 +70,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
+func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
 	status, err := client.Status(ctx)
 	if err != nil {
 		return nil, err
@@ -87,6 +89,8 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 			wg.Add(1)
 
 			go func(hostname string) {
+				Logger.Debugf("Discovered host: %s", hostname)
+
 				defer wg.Done()
 
 				hostname = hostname[:len(hostname)-1] // Strip the last period
@@ -106,11 +110,76 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 				defer d.mu.Unlock()
 				hosts = append(hosts, host)
 
+				Logger.Debugf("Added host to map: %s", host.Addr)
+
 			}(peer.DNSName)
 		}
 	}
 
 	wg.Wait()
+	return hosts, nil
+}
+
+func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
+	hosts, err := d.metadata.GetAvailableHosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	filteredHosts := []*BlobCacheHost{}
+	mu := sync.Mutex{}
+
+	for _, host := range hosts {
+		if host.PrivateAddr != "" {
+			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
+
+			// Don't try to get the state on peers we're already aware of
+			if d.hostMap.Get(addr) != nil {
+				continue
+			}
+
+			wg.Add(1)
+			go func(addr string) {
+				defer wg.Done()
+
+				hostState, err := d.GetHostState(ctx, addr)
+				if err != nil {
+					return
+				}
+
+				mu.Lock()
+				filteredHosts = append(filteredHosts, hostState)
+				mu.Unlock()
+
+				Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
+			}(addr)
+		}
+	}
+
+	wg.Wait()
+	return filteredHosts, nil
+}
+
+func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
+	var hosts []*BlobCacheHost
+	var err error
+
+	switch d.cfg.DiscoveryMode {
+	case string(DiscoveryModeTailscale):
+		hosts, err = d.discoverHostsViaTailscale(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+	case string(DiscoveryModeMetadata):
+		hosts, err = d.discoverHostsViaMetadata(ctx)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid discovery mode: %s", d.cfg.DiscoveryMode)
+	}
+
 	return hosts, nil
 }
 
