@@ -44,6 +44,7 @@ type BlobCacheConfig struct {
 }
 
 type TailscaleConfig struct {
+	WaitForAuth  bool   `key:"waitForAuth" json:"wait_for_auth"`
 	ControlURL   string `key:"controlUrl" json:"control_url"`
 	User         string `key:"user" json:"user"`
 	AuthKey      string `key:"authKey" json:"auth_key"`

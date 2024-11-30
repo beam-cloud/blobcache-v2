@@ -15,6 +15,7 @@ blobfs:
   maxBackgroundTasks: 512
   maxReadAheadKB: 128
 tailscale:
+  waitForAuth: false
   controlUrl:
   user:
   authKey:
