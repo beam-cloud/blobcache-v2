@@ -129,7 +129,7 @@ func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*Blo
 }
 
 func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.metadata.GetAvailableHosts(ctx)
+	hosts, err := d.metadata.GetAvailableHosts(ctx, d.hostMap.Remove)
 	if err != nil {
 		return nil, err
 	}

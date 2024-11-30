@@ -288,7 +288,7 @@ func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([
 	return entries, nil
 }
 
-func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context) ([]*BlobCacheHost, error) {
+func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCallback func(host *BlobCacheHost)) ([]*BlobCacheHost, error) {
 	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex()).Result()
 	if err != nil {
 		return nil, err
@@ -304,6 +304,7 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context) ([]*BlobCache
 			// If the keepalive key doesn't exist, remove the host index key
 			if err == redis.Nil {
 				m.RemoveHostFromIndex(ctx, &BlobCacheHost{Addr: addr})
+				removeHostCallback(&BlobCacheHost{Addr: addr})
 			}
 
 			continue
