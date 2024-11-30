@@ -42,6 +42,8 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
+	log.Printf("Starting discovery client")
+
 	if d.cfg.DiscoveryMode == string(DiscoveryModeTailscale) {
 		server, err := d.tailscale.GetOrCreateServer()
 		if err != nil {
@@ -184,6 +186,7 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 			return nil, err
 		}
 	case string(DiscoveryModeMetadata):
+		log.Printf("Discovering hosts via metadata")
 		hosts, err = d.discoverHostsViaMetadata(ctx)
 		if err != nil {
 			return nil, err
