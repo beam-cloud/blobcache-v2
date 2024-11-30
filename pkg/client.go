@@ -95,6 +95,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		metadata:                metadata,
 		closestHostWithCapacity: nil,
 	}
+
 	bc.hostMap = NewHostMap(cfg, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap, metadata)
 

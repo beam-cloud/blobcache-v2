@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -142,8 +141,6 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	filteredHosts := []*BlobCacheHost{}
 	mu := sync.Mutex{}
 
-	Logger.Debugf("Found %d hosts via metadata", len(hosts))
-
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
 			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
@@ -161,8 +158,6 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 				if err != nil {
 					return
 				}
-
-				log.Printf("Host state: %v", hostState)
 
 				mu.Lock()
 				filteredHosts = append(filteredHosts, hostState)
