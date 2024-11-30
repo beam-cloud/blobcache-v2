@@ -294,6 +294,8 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context) ([]*BlobCache
 		return nil, err
 	}
 
+	log.Printf("Host addrs: %v", hostAddrs)
+
 	hosts := []*BlobCacheHost{}
 	for _, addr := range hostAddrs {
 		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(addr)).Bytes()
