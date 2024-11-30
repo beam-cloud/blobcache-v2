@@ -18,14 +18,18 @@ type DiscoveryClient struct {
 	tailscale *Tailscale
 	cfg       BlobCacheConfig
 	hostMap   *HostMap
+	metadata  *BlobCacheMetadata
 	mu        sync.Mutex
+	tsClient  *tailscale.LocalClient
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:       cfg,
 		tailscale: tailscale,
 		hostMap:   hostMap,
+		metadata:  metadata,
+		tsClient:  nil,
 	}
 }
 
@@ -37,17 +41,26 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
-	server, err := d.tailscale.GetOrCreateServer()
-	if err != nil {
-		return err
+	// Default to metadata discovery if no mode is specified
+	if d.cfg.DiscoveryMode == "" {
+		d.cfg.DiscoveryMode = string(DiscoveryModeMetadata)
 	}
 
-	client, err := server.LocalClient()
-	if err != nil {
-		return err
+	if d.cfg.DiscoveryMode == string(DiscoveryModeTailscale) {
+		server, err := d.tailscale.GetOrCreateServer()
+		if err != nil {
+			return err
+		}
+
+		client, err := server.LocalClient()
+		if err != nil {
+			return err
+		}
+
+		d.tsClient = client
 	}
 
-	hosts, err := d.FindNearbyHosts(ctx, client)
+	hosts, err := d.FindNearbyHosts(ctx)
 	if err == nil {
 		d.updateHostMap(hosts)
 	}
@@ -56,7 +69,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			hosts, err := d.FindNearbyHosts(ctx, client)
+			hosts, err := d.FindNearbyHosts(ctx)
 			if err != nil {
 				continue
 			}
@@ -68,8 +81,8 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
-	status, err := client.Status(ctx)
+func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*BlobCacheHost, error) {
+	status, err := d.tsClient.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +100,8 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 			wg.Add(1)
 
 			go func(hostname string) {
+				Logger.Debugf("Discovered host: %s", hostname)
+
 				defer wg.Done()
 
 				hostname = hostname[:len(hostname)-1] // Strip the last period
@@ -105,12 +120,74 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale
 				d.mu.Lock()
 				defer d.mu.Unlock()
 				hosts = append(hosts, host)
-
 			}(peer.DNSName)
 		}
 	}
 
 	wg.Wait()
+	return hosts, nil
+}
+
+func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
+	hosts, err := d.metadata.GetAvailableHosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	filteredHosts := []*BlobCacheHost{}
+	mu := sync.Mutex{}
+
+	for _, host := range hosts {
+		if host.PrivateAddr != "" {
+			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
+
+			// Don't try to get the state on peers we're already aware of
+			if d.hostMap.Get(addr) != nil {
+				continue
+			}
+
+			wg.Add(1)
+			go func(addr string) {
+				defer wg.Done()
+
+				hostState, err := d.GetHostState(ctx, addr)
+				if err != nil {
+					return
+				}
+
+				mu.Lock()
+				filteredHosts = append(filteredHosts, hostState)
+				mu.Unlock()
+
+				Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
+			}(addr)
+		}
+	}
+
+	wg.Wait()
+	return filteredHosts, nil
+}
+
+func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost, error) {
+	var hosts []*BlobCacheHost
+	var err error
+
+	switch d.cfg.DiscoveryMode {
+	case string(DiscoveryModeTailscale):
+		hosts, err = d.discoverHostsViaTailscale(ctx)
+		if err != nil {
+			return nil, err
+		}
+	case string(DiscoveryModeMetadata):
+		hosts, err = d.discoverHostsViaMetadata(ctx)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid discovery mode: %s", d.cfg.DiscoveryMode)
+	}
+
 	return hosts, nil
 }
 

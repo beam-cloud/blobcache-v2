@@ -13,6 +13,15 @@ const (
 
 const (
 	defaultHostStorageCapacityThresholdPct float64 = 0.95
+	defaultHostKeepAliveIntervalS          int     = 10
+	defaultHostKeepAliveTimeoutS           int     = 60
+)
+
+type DiscoveryMode string
+
+const (
+	DiscoveryModeTailscale DiscoveryMode = "tailscale"
+	DiscoveryModeMetadata  DiscoveryMode = "metadata"
 )
 
 type BlobCacheConfig struct {
@@ -30,10 +39,12 @@ type BlobCacheConfig struct {
 	Tailscale                       TailscaleConfig `key:"tailscale" json:"tailscale"`
 	Metadata                        MetadataConfig  `key:"metadata" json:"metadata"`
 	DiscoveryIntervalS              int             `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	DiscoveryMode                   string          `key:"discoveryMode" json:"discovery_mode"`
 	BlobFs                          BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
 type TailscaleConfig struct {
+	WaitForAuth  bool   `key:"waitForAuth" json:"wait_for_auth"`
 	ControlURL   string `key:"controlUrl" json:"control_url"`
 	User         string `key:"user" json:"user"`
 	AuthKey      string `key:"authKey" json:"auth_key"`
@@ -114,10 +125,10 @@ type MountPointConfig struct {
 }
 
 type BlobCacheHost struct {
-	RTT              time.Duration
-	Addr             string
-	PrivateAddr      string
-	CapacityUsagePct float64
+	RTT              time.Duration `redis:"rtt" json:"rtt"`
+	Addr             string        `redis:"addr" json:"addr"`
+	PrivateAddr      string        `redis:"private_addr" json:"private_addr"`
+	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`
 }
 
 type ClientRequest struct {

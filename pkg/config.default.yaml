@@ -8,12 +8,14 @@ maxCachePct: 60
 grpcMessageSizeBytes: 1000000000
 grpcDialTimeoutS: 1
 discoveryIntervalS: 5
+discoveryMode: metadata
 blobfs:
   enabled: false
   mountPoint: /tmp/test
   maxBackgroundTasks: 512
   maxReadAheadKB: 128
 tailscale:
+  waitForAuth: false
   controlUrl:
   user:
   authKey:

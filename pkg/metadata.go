@@ -2,6 +2,8 @@ package blobcache
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -285,6 +287,76 @@ func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([
 	return entries, nil
 }
 
+func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context) ([]*BlobCacheHost, error) {
+	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex()).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	hosts := []*BlobCacheHost{}
+	for _, addr := range hostAddrs {
+		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(addr)).Bytes()
+		if err != nil {
+
+			// If the keepalive key doesn't exist, remove the host index key
+			if err == redis.Nil {
+				m.RemoveHostFromIndex(ctx, &BlobCacheHost{Addr: addr})
+			}
+
+			continue
+		}
+
+		host := &BlobCacheHost{}
+		if err = json.Unmarshal(hostBytes, host); err != nil {
+			continue
+		}
+
+		hosts = append(hosts, host)
+	}
+
+	if len(hosts) == 0 {
+		return nil, errors.New("no available hosts")
+	}
+
+	return hosts, nil
+}
+
+func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
+	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
+	if err != nil {
+		return err
+	}
+
+	return m.SetHostKeepAlive(ctx, host)
+}
+
+func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, host *BlobCacheHost) error {
+	return m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
+}
+
+func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
+	hostBytes, err := json.Marshal(host)
+	if err != nil {
+		return err
+	}
+
+	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(host.Addr), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
+}
+
+func (m *BlobCacheMetadata) GetHostIndex(ctx context.Context) ([]*BlobCacheHost, error) {
+	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex()).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	hosts := []*BlobCacheHost{}
+	for _, addr := range hostAddrs {
+		hosts = append(hosts, &BlobCacheHost{Addr: addr})
+	}
+
+	return hosts, nil
+}
+
 func (m *BlobCacheMetadata) AddFsNodeChild(ctx context.Context, pid, id string) error {
 	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataFsNodeChildren(pid), id).Err()
 	if err != nil {
@@ -300,12 +372,14 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 // Metadata key storage format
 var (
 	metadataPrefix         string = "blobcache"
+	metadataHostIndex      string = "blobcache:host_index"
 	metadataEntry          string = "blobcache:entry:%s"
 	metadataClientLock     string = "blobcache:client_lock:%s:%s"
 	metadataLocation       string = "blobcache:location:%s"
 	metadataRef            string = "blobcache:ref:%s"
 	metadataFsNode         string = "blobcache:fs:node:%s"
 	metadataFsNodeChildren string = "blobcache:fs:node:%s:children"
+	metadataHostKeepAlive  string = "blobcache:host:keepalive:%s"
 )
 
 // Metadata keys
@@ -315,6 +389,14 @@ func (k *metadataKeys) MetadataPrefix() string {
 
 func (k *metadataKeys) MetadataEntry(hash string) string {
 	return fmt.Sprintf(metadataEntry, hash)
+}
+
+func (k *metadataKeys) MetadataHostIndex() string {
+	return metadataHostIndex
+}
+
+func (k *metadataKeys) MetadataHostKeepAlive(addr string) string {
+	return fmt.Sprintf(metadataHostKeepAlive, addr)
 }
 
 func (k *metadataKeys) MetadataLocation(hash string) string {

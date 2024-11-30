@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"github.com/google/uuid"
@@ -59,6 +60,8 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	if privateIpAddr != "" {
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
+	currentHost.PrivateAddr = privateIpAddr
+	currentHost.CapacityUsagePct = 0
 
 	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
 	if err != nil {
@@ -80,7 +83,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 
 	tailscale := NewTailscale(ctx, hostname, cfg)
 
-	return &CacheService{
+	cs := &CacheService{
 		ctx:           ctx,
 		hostname:      hostname,
 		cas:           cas,
@@ -88,7 +91,32 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		tailscale:     tailscale,
 		metadata:      metadata,
 		privateIpAddr: privateIpAddr,
-	}, nil
+	}
+
+	go cs.HostKeepAlive()
+
+	return cs, nil
+}
+
+func (cs *CacheService) HostKeepAlive() {
+	err := cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+	if err != nil {
+		Logger.Fatalf("Failed to add host to index: %v", err)
+	}
+
+	ticker := time.NewTicker(time.Duration(defaultHostKeepAliveIntervalS) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cs.ctx.Done():
+			return
+		case <-ticker.C:
+			cs.cas.currentHost.PrivateAddr = cs.privateIpAddr
+			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
+			cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
+		}
+	}
 }
 
 func (cs *CacheService) StartServer(port uint) error {
@@ -208,16 +236,19 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
 }
 
-func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+func (cs *CacheService) usagePct() float64 {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	memoryUsage := float64(memStats.Alloc) / (1024 * 1024)
-	capacityUsagePct := memoryUsage / float64(cs.cas.maxCacheSizeMb)
+	return memoryUsage / float64(cs.cas.maxCacheSizeMb)
+}
+
+func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
 
 	return &proto.GetStateResponse{
 		Version:          BlobCacheVersion,
 		PrivateIpAddr:    cs.privateIpAddr,
-		CapacityUsagePct: float32(capacityUsagePct),
+		CapacityUsagePct: float32(cs.usagePct()),
 	}, nil
 }
 
