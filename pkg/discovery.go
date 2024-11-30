@@ -179,6 +179,8 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 	var hosts []*BlobCacheHost
 	var err error
 
+	log.Printf("Discovery mode: %s", d.cfg.DiscoveryMode)
+
 	switch d.cfg.DiscoveryMode {
 	case string(DiscoveryModeTailscale):
 		hosts, err = d.discoverHostsViaTailscale(ctx)
