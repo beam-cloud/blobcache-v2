@@ -471,6 +471,11 @@ func (c *BlobCacheClient) WaitForHosts(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if c.HostsAvailable() {
+		Logger.Infof("Cache available.")
+		return nil
+	}
+
 	Logger.Infof("Waiting for hosts to be available...")
 	for {
 		select {
@@ -478,6 +483,7 @@ func (c *BlobCacheClient) WaitForHosts(timeout time.Duration) error {
 			return ctx.Err()
 		default:
 			if c.HostsAvailable() {
+				Logger.Infof("Cache available.")
 				return nil
 			}
 
