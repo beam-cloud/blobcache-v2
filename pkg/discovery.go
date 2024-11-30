@@ -264,7 +264,8 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 	defer conn.Close()
 
 	c := proto.NewBlobCacheClient(conn)
-	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
+
+	resp, err := c.GetState(dialCtx, &proto.GetStateRequest{})
 	if err != nil {
 		return nil, err
 	}
