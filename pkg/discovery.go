@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -141,12 +140,8 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
-			log.Printf("Host addr: %v", host.Addr)
-			log.Printf("Host private address: %s", host.PrivateAddr)
-			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
-
 			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(addr) != nil {
+			if d.hostMap.Get(host.Addr) != nil {
 				continue
 			}
 
@@ -154,7 +149,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 			go func(addr string) {
 				defer wg.Done()
 
-				hostState, err := d.GetHostState(ctx, addr)
+				hostState, err := d.GetHostStateViaMetadata(ctx, addr, host.PrivateAddr)
 				if err != nil {
 					return
 				}
@@ -164,7 +159,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 				mu.Unlock()
 
 				Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
-			}(addr)
+			}(host.Addr)
 		}
 	}
 
@@ -234,6 +229,47 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 			host.RTT = time.Duration(0)
 		}
 	}
+
+	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
+	if host.RTT > threshold {
+		return nil, errors.New("round-trip time exceeds threshold")
+	}
+
+	if resp.GetVersion() != BlobCacheVersion {
+		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
+	}
+
+	return &host, nil
+}
+
+func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, privateAddr string) (*BlobCacheHost, error) {
+	host := BlobCacheHost{
+		Addr:             addr,
+		RTT:              0,
+		PrivateAddr:      privateAddr,
+		CapacityUsagePct: 0.0,
+	}
+
+	var dialOpts = []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+
+	conn, err := grpc.Dial(privateAddr, dialOpts...)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// Query host state to figure out what the round-trip times might look like
+	startTime := time.Now()
+	c := proto.NewBlobCacheClient(conn)
+	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	host.RTT = time.Since(startTime)
+	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
 
 	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
 	if host.RTT > threshold {
