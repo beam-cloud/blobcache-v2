@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -294,8 +293,6 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCal
 		return nil, err
 	}
 
-	log.Printf("Host addrs: %v", hostAddrs)
-
 	hosts := []*BlobCacheHost{}
 	for _, addr := range hostAddrs {
 		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(addr)).Bytes()
@@ -326,7 +323,6 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCal
 }
 
 func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
-	log.Printf("Adding host to index: %v", host.Addr)
 	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
 	if err != nil {
 		return err
