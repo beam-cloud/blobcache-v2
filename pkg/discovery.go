@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ type DiscoveryClient struct {
 	hostMap   *HostMap
 	metadata  *BlobCacheMetadata
 	mu        sync.Mutex
+	tsClient  *tailscale.LocalClient
 }
 
 func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
@@ -28,6 +30,7 @@ func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *Host
 		tailscale: tailscale,
 		hostMap:   hostMap,
 		metadata:  metadata,
+		tsClient:  nil,
 	}
 }
 
@@ -39,17 +42,21 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
-	server, err := d.tailscale.GetOrCreateServer()
-	if err != nil {
-		return err
+	if d.cfg.DiscoveryMode == string(DiscoveryModeTailscale) {
+		server, err := d.tailscale.GetOrCreateServer()
+		if err != nil {
+			return err
+		}
+
+		client, err := server.LocalClient()
+		if err != nil {
+			return err
+		}
+
+		d.tsClient = client
 	}
 
-	client, err := server.LocalClient()
-	if err != nil {
-		return err
-	}
-
-	hosts, err := d.FindNearbyHosts(ctx, client)
+	hosts, err := d.FindNearbyHosts(ctx)
 	if err == nil {
 		d.updateHostMap(hosts)
 	}
@@ -58,7 +65,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			hosts, err := d.FindNearbyHosts(ctx, client)
+			hosts, err := d.FindNearbyHosts(ctx)
 			if err != nil {
 				continue
 			}
@@ -70,8 +77,8 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
-	status, err := client.Status(ctx)
+func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*BlobCacheHost, error) {
+	status, err := d.tsClient.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +137,12 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	filteredHosts := []*BlobCacheHost{}
 	mu := sync.Mutex{}
 
+	Logger.Debugf("Found %d hosts via metadata", len(hosts))
+	log.Printf("Hosts: %v", hosts)
+
 	for _, host := range hosts {
+		log.Printf("Host: %v", host)
+
 		if host.PrivateAddr != "" {
 			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
 
@@ -161,13 +173,13 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	return filteredHosts, nil
 }
 
-func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context, client *tailscale.LocalClient) ([]*BlobCacheHost, error) {
+func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost, error) {
 	var hosts []*BlobCacheHost
 	var err error
 
 	switch d.cfg.DiscoveryMode {
 	case string(DiscoveryModeTailscale):
-		hosts, err = d.discoverHostsViaTailscale(ctx, client)
+		hosts, err = d.discoverHostsViaTailscale(ctx)
 		if err != nil {
 			return nil, err
 		}
