@@ -143,11 +143,8 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	mu := sync.Mutex{}
 
 	Logger.Debugf("Found %d hosts via metadata", len(hosts))
-	log.Printf("Hosts: %v", hosts)
 
 	for _, host := range hosts {
-		log.Printf("Host: %v", host)
-
 		if host.PrivateAddr != "" {
 			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
 
@@ -164,6 +161,8 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 				if err != nil {
 					return
 				}
+
+				log.Printf("Host state: %v", hostState)
 
 				mu.Lock()
 				filteredHosts = append(filteredHosts, hostState)
@@ -189,7 +188,6 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 			return nil, err
 		}
 	case string(DiscoveryModeMetadata):
-		log.Printf("Discovering hosts via metadata")
 		hosts, err = d.discoverHostsViaMetadata(ctx)
 		if err != nil {
 			return nil, err
