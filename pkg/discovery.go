@@ -255,7 +255,9 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	Logger.Debugf("Dialing host: %s", addr)
+	// Log the timeout value for debugging
+	Logger.Debugf("Dial timeout set to: %d seconds", d.cfg.GRPCDialTimeoutS)
+
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
 
@@ -266,7 +268,8 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 	defer conn.Close()
 
 	c := proto.NewBlobCacheClient(conn)
-	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
+
+	resp, err := c.GetState(dialCtx, &proto.GetStateRequest{})
 	if err != nil {
 		return nil, err
 	}
