@@ -260,21 +260,14 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 	}
 	defer conn.Close()
 
-	// Query host state to figure out what the round-trip times might look like
-	startTime := time.Now()
 	c := proto.NewBlobCacheClient(conn)
 	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	host.RTT = time.Since(startTime)
+	host.RTT = 0
 	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
-
-	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
-	if host.RTT > threshold {
-		return nil, errors.New("round-trip time exceeds threshold")
-	}
 
 	if resp.GetVersion() != BlobCacheVersion {
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
