@@ -300,7 +300,7 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context) ([]*BlobCache
 
 			// If the keepalive key doesn't exist, remove the host index key
 			if err == redis.Nil {
-				m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(), addr)
+				m.RemoveHostFromIndex(ctx, &BlobCacheHost{Addr: addr})
 			}
 
 			continue
