@@ -151,7 +151,6 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 
 				hostState, err := d.GetHostStateViaMetadata(ctx, addr, host.PrivateAddr)
 				if err != nil {
-					Logger.Debugf("Failed to get host state: %v", err)
 					return
 				}
 
@@ -254,9 +253,6 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-
-	// Log the timeout value for debugging
-	Logger.Debugf("Dial timeout set to: %d seconds", d.cfg.GRPCDialTimeoutS)
 
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
