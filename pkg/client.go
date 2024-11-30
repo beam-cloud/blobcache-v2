@@ -348,6 +348,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 					}
 
 					if resp.Ok {
+						Logger.Infof("Content repopulated from source: %s\n", entry.SourcePath)
 						return closestClient, host, nil
 					}
 
