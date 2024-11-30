@@ -349,6 +349,12 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 
 					if resp.Ok {
 						Logger.Infof("Content repopulated from source: %s\n", entry.SourcePath)
+						c.mu.Lock()
+						c.localHostCache[request.hash] = &localClientCache{
+							host:      host,
+							timestamp: time.Now(),
+						}
+						c.mu.Unlock()
 						return closestClient, host, nil
 					}
 

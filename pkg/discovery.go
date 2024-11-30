@@ -129,7 +129,7 @@ func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*Blo
 }
 
 func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.metadata.GetAvailableHosts(ctx)
+	hosts, err := d.metadata.GetAvailableHosts(ctx, d.hostMap.Remove)
 	if err != nil {
 		return nil, err
 	}
@@ -140,10 +140,8 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
-			addr := fmt.Sprintf("%s:%d", host.PrivateAddr, d.cfg.Port)
-
 			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(addr) != nil {
+			if d.hostMap.Get(host.Addr) != nil {
 				continue
 			}
 
@@ -151,7 +149,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 			go func(addr string) {
 				defer wg.Done()
 
-				hostState, err := d.GetHostState(ctx, addr)
+				hostState, err := d.GetHostStateViaMetadata(ctx, addr, host.PrivateAddr)
 				if err != nil {
 					return
 				}
@@ -161,7 +159,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 				mu.Unlock()
 
 				Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
-			}(addr)
+			}(host.Addr)
 		}
 	}
 
@@ -236,6 +234,40 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	if host.RTT > threshold {
 		return nil, errors.New("round-trip time exceeds threshold")
 	}
+
+	if resp.GetVersion() != BlobCacheVersion {
+		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
+	}
+
+	return &host, nil
+}
+
+func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, privateAddr string) (*BlobCacheHost, error) {
+	host := BlobCacheHost{
+		Addr:             addr,
+		RTT:              0,
+		PrivateAddr:      privateAddr,
+		CapacityUsagePct: 0.0,
+	}
+
+	var dialOpts = []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+
+	conn, err := grpc.Dial(privateAddr, dialOpts...)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	c := proto.NewBlobCacheClient(conn)
+	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	host.RTT = 0
+	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
 
 	if resp.GetVersion() != BlobCacheVersion {
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
