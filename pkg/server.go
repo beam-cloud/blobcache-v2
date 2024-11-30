@@ -60,7 +60,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	if privateIpAddr != "" {
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
-	currentHost.PrivateAddr = privateIpAddr
+	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Port)
 	currentHost.CapacityUsagePct = 0
 
 	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
@@ -112,7 +112,7 @@ func (cs *CacheService) HostKeepAlive() {
 		case <-cs.ctx.Done():
 			return
 		case <-ticker.C:
-			cs.cas.currentHost.PrivateAddr = cs.privateIpAddr
+			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.cfg.Port)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
 			cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
 		}
