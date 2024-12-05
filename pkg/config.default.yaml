@@ -10,6 +10,7 @@ grpcDialTimeoutS: 1
 discoveryIntervalS: 5
 discoveryMode: metadata
 directIO: false
+options: []
 blobfs:
   enabled: false
   mountPoint: /tmp/test

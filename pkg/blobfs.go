@@ -115,6 +115,9 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		maxBackgroundTasks = 512
 	}
 
+	options := []string{}
+	options = append(options, opts.Config.BlobFs.Options...)
+
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
 		MaxBackground:        maxBackgroundTasks,
 		DisableXAttrs:        true,
@@ -122,6 +125,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		SyncRead:             false,
 		RememberInodes:       true,
 		MaxReadAhead:         maxReadAheadKB * 1024,
+		Options:              options,
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("could not create server: %v", err)

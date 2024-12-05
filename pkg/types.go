@@ -96,6 +96,7 @@ type BlobFsConfig struct {
 	MaxBackgroundTasks int            `key:"maxBackgroundTasks" json:"max_background_tasks"`
 	MaxReadAheadKB     int            `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
 	DirectIO           bool           `key:"directIO" json:"direct_io"`
+	Options            []string       `key:"options" json:"options"`
 }
 
 type SourceConfig struct {
