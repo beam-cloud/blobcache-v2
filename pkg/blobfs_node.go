@@ -149,7 +149,11 @@ func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
 func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Open called with flags: %v", flags)
 
-	return nil, 0, fs.OK
+	if n.filesystem.Config.BlobFs.DirectIO {
+		flags |= fuse.FOPEN_DIRECT_IO
+	}
+
+	return nil, flags, fs.OK
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
