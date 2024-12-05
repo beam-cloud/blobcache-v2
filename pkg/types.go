@@ -94,7 +94,9 @@ type BlobFsConfig struct {
 	MountPoint         string         `key:"mountPoint" json:"mount_point"`
 	Sources            []SourceConfig `key:"sources" json:"sources"`
 	MaxBackgroundTasks int            `key:"maxBackgroundTasks" json:"max_background_tasks"`
+	MaxWriteKB         int            `key:"maxWriteKB" json:"max_write_kb"`
 	MaxReadAheadKB     int            `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
+	DirectMount        bool           `key:"directMount" json:"direct_mount"`
 	DirectIO           bool           `key:"directIO" json:"direct_io"`
 	Options            []string       `key:"options" json:"options"`
 }

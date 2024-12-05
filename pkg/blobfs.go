@@ -105,6 +105,11 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		EntryTimeout: &entryTimeout,
 	}
 
+	maxWriteKB := opts.Config.BlobFs.MaxWriteKB
+	if maxWriteKB <= 0 {
+		maxWriteKB = 1024
+	}
+
 	maxReadAheadKB := opts.Config.BlobFs.MaxReadAheadKB
 	if maxReadAheadKB <= 0 {
 		maxReadAheadKB = 128
@@ -125,7 +130,9 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		SyncRead:             false,
 		RememberInodes:       true,
 		MaxReadAhead:         maxReadAheadKB * 1024,
+		MaxWrite:             maxWriteKB * 1024,
 		Options:              options,
+		DirectMount:          opts.Config.BlobFs.DirectMount,
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("could not create server: %v", err)
