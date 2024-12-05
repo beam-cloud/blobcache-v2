@@ -149,11 +149,14 @@ func (n *FSNode) Opendir(ctx context.Context) syscall.Errno {
 func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Open called with flags: %v", flags)
 
+	// Enable DirectIO if specified
 	if n.filesystem.Config.BlobFs.DirectIO {
-		flags |= fuse.FOPEN_DIRECT_IO
+		fuseFlags |= fuse.FOPEN_DIRECT_IO
+		fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
+		n.log("DirectIO enabled. Returning fuseFlags: %v", fuseFlags)
 	}
 
-	return nil, flags, fs.OK
+	return nil, fuseFlags, fs.OK
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
