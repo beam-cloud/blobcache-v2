@@ -153,10 +153,10 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	if n.filesystem.Config.BlobFs.DirectIO {
 		fuseFlags |= fuse.FOPEN_DIRECT_IO
 		fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
-		n.log("DirectIO enabled. Returning fuseFlags: %v", fuseFlags)
+		return nil, fuseFlags, fs.OK
 	}
 
-	return nil, fuseFlags, fs.OK
+	return nil, 0, fs.OK
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
