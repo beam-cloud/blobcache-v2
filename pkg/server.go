@@ -343,36 +343,20 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 	const chunkSize = int64(1024 * 1024 * 64) // 64MB chunks
 	offset := req.Offset
 
-	// Create a buffered channel to queue chunks
-	chunkChan := make(chan *proto.GetContentResponse, 10)
-	errChan := make(chan error, 1)
-
-	// Goroutine to send chunks in order
-	go func() {
-		for resp := range chunkChan {
-			if err := stream.Send(resp); err != nil {
-				errChan <- status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
-				return
-			}
-		}
-		errChan <- nil
-	}()
-
 	for {
-		// Fetch content in chunks
 		content, err := cs.cas.Get(req.Hash, offset, chunkSize)
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
-			close(chunkChan)
 			return status.Errorf(codes.NotFound, "Content not found: %v", err)
 		}
 
 		Logger.Infof("GetContentStream - [%s] - %d bytes", req.Hash, len(content))
 
-		// Queue the chunk for sending
-		chunkChan <- &proto.GetContentResponse{
+		if err := stream.Send(&proto.GetContentResponse{
 			Ok:      true,
 			Content: content,
+		}); err != nil {
+			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
 		}
 
 		// Break if this is the last chunk
@@ -383,14 +367,5 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 		offset += int64(len(content))
 	}
 
-	// Close the channel to signal completion
-	close(chunkChan)
-
-	// Wait for the sending goroutine to finish
-	if err := <-errChan; err != nil {
-		return err
-	}
-
-	Logger.Debugf("GetContentStream - [%s] completed", req.Hash)
 	return nil
 }
