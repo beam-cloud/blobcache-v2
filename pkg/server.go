@@ -21,6 +21,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
@@ -158,6 +159,10 @@ func (cs *CacheService) StartServer(port uint) error {
 		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.WriteBufferSize(writeBufferSizeBytes),
 		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    10 * time.Second,
+			Timeout: 20 * time.Second,
+		}),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -335,33 +340,55 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 }
 
 func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
-	chunkSize := int64(1024 * 1024 * 64) // 64MB chunks
+	const chunkSize = int64(1024 * 1024 * 64) // 64MB chunks
 	offset := req.Offset
 
+	// Create a buffered channel to queue chunks
+	chunkChan := make(chan *proto.GetContentResponse, 10)
+	errChan := make(chan error, 1)
+
+	// Goroutine to send chunks in order
+	go func() {
+		for resp := range chunkChan {
+			if err := stream.Send(resp); err != nil {
+				errChan <- status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
+				return
+			}
+		}
+		errChan <- nil
+	}()
+
 	for {
+		// Fetch content in chunks
 		content, err := cs.cas.Get(req.Hash, offset, chunkSize)
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
+			close(chunkChan)
 			return status.Errorf(codes.NotFound, "Content not found: %v", err)
 		}
 
 		Logger.Infof("GetContentStream - [%s] - %d bytes", req.Hash, len(content))
 
-		resp := &proto.GetContentResponse{
+		// Queue the chunk for sending
+		chunkChan <- &proto.GetContentResponse{
 			Ok:      true,
 			Content: content,
 		}
 
-		if err := stream.Send(resp); err != nil {
-			Logger.Errorf("GetContentStream - failed to send chunk: %v", err)
-			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
-		}
-
+		// Break if this is the last chunk
 		if int64(len(content)) < chunkSize {
 			break
 		}
 
 		offset += int64(len(content))
+	}
+
+	// Close the channel to signal completion
+	close(chunkChan)
+
+	// Wait for the sending goroutine to finish
+	if err := <-errChan; err != nil {
+		return err
 	}
 
 	Logger.Debugf("GetContentStream - [%s] completed", req.Hash)

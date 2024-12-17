@@ -92,14 +92,36 @@ func main() {
 		}
 
 		var content []byte
+		chunkQueue := make(chan []byte, 10) // Buffered channel to queue chunks
+		done := make(chan struct{})         // Channel to signal completion
+
+		// Goroutine to write chunks to file
+		go func() {
+			file, err := os.Create("output.bin")
+			if err != nil {
+				log.Fatalf("Unable to create output file: %v\n", err)
+			}
+			defer file.Close()
+
+			for chunk := range chunkQueue {
+				_, err := file.Write(chunk)
+				if err != nil {
+					log.Fatalf("Error writing chunk to file: %v\n", err)
+				}
+			}
+			close(done)
+		}()
+
 		for {
 			chunk, ok := <-contentChan
 			if !ok {
-				log.Println("Content channel closed, exiting loop")
 				break
 			}
-			content = append(content, chunk...)
+			chunkQueue <- chunk
 		}
+		close(chunkQueue) // Close the queue to signal no more chunks
+
+		<-done // Wait for the file writing to complete
 		elapsedTime := time.Since(startTime).Seconds()
 		totalTime += elapsedTime
 
@@ -145,6 +167,11 @@ func main() {
 	}
 
 	averageTime := totalTime / float64(totalIterations)
-	mbPerSecond := (float64(len(b)*totalIterations) / (1024 * 1024)) / averageTime
+	totalBytesReadMB := float64(len(b)*totalIterations) / (1024 * 1024)
+	mbPerSecond := totalBytesReadMB / totalTime
+
+	log.Printf("Total time: %f seconds\n", totalTime)
+	log.Printf("Average time per iteration: %f seconds\n", averageTime)
+	log.Printf("Total read: %.2f MB\n", totalBytesReadMB)
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
 }
