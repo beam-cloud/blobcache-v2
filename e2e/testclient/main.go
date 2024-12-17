@@ -13,7 +13,7 @@ import (
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
 
-var totalIterations int = 3
+var totalIterations int = 10
 var checkHash bool = false
 
 func main() {
