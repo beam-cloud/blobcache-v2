@@ -154,7 +154,10 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, ErrContentNotFound
 		}
 
-		v := value.(cacheValue)
+		v, ok := value.(cacheValue)
+		if !ok {
+			return nil, fmt.Errorf("unexpected cache value type")
+		}
 
 		chunkBytes := v.Content
 		start := o % cas.config.PageSizeBytes

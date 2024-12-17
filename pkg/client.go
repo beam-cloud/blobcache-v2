@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net"
 	"sync"
@@ -261,6 +260,62 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	return nil, ErrContentNotFound
 }
 
+func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
+	contentChan := make(chan []byte)
+
+	go func() {
+		defer close(contentChan)
+		defer cancel()
+
+		for attempt := 0; attempt < 3; attempt++ {
+			client, host, err := c.getGRPCClient(ctx, &ClientRequest{
+				rt:   ClientRequestTypeRetrieval,
+				hash: hash,
+			})
+			if err != nil {
+				return
+			}
+
+			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
+			if err != nil {
+				c.metadata.RemoveEntryLocation(ctx, hash, host)
+				c.mu.Lock()
+				delete(c.localHostCache, hash)
+				c.mu.Unlock()
+				continue
+			}
+
+			for {
+				resp, err := stream.Recv()
+				if err != nil {
+					if err == io.EOF {
+						return
+					}
+
+					c.metadata.RemoveEntryLocation(ctx, hash, host)
+					c.mu.Lock()
+					delete(c.localHostCache, hash)
+					c.mu.Unlock()
+					break
+				}
+
+				if !resp.Ok {
+					c.metadata.RemoveEntryLocation(ctx, hash, host)
+					c.mu.Lock()
+					delete(c.localHostCache, hash)
+					c.mu.Unlock()
+					break
+				}
+
+				contentChan <- resp.Content
+			}
+		}
+	}()
+
+	return contentChan, nil
+}
+
 func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -509,68 +564,4 @@ func (c *BlobCacheClient) GetState() error {
 	}
 
 	return nil
-}
-
-func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
-	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
-
-	contentChan := make(chan []byte)
-
-	log.Printf("Getting content stream for %s\n", hash)
-	go func() {
-		defer func() {
-			log.Println("Closing content channel")
-			close(contentChan)
-		}()
-
-		defer cancel()
-
-		for attempt := 0; attempt < 3; attempt++ {
-			client, host, err := c.getGRPCClient(ctx, &ClientRequest{
-				rt:   ClientRequestTypeRetrieval,
-				hash: hash,
-			})
-			if err != nil {
-				log.Printf("Error getting content stream for %s: %v\n", hash, err)
-				return
-			}
-
-			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
-			if err != nil {
-				c.metadata.RemoveEntryLocation(ctx, hash, host)
-				c.mu.Lock()
-				delete(c.localHostCache, hash)
-				c.mu.Unlock()
-				continue
-			}
-
-			for {
-				resp, err := stream.Recv()
-				if err != nil {
-					if err == io.EOF {
-						log.Println("Received EOF, ending stream")
-						return
-					}
-
-					c.metadata.RemoveEntryLocation(ctx, hash, host)
-					c.mu.Lock()
-					delete(c.localHostCache, hash)
-					c.mu.Unlock()
-					break
-				}
-
-				if !resp.Ok {
-					c.metadata.RemoveEntryLocation(ctx, hash, host)
-					c.mu.Lock()
-					delete(c.localHostCache, hash)
-					c.mu.Unlock()
-					break
-				}
-
-				contentChan <- resp.Content
-			}
-		}
-	}()
-
-	return contentChan, nil
 }
