@@ -142,6 +142,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -244,7 +245,6 @@ func (cs *CacheService) usagePct() float64 {
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
-
 	return &proto.GetStateResponse{
 		Version:          BlobCacheVersion,
 		PrivateIpAddr:    cs.privateIpAddr,
@@ -290,4 +290,35 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	go runtime.GC()
 
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
+}
+
+func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
+	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
+	if err != nil {
+		Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
+		return status.Errorf(codes.NotFound, "Content not found: %v", err)
+	}
+
+	Logger.Infof("GetContentStream - [%s] - %d bytes", req.Hash, len(content))
+
+	chunkSize := 1024 * 1024 * 32 // 16MB chunks
+	for start := 0; start < len(content); start += chunkSize {
+		end := start + chunkSize
+		if end > len(content) {
+			end = len(content)
+		}
+
+		resp := &proto.GetContentResponse{
+			Ok:      true,
+			Content: content[start:end],
+		}
+
+		if err := stream.Send(resp); err != nil {
+			Logger.Errorf("GetContentStream - failed to send chunk: %v", err)
+			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
+		}
+	}
+
+	Logger.Debugf("GetContentStream - [%s] completed", req.Hash)
+	return nil
 }

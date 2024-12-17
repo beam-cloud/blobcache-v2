@@ -6,6 +6,7 @@ package blobcache;
 
 service BlobCache {
   rpc GetContent(GetContentRequest) returns (GetContentResponse) {}
+  rpc GetContentStream(GetContentRequest) returns (stream GetContentResponse) {}
   rpc StoreContent(stream StoreContentRequest) returns (StoreContentResponse) {}
   rpc StoreContentFromSource(StoreContentFromSourceRequest) returns (StoreContentFromSourceResponse) {}
   rpc GetState(GetStateRequest)  returns (GetStateResponse) {}
