@@ -95,7 +95,7 @@ func main() {
 		chunkQueue := make(chan []byte, 10) // Buffered channel to queue chunks
 		done := make(chan struct{})         // Channel to signal completion
 
-		// Goroutine to write chunks to file
+		// Goroutine to write chunks to file and accumulate content
 		go func() {
 			file, err := os.Create("output.bin")
 			if err != nil {
@@ -108,6 +108,7 @@ func main() {
 				if err != nil {
 					log.Fatalf("Error writing chunk to file: %v\n", err)
 				}
+				content = append(content, chunk...) // Accumulate chunks into content
 			}
 			close(done)
 		}()
