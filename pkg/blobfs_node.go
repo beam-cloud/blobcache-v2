@@ -175,8 +175,7 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return nil, syscall.EIO
 	}
 
-	nRead := copy(dest, buffer)
-	return fuse.ReadResultData(dest[:nRead]), fs.OK
+	return fuse.ReadResultData(buffer), fs.OK
 }
 
 func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
