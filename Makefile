@@ -25,4 +25,4 @@ publish-chart:
 	rm beam-blobcache-v2-chart-$(chartVersion).tgz
 
 testclient:
-	go build -o bin/testclient e2e/testclient/main.go
+	GOOS=linux GOARCH=amd64 go build -o bin/testclient e2e/testclient/main.go
