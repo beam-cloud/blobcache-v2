@@ -101,7 +101,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 func (cs *CacheService) HostKeepAlive() {
 	err := cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
 	if err != nil {
-		Logger.Fatalf("Failed to add host to index? %v", err)
+		Logger.Fatalf("Failed to add host to index: %v", err)
 	}
 
 	ticker := time.NewTicker(time.Duration(defaultHostKeepAliveIntervalS) * time.Second)

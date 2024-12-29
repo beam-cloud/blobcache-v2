@@ -341,6 +341,11 @@ func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, host *BlobCach
 		return err
 	}
 
+	err = m.AddHostToIndex(ctx, host)
+	if err != nil {
+		return err
+	}
+
 	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(host.Addr), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
 }
 
