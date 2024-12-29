@@ -128,6 +128,9 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			return nil, syscall.ENOENT
 		}
 
+		// TODO: stream file to a temp file in the container somewhere
+		// /tmp/cache/path/to/file
+
 		out.Attr = *attr
 		return node, fs.OK
 	}
@@ -172,8 +175,7 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return nil, syscall.EIO
 	}
 
-	nRead := copy(dest, buffer)
-	return fuse.ReadResultData(dest[:nRead]), fs.OK
+	return fuse.ReadResultData(buffer), fs.OK
 }
 
 func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
