@@ -99,9 +99,14 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 }
 
 func (cs *CacheService) HostKeepAlive() {
-	err := cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+	err := cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
 	if err != nil {
-		Logger.Fatalf("Failed to add host to index: %v", err)
+		Logger.Warnf("Failed to set host keepalive: %v", err)
+	}
+
+	err = cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+	if err != nil {
+		Logger.Warnf("Failed to add host to index: %v", err)
 	}
 
 	ticker := time.NewTicker(time.Duration(defaultHostKeepAliveIntervalS) * time.Second)
@@ -114,6 +119,8 @@ func (cs *CacheService) HostKeepAlive() {
 		case <-ticker.C:
 			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.cfg.Port)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
+
+			cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
 			cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
 		}
 	}

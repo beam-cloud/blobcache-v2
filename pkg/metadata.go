@@ -323,12 +323,7 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCal
 }
 
 func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
-	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
-	if err != nil {
-		return err
-	}
-
-	return m.SetHostKeepAlive(ctx, host)
+	return m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
 }
 
 func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, host *BlobCacheHost) error {
@@ -337,11 +332,6 @@ func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, host *BlobC
 
 func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
 	hostBytes, err := json.Marshal(host)
-	if err != nil {
-		return err
-	}
-
-	err = m.AddHostToIndex(ctx, host)
 	if err != nil {
 		return err
 	}
