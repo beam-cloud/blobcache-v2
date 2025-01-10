@@ -171,14 +171,17 @@ func (cs *CacheService) StartServer(port uint) error {
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
+	dst := bytes.NewBuffer(make([]byte, req.Length))
+	resp := &proto.GetContentResponse{Content: dst.Bytes()}
+
+	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
 	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
-	return &proto.GetContentResponse{Content: content, Ok: true}, nil
+	return resp, nil
 }
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
