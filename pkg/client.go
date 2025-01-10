@@ -197,6 +197,8 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 				blobcache_fbs.GetStateRequestStart(b)
 				b.Finish(blobcache_fbs.GetStateRequestEnd(b))
 				resp, err := client.GetState(c.ctx, b)
+				Logger.Debugf("GetState response: %v", resp)
+				Logger.Debugf("GetState error: %v", err)
 				if err != nil {
 					return ErrInvalidHostVersion
 				}
@@ -531,7 +533,10 @@ func (c *BlobCacheClient) GetState() error {
 	b := flatbuffers.NewBuilder(0)
 	blobcache_fbs.GetStateRequestStart(b)
 	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
-	_, err = client.GetState(ctx, b)
+	resp, err := client.GetState(ctx, b)
+
+	Logger.Debugf("GetState response: %v", resp)
+	Logger.Debugf("GetState error: %v", err)
 	if err != nil {
 		return err
 	}
