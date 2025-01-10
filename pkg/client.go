@@ -534,10 +534,7 @@ func (c *BlobCacheClient) GetState() error {
 	b := flatbuffers.NewBuilder(0)
 	blobcache_fbs.GetStateRequestStart(b)
 	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
-	resp, err := client.GetState(ctx, b)
-
-	Logger.Debugf("GetState response: %v", resp)
-	Logger.Debugf("GetState error: %v", err)
+	_, err = client.GetState(ctx, b)
 	if err != nil {
 		return err
 	}

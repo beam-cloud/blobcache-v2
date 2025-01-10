@@ -277,15 +277,12 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 
 	c := blobcache_fbs.NewBlobCacheClient(conn)
 
-	Logger.Infof("Getting state from %s", privateAddr)
-
 	b := flatbuffers.NewBuilder(0)
 	blobcache_fbs.GetStateRequestStart(b)
 	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
 
 	resp, err := c.GetState(dialCtx, b)
 	if err != nil {
-		Logger.Errorf("Error getting state from %s: %v", privateAddr, err)
 		return nil, err
 	}
 
