@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -83,6 +85,13 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 
 	tailscale := NewTailscale(ctx, hostname, cfg)
 
+	// Start pprof server for performance profiling
+	go func() {
+		if err := http.ListenAndServe("0.0.0.0:6666", nil); err != nil {
+			Logger.Errorf("Failed to start pprof server: %v", err)
+		}
+	}()
+
 	cs := &CacheService{
 		ctx:           ctx,
 		hostname:      hostname,
@@ -149,6 +158,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.RPCCompressor(&BrotliCompressor{}),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 

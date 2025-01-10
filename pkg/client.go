@@ -160,6 +160,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
+		grpc.WithDefaultCallOptions(grpc.UseCompressor("brotli")),
 	}
 
 	if c.cfg.Token != "" {

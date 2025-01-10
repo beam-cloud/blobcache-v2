@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -137,15 +136,18 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {
-	buffer := bytes.NewBuffer(make([]byte, 0, length))
+	pageSizeBytes := cas.config.PageSizeBytes
 
 	remainingLength := length
 	o := offset
 
 	cas.cache.ResetTTL(hash, time.Duration(cas.config.ObjectTtlS)*time.Second)
 
+	// Initialize a byte slice with the expected length
+	result := make([]byte, 0, length)
+
 	for remainingLength > 0 {
-		chunkIdx := o / cas.config.PageSizeBytes
+		chunkIdx := o / pageSizeBytes
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		// Check cache for chunk
@@ -154,10 +156,13 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, ErrContentNotFound
 		}
 
-		v := value.(cacheValue)
+		v, ok := value.(cacheValue)
+		if !ok {
+			return nil, fmt.Errorf("unexpected type for cache value")
+		}
 
 		chunkBytes := v.Content
-		start := o % cas.config.PageSizeBytes
+		start := o % pageSizeBytes
 		chunkRemaining := int64(len(chunkBytes)) - start
 		if chunkRemaining <= 0 {
 			break
@@ -170,15 +175,14 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		if _, err := buffer.Write(chunkBytes[start:end]); err != nil {
-			return nil, fmt.Errorf("failed to write to buffer: %v", err)
-		}
+		// Directly append the slice to the result
+		result = append(result, chunkBytes[start:end]...)
 
 		remainingLength -= readLength
 		o += readLength
 	}
 
-	return buffer.Bytes(), nil
+	return result, nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {
