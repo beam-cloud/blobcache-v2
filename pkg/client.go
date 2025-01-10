@@ -197,9 +197,8 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 				b := flatbuffers.NewBuilder(0)
 				blobcache_fbs.GetStateRequestStart(b)
 				b.Finish(blobcache_fbs.GetStateRequestEnd(b))
+
 				resp, err := client.GetState(c.ctx, b)
-				Logger.Debugf("GetState response: %v", resp)
-				Logger.Debugf("GetState error: %v", err)
 				if err != nil {
 					return ErrInvalidHostVersion
 				}
