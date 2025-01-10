@@ -27,7 +27,7 @@ import (
 const (
 	writeBufferSizeBytes     = 128 * 1024
 	getContentBufferPoolSize = 128
-	getContentBufferSize     = 128 * 1024
+	getContentBufferSize     = 256 * 1024
 )
 
 type CacheServiceOpts struct {
