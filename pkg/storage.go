@@ -138,6 +138,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) error {
 	remainingLength := length
 	o := offset
+	dstOffset := int64(0)
 
 	cas.cache.ResetTTL(hash, time.Duration(cas.config.ObjectTtlS)*time.Second)
 
@@ -167,10 +168,11 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 			return fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		copy(dst[o:o+readLength], chunkBytes[start:end])
+		copy(dst[dstOffset:dstOffset+readLength], chunkBytes[start:end])
 
 		remainingLength -= readLength
 		o += readLength
+		dstOffset += readLength
 	}
 
 	return nil

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -67,6 +69,12 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	if err != nil {
 		return nil, err
 	}
+
+	go func() {
+		runtime.SetBlockProfileRate(1)
+		runtime.SetMutexProfileFraction(1)
+		http.ListenAndServe("localhost:6666", nil)
+	}()
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if cfg.BlobFs.Enabled {
@@ -149,6 +157,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.WriteBufferSize(128*1024),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
