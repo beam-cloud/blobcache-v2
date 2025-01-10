@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	proto "github.com/beam-cloud/blobcache-v2/proto"
+	"github.com/beam-cloud/blobcache-v2/proto/blobcache_fbs"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 )
 
@@ -31,7 +31,7 @@ type CacheServiceOpts struct {
 
 type CacheService struct {
 	ctx context.Context
-	proto.UnimplementedBlobCacheServer
+	blobcache_fbs.UnimplementedBlobCacheServer
 	hostname      string
 	privateIpAddr string
 	cas           *ContentAddressableStorage
@@ -159,7 +159,7 @@ func (cs *CacheService) StartServer(port uint) error {
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
 	)
-	proto.RegisterBlobCacheServer(s, cs)
+	blobcache_fbs.RegisterBlobCacheServer(s, cs)
 
 	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
 
@@ -179,15 +179,27 @@ func (cs *CacheService) StartServer(port uint) error {
 	return nil
 }
 
-func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
+func (cs *CacheService) GetContent(ctx context.Context, req *blobcache_fbs.GetContentRequest) (*flatbuffers.Builder, error) {
+	reqT := req.UnPack()
+	content, err := cs.cas.Get(reqT.Hash, reqT.Offset, reqT.Length)
 	if err != nil {
-		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
-		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
+		Logger.Debugf("Get - [%s] - %v", reqT.Hash, err)
+		b := flatbuffers.NewBuilder(0)
+		blobcache_fbs.GetContentResponseStart(b)
+		blobcache_fbs.GetContentResponseAddOk(b, false)
+		b.Finish(blobcache_fbs.GetContentResponseEnd(b))
+		return b, nil
 	}
 
-	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
-	return &proto.GetContentResponse{Content: content, Ok: true}, nil
+	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", reqT.Hash, reqT.Offset, reqT.Length)
+	b := flatbuffers.NewBuilder(0)
+	contentOffset := b.CreateByteVector(content)
+
+	blobcache_fbs.GetContentResponseStart(b)
+	blobcache_fbs.GetContentResponseAddOk(b, true)
+	blobcache_fbs.GetContentResponseAddContent(b, contentOffset)
+	b.Finish(blobcache_fbs.GetContentResponseEnd(b))
+	return b, nil
 }
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
@@ -220,7 +232,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	return hash, nil
 }
 
-func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
+func (cs *CacheService) StoreContent(stream blobcache_fbs.BlobCache_StoreContentServer) error {
 	ctx := stream.Context()
 	var buffer bytes.Buffer
 
@@ -229,15 +241,16 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		if err == io.EOF {
 			break
 		}
-
 		if err != nil {
 			Logger.Infof("Store - error: %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
+		reqBytes := req.ContentBytes()
 
-		Logger.Debugf("Store - rx chunk (%d bytes)", len(req.Content))
+		// Convert received bytes to FlatBuffers request
+		Logger.Debugf("Store - rx chunk (%d bytes)", len(reqBytes))
 
-		if _, err := buffer.Write(req.Content); err != nil {
+		if _, err := buffer.Write(reqBytes); err != nil {
 			Logger.Debugf("Store - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
 		}
@@ -249,7 +262,14 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 	}
 
 	buffer.Reset()
-	return stream.SendAndClose(&proto.StoreContentResponse{Hash: hash})
+
+	// Build response using FlatBuffers
+	b := flatbuffers.NewBuilder(0)
+	hashOffset := b.CreateString(hash)
+	blobcache_fbs.StoreContentResponseStart(b)
+	blobcache_fbs.StoreContentResponseAddHash(b, hashOffset)
+	b.Finish(blobcache_fbs.StoreContentResponseEnd(b))
+	return stream.SendAndClose(b)
 }
 
 func (cs *CacheService) usagePct() float64 {
@@ -259,29 +279,40 @@ func (cs *CacheService) usagePct() float64 {
 	return memoryUsage / float64(cs.cas.maxCacheSizeMb)
 }
 
-func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
+func (cs *CacheService) GetState(ctx context.Context, req *blobcache_fbs.GetStateRequest) (*flatbuffers.Builder, error) {
+	b := flatbuffers.NewBuilder(0)
+	version := b.CreateString(BlobCacheVersion)
+	privateIpAddr := b.CreateString(cs.privateIpAddr)
 
-	return &proto.GetStateResponse{
-		Version:          BlobCacheVersion,
-		PrivateIpAddr:    cs.privateIpAddr,
-		CapacityUsagePct: float32(cs.usagePct()),
-	}, nil
+	blobcache_fbs.GetStateResponseStart(b)
+	blobcache_fbs.GetStateResponseAddVersion(b, version)
+	blobcache_fbs.GetStateResponseAddPrivateIpAddr(b, privateIpAddr)
+	blobcache_fbs.GetStateResponseAddCapacityUsagePct(b, float32(cs.usagePct()))
+	b.Finish(blobcache_fbs.GetStateResponseEnd(b))
+	return b, nil
 }
 
-func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
-	localPath := filepath.Join("/", req.SourcePath)
+func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *blobcache_fbs.StoreContentFromSourceRequest) (*flatbuffers.Builder, error) {
+	reqT := req.UnPack()
+	localPath := filepath.Join("/", reqT.SourcePath)
 
-	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
 		Logger.Infof("StoreFromContent - source not found: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
+		b := flatbuffers.NewBuilder(0)
+		blobcache_fbs.StoreContentFromSourceResponseStart(b)
+		blobcache_fbs.StoreContentFromSourceResponseAddOk(b, false)
+		b.Finish(blobcache_fbs.StoreContentFromSourceResponseEnd(b))
+		return b, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
 	}
 
-	// Open the file
 	file, err := os.Open(localPath)
 	if err != nil {
 		Logger.Infof("StoreFromContent - error reading source: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
+		b := flatbuffers.NewBuilder(0)
+		blobcache_fbs.StoreContentFromSourceResponseStart(b)
+		blobcache_fbs.StoreContentFromSourceResponseAddOk(b, false)
+		b.Finish(blobcache_fbs.StoreContentFromSourceResponseEnd(b))
+		return b, status.Errorf(codes.Internal, "Failed to open file: %v", err)
 	}
 	defer file.Close()
 
@@ -289,21 +320,28 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	if _, err := io.Copy(&buffer, file); err != nil {
 		Logger.Infof("StoreFromContent - error copying source: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+		b := flatbuffers.NewBuilder(0)
+		blobcache_fbs.StoreContentFromSourceResponseStart(b)
+		blobcache_fbs.StoreContentFromSourceResponseAddOk(b, false)
+		b.Finish(blobcache_fbs.StoreContentFromSourceResponseEnd(b))
+		return b, nil
 	}
 
-	// Store the content
-	hash, err := cs.store(ctx, &buffer, localPath, req.SourceOffset)
+	hash, err := cs.store(ctx, &buffer, localPath, reqT.SourceOffset)
 	if err != nil {
 		Logger.Infof("StoreFromContent - error storing data in cache: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, err
+		b := flatbuffers.NewBuilder(0)
+		blobcache_fbs.StoreContentFromSourceResponseStart(b)
+		blobcache_fbs.StoreContentFromSourceResponseAddOk(b, false)
+		b.Finish(blobcache_fbs.StoreContentFromSourceResponseEnd(b))
+		return b, err
 	}
 
-	buffer.Reset()
-	Logger.Infof("StoreFromContent - [%s]", hash)
-
-	// HOTFIX: Manually trigger garbage collection
-	go runtime.GC()
-
-	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
+	b := flatbuffers.NewBuilder(0)
+	hashOffset := b.CreateString(hash)
+	blobcache_fbs.StoreContentFromSourceResponseStart(b)
+	blobcache_fbs.StoreContentFromSourceResponseAddOk(b, true)
+	blobcache_fbs.StoreContentFromSourceResponseAddHash(b, hashOffset)
+	b.Finish(blobcache_fbs.StoreContentFromSourceResponseEnd(b))
+	return b, nil
 }

@@ -1,0 +1,47 @@
+namespace blobcache_fbs;
+
+table GetContentRequest {
+  hash: string;  // Hash of the content to retrieve
+  offset: int64; // Offset into the content
+  length: int64; // Length of the content to retrieve
+}
+
+table GetContentResponse {
+  ok: bool;
+  content: [ubyte]; // Content data
+}
+
+table StoreContentRequest {
+  content: [ubyte];
+}
+
+table StoreContentResponse {
+  hash: string; // Hash of the stored content
+}
+
+table GetStateRequest {
+  // Empty table for request
+}
+
+table GetStateResponse {
+  version: string;
+  capacity_usage_pct: float;
+  private_ip_addr: string;
+}
+
+table StoreContentFromSourceRequest {
+  source_path: string;
+  source_offset: int64;
+}
+
+table StoreContentFromSourceResponse {
+  ok: bool;
+  hash: string;
+}
+
+rpc_service BlobCache {
+  GetContent(GetContentRequest): GetContentResponse;
+  StoreContent(StoreContentRequest): StoreContentResponse (streaming: "client");
+  StoreContentFromSource(StoreContentFromSourceRequest): StoreContentFromSourceResponse;
+  GetState(GetStateRequest): GetStateResponse;
+}

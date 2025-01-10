@@ -175,7 +175,6 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		// Directly append the slice to the result
 		result = append(result, chunkBytes[start:end]...)
 
 		remainingLength -= readLength

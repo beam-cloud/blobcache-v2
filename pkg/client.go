@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/beam-cloud/blobcache-v2/proto"
+	"github.com/beam-cloud/blobcache-v2/proto/blobcache_fbs"
 	mapset "github.com/deckarep/golang-set/v2"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
@@ -40,7 +41,7 @@ type BlobCacheClient struct {
 	hostname                string
 	discoveryClient         *DiscoveryClient
 	tailscaleClient         *tailscale.LocalClient
-	grpcClients             map[string]proto.BlobCacheClient
+	grpcClients             map[string]blobcache_fbs.BlobCacheClient
 	hostMap                 *HostMap
 	mu                      sync.RWMutex
 	metadata                *BlobCacheMetadata
@@ -89,7 +90,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		hostname:                hostname,
 		tailscale:               tailscale,
 		tailscaleClient:         tailscaleClient,
-		grpcClients:             make(map[string]proto.BlobCacheClient),
+		grpcClients:             make(map[string]blobcache_fbs.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
 		mu:                      sync.RWMutex{},
 		metadata:                metadata,
@@ -173,7 +174,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+	c.grpcClients[host.Addr] = blobcache_fbs.NewBlobCacheClient(conn)
 
 	go c.monitorHost(host)
 	return nil
@@ -192,12 +193,15 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 					return ErrHostNotFound
 				}
 
-				resp, err := client.GetState(c.ctx, &proto.GetStateRequest{})
+				b := flatbuffers.NewBuilder(0)
+				blobcache_fbs.GetStateRequestStart(b)
+				b.Finish(blobcache_fbs.GetStateRequestEnd(b))
+				resp, err := client.GetState(c.ctx, b)
 				if err != nil {
 					return ErrInvalidHostVersion
 				}
 
-				if resp.GetVersion() != BlobCacheVersion {
+				if string(resp.Version()) != BlobCacheVersion {
 					return ErrInvalidHostVersion
 				}
 
@@ -241,8 +245,15 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 
 		start := time.Now()
 
-		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
-		if err != nil || !getContentResponse.Ok {
+		b := flatbuffers.NewBuilder(0)
+		hashOffset := b.CreateString(hash)
+		blobcache_fbs.GetContentRequestStart(b)
+		blobcache_fbs.GetContentRequestAddHash(b, hashOffset)
+		blobcache_fbs.GetContentRequestAddOffset(b, offset)
+		blobcache_fbs.GetContentRequestAddLength(b, length)
+		b.Finish(blobcache_fbs.GetContentRequestEnd(b))
+		getContentResponse, err := client.GetContent(ctx, b)
+		if err != nil || !getContentResponse.Ok() {
 			// If we had an issue getting the content, remove this location from metadata
 			c.metadata.RemoveEntryLocation(ctx, hash, host)
 
@@ -254,7 +265,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		}
 
 		Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
-		return getContentResponse.Content, nil
+		return getContentResponse.ContentBytes(), nil
 	}
 
 	return nil, ErrContentNotFound
@@ -285,7 +296,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 	}()
 }
 
-func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
+func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (blobcache_fbs.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
 	var err error = nil
 
@@ -340,15 +351,19 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 						return nil, nil, ErrClientNotFound
 					}
 
-					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
-						SourcePath:   entry.SourcePath,
-						SourceOffset: entry.SourceOffset,
-					})
+					b := flatbuffers.NewBuilder(0)
+					pathOffset := b.CreateString(entry.SourcePath)
+					blobcache_fbs.StoreContentFromSourceRequestStart(b)
+					blobcache_fbs.StoreContentFromSourceRequestAddSourcePath(b, pathOffset)
+					blobcache_fbs.StoreContentFromSourceRequestAddSourceOffset(b, entry.SourceOffset)
+					b.Finish(blobcache_fbs.StoreContentFromSourceRequestEnd(b))
+
+					resp, err := closestClient.StoreContentFromSource(c.ctx, b)
 					if err != nil {
 						return nil, nil, err
 					}
 
-					if resp.Ok {
+					if resp.Ok() {
 						Logger.Infof("Content repopulated from source: %s\n", entry.SourcePath)
 						c.mu.Lock()
 						c.localHostCache[request.hash] = &localClientCache{
@@ -430,8 +445,12 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk}
-		if err := stream.Send(req); err != nil {
+		b := flatbuffers.NewBuilder(0)
+		contentOffset := b.CreateByteVector(chunk)
+		blobcache_fbs.StoreContentRequestStart(b)
+		blobcache_fbs.StoreContentRequestAddContent(b, contentOffset)
+		b.Finish(blobcache_fbs.StoreContentRequestEnd(b))
+		if err := stream.Send(b); err != nil {
 			return "", err
 		}
 	}
@@ -442,7 +461,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	}
 
 	Logger.Debugf("Elapsed time to send content: %v\n", time.Since(start))
-	return resp.Hash, nil
+	return string(resp.Hash()), nil
 }
 
 func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
@@ -456,12 +475,19 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
+	b := flatbuffers.NewBuilder(0)
+	pathOffset := b.CreateString(sourcePath)
+	blobcache_fbs.StoreContentFromSourceRequestStart(b)
+	blobcache_fbs.StoreContentFromSourceRequestAddSourcePath(b, pathOffset)
+	blobcache_fbs.StoreContentFromSourceRequestAddSourceOffset(b, sourceOffset)
+	b.Finish(blobcache_fbs.StoreContentFromSourceRequestEnd(b))
+
+	resp, err := client.StoreContentFromSource(ctx, b)
 	if err != nil {
 		return "", err
 	}
 
-	return resp.Hash, nil
+	return string(resp.Hash()), nil
 }
 
 func (c *BlobCacheClient) HostsAvailable() bool {
@@ -502,7 +528,10 @@ func (c *BlobCacheClient) GetState() error {
 		return err
 	}
 
-	_, err = client.GetState(ctx, &proto.GetStateRequest{})
+	b := flatbuffers.NewBuilder(0)
+	blobcache_fbs.GetStateRequestStart(b)
+	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
+	_, err = client.GetState(ctx, b)
 	if err != nil {
 		return err
 	}
