@@ -13,7 +13,6 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/mostynb/go-grpc-compression/snappy"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -161,7 +160,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
-		grpc.WithDefaultCallOptions(grpc.UseCompressor(snappy.Name)),
+		// grpc.WithDefaultCallOptions(grpc.UseCompressor(snappy.Name)),
 	}
 
 	if c.cfg.Token != "" {
