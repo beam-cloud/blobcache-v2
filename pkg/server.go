@@ -158,6 +158,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.CustomCodec(flatbuffers.FlatbuffersCodec{}),
 	)
 	blobcache_fbs.RegisterBlobCacheServer(s, cs)
 

@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/beam-cloud/blobcache-v2/proto"
+	blobcache_fbs "github.com/beam-cloud/blobcache-v2/proto/blobcache_fbs"
+	flatbuffers "github.com/google/flatbuffers/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"tailscale.com/client/tailscale"
@@ -201,6 +202,9 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(d.tailscale.DialWithTimeout),
+		grpc.WithDefaultCallOptions(
+			grpc.ForceCodec(flatbuffers.FlatbuffersCodec{}),
+		),
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)
@@ -211,17 +215,20 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 
 	// Query host state to figure out what the round-trip times might look like
 	startTime := time.Now()
-	c := proto.NewBlobCacheClient(conn)
-	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
+	c := blobcache_fbs.NewBlobCacheClient(conn)
+	b := flatbuffers.NewBuilder(0)
+	blobcache_fbs.GetStateRequestStart(b)
+	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
+	resp, err := c.GetState(ctx, b)
 	if err != nil {
 		return nil, err
 	}
 
 	host.RTT = time.Since(startTime)
-	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
+	host.CapacityUsagePct = float64(resp.CapacityUsagePct())
 
-	if resp.PrivateIpAddr != "" {
-		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.Port)
+	if len(resp.PrivateIpAddr()) > 0 {
+		privateAddr := fmt.Sprintf("%s:%d", string(resp.PrivateIpAddr()), d.cfg.Port)
 		privateConn, privateErr := DialWithTimeout(ctx, privateAddr)
 		if privateErr == nil {
 			privateConn.Close()
@@ -235,8 +242,8 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 		return nil, errors.New("round-trip time exceeds threshold")
 	}
 
-	if resp.GetVersion() != BlobCacheVersion {
-		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
+	if string(resp.Version()) != BlobCacheVersion {
+		return nil, fmt.Errorf("version mismatch: %s != %s", string(resp.Version()), BlobCacheVersion)
 	}
 
 	return &host, nil
@@ -250,8 +257,13 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 		CapacityUsagePct: 0.0,
 	}
 
+	Logger.Infof("Dialing private address: %s", privateAddr)
+
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.ForceCodec(flatbuffers.FlatbuffersCodec{}),
+		),
 	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
@@ -263,18 +275,25 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 	}
 	defer conn.Close()
 
-	c := proto.NewBlobCacheClient(conn)
+	c := blobcache_fbs.NewBlobCacheClient(conn)
 
-	resp, err := c.GetState(dialCtx, &proto.GetStateRequest{})
+	Logger.Infof("Getting state from %s", privateAddr)
+
+	b := flatbuffers.NewBuilder(0)
+	blobcache_fbs.GetStateRequestStart(b)
+	b.Finish(blobcache_fbs.GetStateRequestEnd(b))
+
+	resp, err := c.GetState(dialCtx, b)
 	if err != nil {
+		Logger.Errorf("Error getting state from %s: %v", privateAddr, err)
 		return nil, err
 	}
 
 	host.RTT = 0
-	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
+	host.CapacityUsagePct = float64(resp.CapacityUsagePct())
 
-	if resp.GetVersion() != BlobCacheVersion {
-		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
+	if string(resp.Version()) != BlobCacheVersion {
+		return nil, fmt.Errorf("version mismatch: %s != %s", string(resp.Version()), BlobCacheVersion)
 	}
 
 	return &host, nil

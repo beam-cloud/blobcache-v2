@@ -160,6 +160,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
+			grpc.ForceCodec(flatbuffers.FlatbuffersCodec{}),
 		),
 	}
 
