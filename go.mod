@@ -5,6 +5,7 @@ go 1.22.0
 toolchain go1.22.4
 
 require (
+	github.com/andybalholm/brotli v1.1.1
 	github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2
 	github.com/bsm/redislock v0.9.4
 	github.com/deckarep/golang-set/v2 v2.6.0
@@ -28,7 +29,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa // indirect
-	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.25.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.26.6 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.16 // indirect
