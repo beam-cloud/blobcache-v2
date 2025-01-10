@@ -163,7 +163,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
-		grpc.WithReadBufferSize(128 * 1024),
+		grpc.WithReadBufferSize(readBufferSizeBytes),
 	}
 
 	if c.cfg.Token != "" {
