@@ -20,11 +20,14 @@ import (
 	"tailscale.com/client/tailscale"
 )
 
-const getContentRequestTimeout = 30 * time.Second
-const storeContentRequestTimeout = 300 * time.Second
-const closestHostTimeout = 30 * time.Second
-const localClientCacheCleanupInterval = 5 * time.Second
-const localClientCacheTTL = 300 * time.Second
+const (
+	getContentRequestTimeout        = 30 * time.Second
+	storeContentRequestTimeout      = 300 * time.Second
+	closestHostTimeout              = 30 * time.Second
+	localClientCacheCleanupInterval = 5 * time.Second
+	localClientCacheTTL             = 300 * time.Second
+	readBufferSizeBytes             = 128 * 1024
+)
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

@@ -8,12 +8,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -23,6 +22,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	writeBufferSizeBytes     = 128 * 1024
+	getContentBufferPoolSize = 64
+	getContentBufferSize     = 128 * 1024
 )
 
 type CacheServiceOpts struct {
@@ -69,12 +74,6 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	if err != nil {
 		return nil, err
 	}
-
-	go func() {
-		runtime.SetBlockProfileRate(1)
-		runtime.SetMutexProfileFraction(1)
-		http.ListenAndServe("localhost:6666", nil)
-	}()
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if cfg.BlobFs.Enabled {
@@ -157,7 +156,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		grpc.WriteBufferSize(128*1024),
+		grpc.WriteBufferSize(writeBufferSizeBytes),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -179,10 +178,32 @@ func (cs *CacheService) StartServer(port uint) error {
 	return nil
 }
 
-func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	dst := make([]byte, req.Length)
-	resp := &proto.GetContentResponse{Content: dst}
+var getContentBufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, getContentBufferSize)
+		return &b
+	},
+}
 
+func init() {
+	for i := 0; i < getContentBufferPoolSize; i++ {
+		//lint:ignore SA6002 reason: pre-allocating buffers for performance
+		getContentBufferPool.Put(make([]byte, getContentBufferSize))
+	}
+}
+
+func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
+	bufPtr := getContentBufferPool.Get().(*[]byte)
+	defer getContentBufferPool.Put(bufPtr)
+	dst := *bufPtr
+
+	if cap(dst) < int(req.Length) {
+		dst = make([]byte, req.Length)
+		*bufPtr = dst
+	}
+	dst = dst[:req.Length]
+
+	resp := &proto.GetContentResponse{Content: dst}
 	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
