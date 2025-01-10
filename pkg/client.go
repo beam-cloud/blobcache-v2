@@ -160,7 +160,6 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
-		// grpc.WithDefaultCallOptions(grpc.UseCompressor(snappy.Name)),
 	}
 
 	if c.cfg.Token != "" {
@@ -240,27 +239,19 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 			return nil, err
 		}
 
-		Logger.Debugf("Getting content from client: %v", client)
-		Logger.Debugf("Getting content from host: %s", host.Addr)
-
 		start := time.Now()
 
-		mockBuffer := make([]byte, length)
-		getContentResponse := &proto.GetContentResponse{
-			Content: mockBuffer,
+		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
+		if err != nil || !getContentResponse.Ok {
+			// If we had an issue getting the content, remove this location from metadata
+			c.metadata.RemoveEntryLocation(ctx, hash, host)
+
+			c.mu.Lock()
+			delete(c.localHostCache, hash)
+			c.mu.Unlock()
+
+			continue
 		}
-
-		// getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
-		// if err != nil || !getContentResponse.Ok {
-		// 	// If we had an issue getting the content, remove this location from metadata
-		// 	c.metadata.RemoveEntryLocation(ctx, hash, host)
-
-		// 	c.mu.Lock()
-		// 	delete(c.localHostCache, hash)
-		// 	c.mu.Unlock()
-
-		// 	continue
-		// }
 
 		Logger.Debugf("Elapsed time to get content: %v", time.Since(start))
 		return getContentResponse.Content, nil

@@ -42,7 +42,6 @@ message GetStateResponse {
 message StoreContentFromSourceRequest {
   string source_path = 1;
   int64 source_offset = 2;
-  bool compress = 3;
 }
 
 message StoreContentFromSourceResponse {

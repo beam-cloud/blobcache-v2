@@ -167,8 +167,6 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	buffer := make([]byte, len(dest))
-
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
 	if err != nil {
 		return nil, syscall.EIO
