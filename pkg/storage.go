@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -136,11 +135,10 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	return nil
 }
 
-func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]byte, error) {
-	buffer := bytes.NewBuffer(make([]byte, 0, length))
-
+func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) error {
 	remainingLength := length
 	o := offset
+	dstOffset := int64(0)
 
 	cas.cache.ResetTTL(hash, time.Duration(cas.config.ObjectTtlS)*time.Second)
 
@@ -151,7 +149,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		// Check cache for chunk
 		value, found := cas.cache.Get(chunkKey)
 		if !found {
-			return nil, ErrContentNotFound
+			return ErrContentNotFound
 		}
 
 		v := value.(cacheValue)
@@ -167,18 +165,17 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64) ([]
 		end := start + readLength
 
 		if start < 0 || end <= start || end > int64(len(chunkBytes)) {
-			return nil, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
+			return fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		if _, err := buffer.Write(chunkBytes[start:end]); err != nil {
-			return nil, fmt.Errorf("failed to write to buffer: %v", err)
-		}
+		copy(dst[dstOffset:dstOffset+readLength], chunkBytes[start:end])
 
 		remainingLength -= readLength
 		o += readLength
+		dstOffset += readLength
 	}
 
-	return buffer.Bytes(), nil
+	return nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {

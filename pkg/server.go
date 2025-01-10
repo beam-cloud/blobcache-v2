@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,6 +22,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+const (
+	writeBufferSizeBytes     = 128 * 1024
+	getContentBufferPoolSize = 128
+	getContentBufferSize     = 256 * 1024
 )
 
 type CacheServiceOpts struct {
@@ -149,6 +156,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
+		grpc.WriteBufferSize(writeBufferSizeBytes),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -170,15 +178,42 @@ func (cs *CacheService) StartServer(port uint) error {
 	return nil
 }
 
+var getContentBufferPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, getContentBufferSize)
+		return &b
+	},
+}
+
+func init() {
+	for i := 0; i < getContentBufferPoolSize; i++ {
+		//lint:ignore SA6002 reason: pre-allocating buffers for performance
+		getContentBufferPool.Put(make([]byte, getContentBufferSize))
+	}
+}
+
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	content, err := cs.cas.Get(req.Hash, req.Offset, req.Length)
+	bufPtr := getContentBufferPool.Get().(*[]byte)
+	defer getContentBufferPool.Put(bufPtr)
+	dst := *bufPtr
+
+	if cap(dst) < int(req.Length) {
+		dst = make([]byte, req.Length)
+		*bufPtr = dst
+	}
+	dst = dst[:req.Length]
+
+	resp := &proto.GetContentResponse{Content: dst}
+	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
 	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
-	return &proto.GetContentResponse{Content: content, Ok: true}, nil
+
+	resp.Ok = true
+	return resp, nil
 }
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
