@@ -19,9 +19,9 @@ import (
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"github.com/google/uuid"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/status"
 )
 
@@ -158,7 +158,6 @@ func (cs *CacheService) StartServer(port uint) error {
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		grpc.RPCCompressor(&BrotliCompressor{}),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 

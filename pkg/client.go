@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
+	_ "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/metadata"
 	"tailscale.com/client/tailscale"
 )
@@ -160,7 +162,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
-		grpc.WithDefaultCallOptions(grpc.UseCompressor("brotli")),
+		grpc.WithDefaultCallOptions(grpc.UseCompressor(gzip.Name)),
 	}
 
 	if c.cfg.Token != "" {
