@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -136,7 +135,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	return nil
 }
 
-func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst *bytes.Buffer) error {
+func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) error {
 	remainingLength := length
 	o := offset
 
@@ -168,9 +167,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 			return fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
-		if _, err := dst.Write(chunkBytes[start:end]); err != nil {
-			return fmt.Errorf("failed to write to buffer: %v", err)
-		}
+		copy(dst[o:o+readLength], chunkBytes[start:end])
 
 		remainingLength -= readLength
 		o += readLength

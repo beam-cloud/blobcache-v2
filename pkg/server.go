@@ -171,8 +171,8 @@ func (cs *CacheService) StartServer(port uint) error {
 }
 
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	dst := bytes.NewBuffer(make([]byte, req.Length))
-	resp := &proto.GetContentResponse{Content: dst.Bytes()}
+	dst := make([]byte, req.Length)
+	resp := &proto.GetContentResponse{Content: dst}
 
 	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
@@ -181,6 +181,8 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 	}
 
 	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
+
+	resp.Ok = true
 	return resp, nil
 }
 
