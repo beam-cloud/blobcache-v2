@@ -169,10 +169,10 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 
 	buffer := make([]byte, len(dest))
 
-	// buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
-	// if err != nil {
-	// 	return nil, syscall.EIO
-	// }
+	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+	if err != nil {
+		return nil, syscall.EIO
+	}
 
 	nRead := copy(dest, buffer)
 	return fuse.ReadResultData(dest[:nRead]), fs.OK
