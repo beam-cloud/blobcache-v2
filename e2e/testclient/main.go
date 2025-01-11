@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"flag"
 	"io"
 	"log"
 	"os"
@@ -14,11 +14,20 @@ import (
 )
 
 var (
-	totalIterations int  = 3
-	checkHash       bool = false
+	totalIterations int
+	checkContent    bool
 )
 
+type TestResult struct {
+	ElapsedTime        float64
+	ContentCheckPassed bool
+}
+
 func main() {
+	flag.IntVar(&totalIterations, "iterations", 3, "Number of iterations to run the tests")
+	flag.BoolVar(&checkContent, "checkcontent", true, "Check the content hash after receiving data")
+	flag.Parse()
+
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v\n", err)
@@ -44,136 +53,190 @@ func main() {
 	hashBytes := sha256.Sum256(b)
 	fileHash := hex.EncodeToString(hashBytes[:])
 
-	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
-	var totalTime float64
-
-	var storedHashed string = ""
-	for i := 0; i < totalIterations; i++ {
-		chunks := make(chan []byte)
-
-		// Read file in chunks and dump into channel for StoreContent RPC calls
-		go func() {
-			file, err := os.Open(filePath)
-			if err != nil {
-				log.Fatalf("err: %v\n", err)
-			}
-			defer file.Close()
-
-			for {
-				buf := make([]byte, chunkSize)
-				n, err := file.Read(buf)
-
-				if err != nil && err != io.EOF {
-					log.Fatalf("err reading file: %v\n", err)
-				}
-
-				if n == 0 {
-					break
-				}
-
-				chunks <- buf[:n]
-			}
-
-			close(chunks)
-		}()
-
-		if storedHashed == "" {
-			hash, err := client.StoreContent(chunks)
-			if err != nil {
-				log.Fatalf("Unable to store content: %v\n", err)
-			}
-			storedHashed = hash
-		}
-
-		startTime := time.Now()
-		contentChan, err := client.GetContentStream(storedHashed, 0, int64(len(b)))
-		if err != nil {
-			log.Fatalf("Unable to get content stream: %v\n", err)
-		}
-
-		var content []byte
-		chunkQueue := make(chan []byte, 10) // Buffered channel to queue chunks
-		done := make(chan struct{})         // Channel to signal completion
-
-		// Goroutine to write chunks to file and accumulate content
-		go func() {
-			file, err := os.Create("output.bin")
-			if err != nil {
-				log.Fatalf("Unable to create output file: %v\n", err)
-			}
-			defer file.Close()
-
-			for chunk := range chunkQueue {
-				_, err := file.Write(chunk)
-				if err != nil {
-					log.Fatalf("Error writing chunk to file: %v\n", err)
-				}
-
-				content = append(content, chunk...) // Accumulate chunks
-			}
-			close(done)
-		}()
-
-		for {
-			chunk, ok := <-contentChan
-			if !ok {
-				break
-			}
-			chunkQueue <- chunk
-		}
-		close(chunkQueue) // Close the queue to signal no more chunks
-
-		<-done // Wait for the file writing to complete
-		elapsedTime := time.Since(startTime).Seconds()
-		totalTime += elapsedTime
-
-		if checkHash {
-			hashBytes := sha256.Sum256(content)
-			responseHash := hex.EncodeToString(hashBytes[:])
-
-			log.Printf("Initial file len: %d\n", len(b))
-			log.Printf("Response content len: %d\n", len(content))
-			log.Printf("Hash of initial file: %s\n", fileHash)
-			log.Printf("Hash of stored content: %s\n", storedHashed)
-			log.Printf("Hash of retrieved content: %s\n", responseHash)
-			log.Printf("Iteration %d: content length: %d, file length: %d, elapsed time: %f seconds\n", i+1, len(content), len(b), elapsedTime)
-
-			if len(content) != len(b) {
-				log.Fatalf("length mismatch: content len: %d, file len: %d\n", len(content), len(b))
-			}
-
-			// Direct byte comparison loop
-			mismatchFound := false
-			for i := range content {
-				if content[i] != b[i] {
-					log.Printf("Byte mismatch at position %d: content byte: %x, file byte: %x\n", i, content[i], b[i])
-					mismatchFound = true
-					break
-				}
-			}
-
-			if !mismatchFound {
-				log.Println("Direct byte comparison found no differences.")
-			} else {
-				log.Println("Direct byte comparison found differences.")
-			}
-
-			// Cross-check with bytes.Equal
-			if bytes.Equal(content, b) {
-				log.Println("bytes.Equal confirms the slices are equal.")
-			} else {
-				log.Println("bytes.Equal indicates the slices are not equal.")
-			}
-
-		}
+	hash, err := storeFile(client, filePath)
+	if err != nil {
+		log.Fatalf("Failed to store file: %v\n", err)
 	}
 
-	averageTime := totalTime / float64(totalIterations)
-	totalBytesReadMB := float64(len(b)*totalIterations) / (1024 * 1024)
-	mbPerSecond := totalBytesReadMB / totalTime
+	var totalStreamResult, totalGetContentResult TestResult
+	for i := 0; i < totalIterations; i++ {
+		log.Printf("Iteration %d\n", i)
 
-	log.Printf("Total time: %f seconds\n", totalTime)
-	log.Printf("Average time per iteration: %f seconds\n", averageTime)
+		// Call GetContentStream
+		log.Printf("TestGetContentStream - %v\n", hash)
+		streamResult, err := TestGetContentStream(client, hash, len(b), fileHash)
+		if err != nil {
+			log.Fatalf("TestGetContentStream failed: %v\n", err)
+		}
+		totalStreamResult.ElapsedTime += streamResult.ElapsedTime
+		totalStreamResult.ContentCheckPassed = totalStreamResult.ContentCheckPassed || streamResult.ContentCheckPassed
+		log.Printf("TestGetContentStream - %v\n", streamResult)
+
+		// Call GetContent
+		log.Printf("TestGetContent - %v\n", hash)
+		getContentResult, err := TestGetContent(client, hash, int64(len(b)), fileHash)
+		if err != nil {
+			log.Fatalf("TestGetContent failed: %v\n", err)
+		}
+		totalGetContentResult.ElapsedTime += getContentResult.ElapsedTime
+		totalGetContentResult.ContentCheckPassed = totalGetContentResult.ContentCheckPassed || getContentResult.ContentCheckPassed
+		log.Printf("TestGetContent - %v\n", getContentResult)
+	}
+
+	GenerateReport(totalStreamResult, totalGetContentResult, len(b), totalIterations)
+}
+
+func storeFile(client *blobcache.BlobCacheClient, filePath string) (string, error) {
+	chunks := make(chan []byte)
+	go func() {
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Fatalf("err: %v\n", err)
+		}
+		defer file.Close()
+
+		const chunkSize = 1024 * 1024 * 16 // 16MB chunks
+		for {
+			buf := make([]byte, chunkSize)
+			n, err := file.Read(buf)
+
+			if err != nil && err != io.EOF {
+				log.Fatalf("err reading file: %v\n", err)
+			}
+
+			if n == 0 {
+				break
+			}
+
+			chunks <- buf[:n]
+		}
+
+		close(chunks)
+	}()
+
+	hash, err := client.StoreContent(chunks)
+	if err != nil {
+		return "", err
+	}
+	return hash, nil
+}
+
+func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSize int, expectedHash string) (TestResult, error) {
+	contentCheckPassed := false
+
+	startTime := time.Now()
+	contentChan, err := client.GetContentStream(hash, 0, int64(fileSize))
+	if err != nil {
+		return TestResult{}, err
+	}
+
+	var contentStream []byte
+	chunkQueue := make(chan []byte, 10) // Buffered channel to queue chunks
+	done := make(chan struct{})         // Channel to signal completion
+
+	go func() {
+		file, err := os.Create("output_stream.bin")
+		if err != nil {
+			log.Fatalf("Unable to create output file: %v\n", err)
+		}
+		defer file.Close()
+
+		for chunk := range chunkQueue {
+			_, err := file.Write(chunk)
+			if err != nil {
+				log.Fatalf("Error writing chunk to file: %v\n", err)
+			}
+
+			contentStream = append(contentStream, chunk...) // Accumulate chunks
+		}
+		close(done)
+	}()
+
+	for {
+		chunk, ok := <-contentChan
+		if !ok {
+			break
+		}
+		chunkQueue <- chunk
+	}
+	close(chunkQueue) // Close the queue to signal no more chunks
+	<-done            // Wait for the file writing to complete
+
+	elapsedTime := time.Since(startTime).Seconds()
+
+	// Verify hash
+	if checkContent {
+		log.Printf("Verifying hash for GetContentStream\n")
+		hashBytes := sha256.Sum256(contentStream)
+		retrievedHash := hex.EncodeToString(hashBytes[:])
+		if retrievedHash != expectedHash {
+			log.Printf("Hash mismatch for GetContentStream: expected %s, got %s", expectedHash, retrievedHash)
+			contentCheckPassed = false
+		}
+		log.Printf("Hash verification for GetContentStream - %v\n", contentCheckPassed)
+	}
+
+	return TestResult{ElapsedTime: elapsedTime, ContentCheckPassed: contentCheckPassed}, nil
+}
+
+func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int64, expectedHash string) (TestResult, error) {
+	startTime := time.Now()
+	var content []byte
+	offset := int64(0)
+	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
+
+	for offset < fileSize {
+		end := offset + chunkSize
+		if end > fileSize {
+			end = fileSize
+		}
+
+		chunk, err := client.GetContent(hash, offset, end-offset)
+		if err != nil {
+			return TestResult{}, err
+		}
+		content = append(content, chunk...)
+		offset = end
+	}
+
+	elapsedTime := time.Since(startTime).Seconds()
+
+	// Verify hash
+	contentCheckPassed := false
+	if checkContent {
+		log.Printf("Verifying hash for GetContent\n")
+		hashBytes := sha256.Sum256(content)
+		retrievedHash := hex.EncodeToString(hashBytes[:])
+		if retrievedHash != expectedHash {
+			log.Printf("Hash mismatch for GetContent: expected %s, got %s", expectedHash, retrievedHash)
+			contentCheckPassed = false
+		}
+		log.Printf("Hash verification for GetContent - %v\n", contentCheckPassed)
+	}
+
+	return TestResult{ElapsedTime: elapsedTime, ContentCheckPassed: contentCheckPassed}, nil
+}
+
+func GenerateReport(streamResult, contentResult TestResult, fileSize, iterations int) {
+	averageTimeStream := streamResult.ElapsedTime / float64(iterations)
+	averageTimeContent := contentResult.ElapsedTime / float64(iterations)
+	totalBytesReadMB := float64(fileSize*iterations) / (1024 * 1024)
+	mbPerSecondStream := totalBytesReadMB / streamResult.ElapsedTime
+	mbPerSecondContent := totalBytesReadMB / contentResult.ElapsedTime
+
+	log.Printf("Total time for GetContentStream: %f seconds\n", streamResult.ElapsedTime)
+	log.Printf("Average time per iteration for GetContentStream: %f seconds\n", averageTimeStream)
+	log.Printf("Total time for GetContent: %f seconds\n", contentResult.ElapsedTime)
+	log.Printf("Average time per iteration for GetContent: %f seconds\n", averageTimeContent)
 	log.Printf("Total read: %.2f MB\n", totalBytesReadMB)
-	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
+	log.Printf("Average MB/s rate of reading (GetContentStream): %f\n", mbPerSecondStream)
+	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecondContent)
+
+	if checkContent {
+		if streamResult.ContentCheckPassed && contentResult.ContentCheckPassed {
+			log.Println("Content check passed for all iterations.")
+		} else {
+			log.Println("Content check failed for some iterations.")
+		}
+	}
 }
