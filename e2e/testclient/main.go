@@ -131,18 +131,12 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 	}
 
 	var contentStream []byte
-	chunkQueue := make(chan []byte, 10) // Buffered channel to queue chunks
+	chunkQueue := make(chan []byte, 20) // Buffered channel to queue chunks
 	done := make(chan struct{})         // Channel to signal completion
 
 	go func() {
-		file, err := os.Create("output_stream.bin")
-		if err != nil {
-			log.Fatalf("Unable to create output file: %v\n", err)
-		}
-		defer file.Close()
-
 		for chunk := range chunkQueue {
-			contentStream = append(contentStream, chunk...) // Accumulate chunks
+			contentStream = append(contentStream, chunk...)
 		}
 		close(done)
 	}()
@@ -155,13 +149,14 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 		chunkQueue <- chunk
 	}
 	close(chunkQueue) // Close the queue to signal no more chunks
-	<-done            // Wait for the file writing to complete
+	<-done
 
 	elapsedTime := time.Since(startTime).Seconds()
 
-	// Verify hash
+	// Verify received content's hash
 	if checkContent {
 		log.Printf("Verifying hash for GetContentStream\n")
+
 		hashBytes := sha256.Sum256(contentStream)
 		retrievedHash := hex.EncodeToString(hashBytes[:])
 		if retrievedHash != expectedHash {
@@ -180,7 +175,7 @@ func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int
 	startTime := time.Now()
 	var content []byte
 	offset := int64(0)
-	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
+	const chunkSize = 1024 * 128 // 128k chunks
 
 	for offset < fileSize {
 		end := offset + chunkSize
@@ -198,10 +193,11 @@ func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int
 
 	elapsedTime := time.Since(startTime).Seconds()
 
-	// Verify hash
+	// Verify received content's hash
 	contentCheckPassed := false
 	if checkContent {
 		log.Printf("Verifying hash for GetContent\n")
+
 		hashBytes := sha256.Sum256(content)
 		retrievedHash := hex.EncodeToString(hashBytes[:])
 		if retrievedHash != expectedHash {
