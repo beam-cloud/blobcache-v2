@@ -119,7 +119,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
 		n.log("Storing content from source with path: %s", sourcePath)
-		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		hash, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
@@ -131,8 +131,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 		if n.filesystem.Config.BlobFs.Prefetch {
 			log.Printf("Prefetching file: %s", sourcePath)
-			// TODO: stream file to a temp file in the container somewhere
-			// /tmp/cache/path/to/file
+			n.filesystem.PrefetchManager.GetPrefetchBuffer(hash)
 		}
 
 		out.Attr = *attr
@@ -172,6 +171,10 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:0]), fs.OK
+	}
+
+	if n.filesystem.Config.BlobFs.Prefetch {
+
 	}
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))

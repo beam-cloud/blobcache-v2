@@ -24,5 +24,6 @@ publish-chart:
 	helm push beam-blobcache-v2-chart-$(chartVersion).tgz oci://public.ecr.aws/n4e0e1y0
 	rm beam-blobcache-v2-chart-$(chartVersion).tgz
 
-testclient:
-	GOOS=linux GOARCH=amd64 go build -o bin/testclient e2e/testclient/main.go
+testclients:
+	GOOS=linux GOARCH=amd64 go build -o bin/throughput e2e/throughput/main.go
+	GOOS=linux GOARCH=amd64 go build -o bin/fs e2e/fs/main.go

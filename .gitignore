@@ -1,10 +1,13 @@
 *.tgz
 .DS_Store
 bin/blobcache
+bin/throughput
+bin/fs
 bin/testclient
 build.sh
 tmp/
 config.yaml
-e2e/testclient/testdata/*.bin
+e2e/throughput/testdata/*.bin
+e2e/fs/testdata/*.bin
 daemonset.yaml
 output.bin

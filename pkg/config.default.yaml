@@ -12,6 +12,7 @@ discoveryMode: metadata
 directIO: false
 options: []
 blobfs:
+  prefetch: false
   enabled: false
   mountPoint: /tmp/test
   maxBackgroundTasks: 512

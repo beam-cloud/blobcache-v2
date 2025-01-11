@@ -182,7 +182,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 	dirMeta, err := metadata.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
-		log.Printf("Root node metadata not found, creating it now...\n")
+		Logger.Infof("Root node metadata not found, creating it now...")
 
 		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Path: rootPath, Ino: 1, Mode: fuse.S_IFDIR | 0755}
 
