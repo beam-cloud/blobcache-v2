@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"net"
 	"sync"
@@ -22,6 +24,7 @@ import (
 
 const (
 	getContentRequestTimeout        = 30 * time.Second
+	getContentStreamRequestTimeout  = 600 * time.Second
 	storeContentRequestTimeout      = 300 * time.Second
 	closestHostTimeout              = 30 * time.Second
 	localClientCacheCleanupInterval = 5 * time.Second
@@ -511,4 +514,58 @@ func (c *BlobCacheClient) GetState() error {
 	}
 
 	return nil
+}
+
+func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, getContentStreamRequestTimeout)
+	contentChan := make(chan []byte)
+
+	go func() {
+		defer func() {
+			close(contentChan)
+		}()
+
+		defer cancel()
+
+		for attempt := 0; attempt < 3; attempt++ {
+			client, host, err := c.getGRPCClient(ctx, &ClientRequest{
+				rt:   ClientRequestTypeRetrieval,
+				hash: hash,
+			})
+			if err != nil {
+				log.Printf("Error getting content stream for %s: %v\n", hash, err)
+				return
+			}
+
+			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
+			if err != nil {
+				c.metadata.RemoveEntryLocation(ctx, hash, host)
+				c.mu.Lock()
+				delete(c.localHostCache, hash)
+				c.mu.Unlock()
+				continue
+			}
+
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					return
+				}
+
+				// If an unexpected error occurs, assume the content is no
+				// longer available on this host and remove entry from metadata
+				if err != nil || !resp.Ok {
+					c.metadata.RemoveEntryLocation(ctx, hash, host)
+					c.mu.Lock()
+					delete(c.localHostCache, hash)
+					c.mu.Unlock()
+					break
+				}
+
+				contentChan <- resp.Content
+			}
+		}
+	}()
+
+	return contentChan, nil
 }

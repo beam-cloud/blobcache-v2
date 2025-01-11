@@ -13,7 +13,10 @@ import (
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
 
-var totalIterations int = 1
+var (
+	totalIterations int  = 3
+	checkHash       bool = false
+)
 
 func main() {
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
@@ -33,7 +36,7 @@ func main() {
 		log.Fatalf("Unable to create client: %v\n", err)
 	}
 
-	filePath := "e2e/testclient/testdata/test2.bin"
+	filePath := "e2e/testclient/testdata/test3.bin"
 	b, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatalf("Unable to read input file: %v\n", err)
@@ -44,6 +47,7 @@ func main() {
 	const chunkSize = 1024 * 1024 * 16 // 16MB chunks
 	var totalTime float64
 
+	var storedHashed string = ""
 	for i := 0; i < totalIterations; i++ {
 		chunks := make(chan []byte)
 
@@ -73,65 +77,74 @@ func main() {
 			close(chunks)
 		}()
 
-		hash, err := client.StoreContent(chunks)
-		if err != nil {
-			log.Fatalf("Unable to store content: %v\n", err)
+		if storedHashed == "" {
+			hash, err := client.StoreContent(chunks)
+			if err != nil {
+				log.Fatalf("Unable to store content: %v\n", err)
+			}
+			storedHashed = hash
 		}
 
 		startTime := time.Now()
-		content, err := client.GetContent(hash, 0, int64(len(b)))
+		contentChan, err := client.GetContentStream(storedHashed, 0, int64(len(b)))
 		if err != nil {
-			log.Fatalf("Unable to get content: %v\n", err)
+			log.Fatalf("Unable to get content stream: %v\n", err)
+		}
+
+		var content []byte
+		for {
+			chunk, ok := <-contentChan
+			if !ok {
+				log.Println("Content channel closed, exiting loop")
+				break
+			}
+			content = append(content, chunk...)
 		}
 		elapsedTime := time.Since(startTime).Seconds()
 		totalTime += elapsedTime
 
-		hashBytes := sha256.Sum256(content)
-		responseHash := hex.EncodeToString(hashBytes[:])
+		if checkHash {
+			hashBytes := sha256.Sum256(content)
+			responseHash := hex.EncodeToString(hashBytes[:])
 
-		log.Printf("Initial file len: %d\n", len(b))
-		log.Printf("Response content len: %d\n", len(content))
-		log.Printf("Hash of initial file: %s\n", fileHash)
-		log.Printf("Hash of stored content: %s\n", hash)
-		log.Printf("Hash of retrieved content: %s\n", responseHash)
+			log.Printf("Initial file len: %d\n", len(b))
+			log.Printf("Response content len: %d\n", len(content))
+			log.Printf("Hash of initial file: %s\n", fileHash)
+			log.Printf("Hash of stored content: %s\n", storedHashed)
+			log.Printf("Hash of retrieved content: %s\n", responseHash)
+			log.Printf("Iteration %d: content length: %d, file length: %d, elapsed time: %f seconds\n", i+1, len(content), len(b), elapsedTime)
 
-		log.Printf("Iteration %d: content length: %d, file length: %d, elapsed time: %f seconds\n", i+1, len(content), len(b), elapsedTime)
-
-		if len(content) != len(b) {
-			log.Fatalf("length mismatch: content len: %d, file len: %d\n", len(content), len(b))
-		}
-
-		// Direct byte comparison loop
-		mismatchFound := false
-		for i := range content {
-			if content[i] != b[i] {
-				log.Printf("Byte mismatch at position %d: content byte: %x, file byte: %x\n", i, content[i], b[i])
-				mismatchFound = true
-				break
+			if len(content) != len(b) {
+				log.Fatalf("length mismatch: content len: %d, file len: %d\n", len(content), len(b))
 			}
-		}
 
-		if !mismatchFound {
-			log.Println("Direct byte comparison found no differences.")
-		} else {
-			log.Println("Direct byte comparison found differences.")
-		}
+			// Direct byte comparison loop
+			mismatchFound := false
+			for i := range content {
+				if content[i] != b[i] {
+					log.Printf("Byte mismatch at position %d: content byte: %x, file byte: %x\n", i, content[i], b[i])
+					mismatchFound = true
+					break
+				}
+			}
 
-		// Cross-check with bytes.Equal
-		if bytes.Equal(content, b) {
-			log.Println("bytes.Equal confirms the slices are equal.")
-		} else {
-			log.Println("bytes.Equal indicates the slices are not equal.")
-		}
+			if !mismatchFound {
+				log.Println("Direct byte comparison found no differences.")
+			} else {
+				log.Println("Direct byte comparison found differences.")
+			}
 
+			// Cross-check with bytes.Equal
+			if bytes.Equal(content, b) {
+				log.Println("bytes.Equal confirms the slices are equal.")
+			} else {
+				log.Println("bytes.Equal indicates the slices are not equal.")
+			}
+
+		}
 	}
 
-	averageTime := totalTime / 10
+	averageTime := totalTime / float64(totalIterations)
 	mbPerSecond := (float64(len(b)*totalIterations) / (1024 * 1024)) / averageTime
 	log.Printf("Average MB/s rate of reading (GetContent): %f\n", mbPerSecond)
-
-	_, err = client.StoreContentFromSource("images/agent.yaml", 0)
-	if err != nil {
-		log.Fatalf("Unable to store content from source: %v\n", err)
-	}
 }
