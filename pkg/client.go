@@ -293,19 +293,11 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 
 			for {
 				resp, err := stream.Recv()
-				if err != nil {
-					if err == io.EOF {
-						return
-					}
-
-					c.metadata.RemoveEntryLocation(ctx, hash, host)
-					c.mu.Lock()
-					delete(c.localHostCache, hash)
-					c.mu.Unlock()
-					break
+				if err == io.EOF {
+					return
 				}
 
-				if !resp.Ok {
+				if err != nil || !resp.Ok {
 					c.metadata.RemoveEntryLocation(ctx, hash, host)
 					c.mu.Lock()
 					delete(c.localHostCache, hash)

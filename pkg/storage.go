@@ -135,7 +135,7 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	return nil
 }
 
-func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) error {
+func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) (int64, error) {
 	remainingLength := length
 	o := offset
 	dstOffset := int64(0)
@@ -149,12 +149,12 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		// Check cache for chunk
 		value, found := cas.cache.Get(chunkKey)
 		if !found {
-			return ErrContentNotFound
+			return 0, ErrContentNotFound
 		}
 
 		v, ok := value.(cacheValue)
 		if !ok {
-			return nil, fmt.Errorf("unexpected cache value type")
+			return 0, fmt.Errorf("unexpected cache value type")
 		}
 
 		chunkBytes := v.Content
@@ -168,7 +168,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		end := start + readLength
 
 		if start < 0 || end <= start || end > int64(len(chunkBytes)) {
-			return fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
+			return 0, fmt.Errorf("invalid chunk boundaries: start %d, end %d, chunk size %d", start, end, len(chunkBytes))
 		}
 
 		copy(dst[dstOffset:dstOffset+readLength], chunkBytes[start:end])
@@ -178,7 +178,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		dstOffset += readLength
 	}
 
-	return nil
+	return dstOffset, nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {

@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	writeBufferSizeBytes     = 128 * 1024
-	getContentBufferPoolSize = 128
-	getContentBufferSize     = 256 * 1024
+	writeBufferSizeBytes      = 128 * 1024
+	getContentBufferPoolSize  = 128
+	getContentBufferSize      = 256 * 1024
+	getContentStreamChunkSize = 64 * 1024 * 1024 // 64MB
 )
 
 type CacheServiceOpts struct {
@@ -210,7 +211,7 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 	dst = dst[:req.Length]
 
 	resp := &proto.GetContentResponse{Content: dst}
-	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
+	_, err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
@@ -220,6 +221,37 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 
 	resp.Ok = true
 	return resp, nil
+}
+
+func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
+	const chunkSize = getContentStreamChunkSize
+	offset := req.Offset
+	dst := make([]byte, chunkSize)
+
+	for {
+		n, err := cs.cas.Get(req.Hash, offset, chunkSize, dst)
+		if err != nil {
+			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
+			return status.Errorf(codes.NotFound, "Content not found: %v", err)
+		}
+
+		Logger.Infof("GetContentStream - [%s] - %d bytes", req.Hash, n)
+		if err := stream.Send(&proto.GetContentResponse{
+			Ok:      true,
+			Content: dst[:n],
+		}); err != nil {
+			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
+		}
+
+		// Break if this is the last chunk
+		if n < chunkSize {
+			break
+		}
+
+		offset += int64(n)
+	}
+
+	return nil
 }
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
@@ -337,35 +369,4 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	go runtime.GC()
 
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
-}
-
-func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
-	const chunkSize = int64(1024 * 1024 * 64) // 64MB chunks
-	offset := req.Offset
-
-	for {
-		content, err := cs.cas.Get(req.Hash, offset, chunkSize)
-		if err != nil {
-			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
-			return status.Errorf(codes.NotFound, "Content not found: %v", err)
-		}
-
-		Logger.Infof("GetContentStream - [%s] - %d bytes", req.Hash, len(content))
-
-		if err := stream.Send(&proto.GetContentResponse{
-			Ok:      true,
-			Content: content,
-		}); err != nil {
-			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
-		}
-
-		// Break if this is the last chunk
-		if int64(len(content)) < chunkSize {
-			break
-		}
-
-		offset += int64(len(content))
-	}
-
-	return nil
 }
