@@ -142,11 +142,6 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 		defer file.Close()
 
 		for chunk := range chunkQueue {
-			_, err := file.Write(chunk)
-			if err != nil {
-				log.Fatalf("Error writing chunk to file: %v\n", err)
-			}
-
 			contentStream = append(contentStream, chunk...) // Accumulate chunks
 		}
 		close(done)
@@ -170,10 +165,12 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 		hashBytes := sha256.Sum256(contentStream)
 		retrievedHash := hex.EncodeToString(hashBytes[:])
 		if retrievedHash != expectedHash {
-			log.Printf("Hash mismatch for GetContentStream: expected %s, got %s", expectedHash, retrievedHash)
 			contentCheckPassed = false
+		} else {
+			contentCheckPassed = true
 		}
-		log.Printf("Hash verification for GetContentStream - %v\n", contentCheckPassed)
+
+		log.Printf("Calculated hash for GetContentStream: expected %s, got %s", expectedHash, retrievedHash)
 	}
 
 	return TestResult{ElapsedTime: elapsedTime, ContentCheckPassed: contentCheckPassed}, nil
@@ -208,10 +205,12 @@ func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int
 		hashBytes := sha256.Sum256(content)
 		retrievedHash := hex.EncodeToString(hashBytes[:])
 		if retrievedHash != expectedHash {
-			log.Printf("Hash mismatch for GetContent: expected %s, got %s", expectedHash, retrievedHash)
 			contentCheckPassed = false
+		} else {
+			contentCheckPassed = true
 		}
-		log.Printf("Hash verification for GetContent - %v\n", contentCheckPassed)
+
+		log.Printf("Calculated hash for GetContent: expected %s, got %s", expectedHash, retrievedHash)
 	}
 
 	return TestResult{ElapsedTime: elapsedTime, ContentCheckPassed: contentCheckPassed}, nil
