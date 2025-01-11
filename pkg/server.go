@@ -26,10 +26,10 @@ import (
 )
 
 const (
-	writeBufferSizeBytes      = 128 * 1024
-	getContentBufferPoolSize  = 128
-	getContentBufferSize      = 256 * 1024
-	getContentStreamChunkSize = 64 * 1024 * 1024 // 64MB
+	writeBufferSizeBytes      int   = 128 * 1024
+	getContentBufferPoolSize  int   = 128
+	getContentBufferSize      int64 = 256 * 1024
+	getContentStreamChunkSize int64 = 64 * 1024 * 1024 // 64MB
 )
 
 type CacheServiceOpts struct {
@@ -226,10 +226,16 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
 	const chunkSize = getContentStreamChunkSize
 	offset := req.Offset
-	dst := make([]byte, chunkSize)
+	remainingLength := req.Length
 
-	for {
-		n, err := cs.cas.Get(req.Hash, offset, chunkSize, dst)
+	for remainingLength > 0 {
+		currentChunkSize := chunkSize
+		if remainingLength < int64(chunkSize) {
+			currentChunkSize = remainingLength
+		}
+
+		dst := make([]byte, currentChunkSize)
+		n, err := cs.cas.Get(req.Hash, offset, currentChunkSize, dst)
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
 			return status.Errorf(codes.NotFound, "Content not found: %v", err)
@@ -244,11 +250,12 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 		}
 
 		// Break if this is the last chunk
-		if n < chunkSize {
+		if n < currentChunkSize {
 			break
 		}
 
 		offset += int64(n)
+		remainingLength -= int64(n)
 	}
 
 	return nil
