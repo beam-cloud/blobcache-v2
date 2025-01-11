@@ -21,7 +21,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
@@ -160,10 +159,6 @@ func (cs *CacheService) StartServer(port uint) error {
 		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.WriteBufferSize(writeBufferSizeBytes),
 		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    10 * time.Second,
-			Timeout: 20 * time.Second,
-		}),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
