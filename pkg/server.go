@@ -28,7 +28,7 @@ const (
 	writeBufferSizeBytes      int   = 128 * 1024
 	getContentBufferPoolSize  int   = 128
 	getContentBufferSize      int64 = 256 * 1024
-	getContentStreamChunkSize int64 = 64 * 1024 * 1024 // 64MB
+	getContentStreamChunkSize int64 = 32 * 1024 * 1024 // 32MB
 )
 
 type CacheServiceOpts struct {

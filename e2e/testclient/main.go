@@ -131,7 +131,7 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 	}
 
 	var contentStream []byte
-	chunkQueue := make(chan []byte, 20) // Buffered channel to queue chunks
+	chunkQueue := make(chan []byte, 50) // Buffered channel to queue chunks
 	done := make(chan struct{})         // Channel to signal completion
 
 	go func() {
