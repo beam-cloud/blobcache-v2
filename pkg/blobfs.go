@@ -67,12 +67,13 @@ type BlobFsSystemOpts struct {
 }
 
 type BlobFs struct {
-	ctx      context.Context
-	root     *FSNode
-	verbose  bool
-	Metadata *BlobCacheMetadata
-	Client   *BlobCacheClient
-	Config   BlobCacheConfig
+	ctx             context.Context
+	root            *FSNode
+	verbose         bool
+	Metadata        *BlobCacheMetadata
+	Client          *BlobCacheClient
+	Config          BlobCacheConfig
+	PrefetchManager *PrefetchManager
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
@@ -168,6 +169,11 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 		Config:   opts.Config,
 		Client:   opts.Client,
 		Metadata: metadata,
+	}
+
+	if opts.Config.BlobFs.Prefetch {
+		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config)
+		bfs.PrefetchManager.Start()
 	}
 
 	rootID := GenerateFsID("/")

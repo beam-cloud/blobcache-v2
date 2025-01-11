@@ -91,6 +91,7 @@ type RedisConfig struct {
 
 type BlobFsConfig struct {
 	Enabled            bool           `key:"enabled" json:"enabled"`
+	Prefetch           bool           `key:"prefetch" json:"prefetch"`
 	MountPoint         string         `key:"mountPoint" json:"mount_point"`
 	Sources            []SourceConfig `key:"sources" json:"sources"`
 	MaxBackgroundTasks int            `key:"maxBackgroundTasks" json:"max_background_tasks"`
