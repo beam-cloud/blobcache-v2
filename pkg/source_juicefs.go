@@ -21,7 +21,7 @@ func NewJuiceFsSource(config JuiceFSConfig) (Source, error) {
 }
 
 func (s *JuiceFsSource) Mount(localPath string) error {
-	Logger.Infof("JuiceFS filesystem mounting to: '%s'\n", localPath)
+	Logger.Infof("JuiceFS filesystem mounting to: '%s'", localPath)
 
 	cacheSize := strconv.FormatInt(s.config.CacheSize, 10)
 
@@ -126,6 +126,6 @@ func (s *JuiceFsSource) Unmount(localPath string) error {
 		return fmt.Errorf("error executing juicefs umount: %v, output: %s", err, string(output))
 	}
 
-	Logger.Infof("JuiceFS filesystem unmounted from: '%s'\n", localPath)
+	Logger.Infof("JuiceFS filesystem unmounted from: '%s'", localPath)
 	return nil
 }

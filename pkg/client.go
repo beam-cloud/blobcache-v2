@@ -382,7 +382,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 					}
 					defer c.metadata.RemoveClientLock(ctx, c.hostname, request.hash)
 
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s\n", entry.SourcePath)
+					Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
 					host, err = c.hostMap.Closest(closestHostTimeout)
 					if err != nil {
 						return nil, nil, err
@@ -402,7 +402,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 					}
 
 					if resp.Ok {
-						Logger.Infof("Content repopulated from source: %s\n", entry.SourcePath)
+						Logger.Infof("Content repopulated from source: %s", entry.SourcePath)
 						c.mu.Lock()
 						c.localHostCache[request.hash] = &localClientCache{
 							host:      host,
@@ -494,7 +494,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 		return "", err
 	}
 
-	Logger.Debugf("Elapsed time to send content: %v\n", time.Since(start))
+	Logger.Debugf("Elapsed time to send content: %v", time.Since(start))
 	return resp.Hash, nil
 }
 

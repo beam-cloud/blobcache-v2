@@ -30,7 +30,7 @@ func main() {
 
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v\n", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	cfg := configManager.GetConfig()
@@ -42,7 +42,7 @@ func main() {
 
 	client, err := blobcache.NewBlobCacheClient(ctx, cfg)
 	if err != nil {
-		log.Fatalf("Unable to create client: %v\n", err)
+		log.Fatalf("Unable to create client: %v", err)
 	}
 
 	filePath := "e2e/testclient/testdata/test3.bin"
@@ -101,7 +101,7 @@ func storeFile(client *blobcache.BlobCacheClient, filePath string) (string, erro
 			n, err := file.Read(buf)
 
 			if err != nil && err != io.EOF {
-				log.Fatalf("err reading file: %v\n", err)
+				log.Fatalf("err reading file: %v", err)
 			}
 
 			if n == 0 {
@@ -155,7 +155,7 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 
 	// Verify received content's hash
 	if checkContent {
-		log.Printf("Verifying hash for GetContentStream\n")
+		log.Printf("Verifying hash for GetContentStream")
 
 		hashBytes := sha256.Sum256(contentStream)
 		retrievedHash := hex.EncodeToString(hashBytes[:])

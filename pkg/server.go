@@ -81,11 +81,11 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		for _, sourceConfig := range cfg.BlobFs.Sources {
 			_, err := NewSource(sourceConfig)
 			if err != nil {
-				Logger.Errorf("Failed to configure content source: %+v\n", err)
+				Logger.Errorf("Failed to configure content source: %+v", err)
 				continue
 			}
 
-			Logger.Infof("Configured and mounted source: %+v\n", sourceConfig.FilesystemName)
+			Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
 		}
 	}
 
@@ -162,7 +162,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
+	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(localListener)
 	go s.Serve(tailscaleListener)

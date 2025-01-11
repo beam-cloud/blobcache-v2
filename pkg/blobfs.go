@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -78,7 +77,7 @@ type BlobFs struct {
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
 	mountPoint := opts.Config.BlobFs.MountPoint
-	Logger.Infof("Mounting to %s\n", mountPoint)
+	Logger.Infof("Mounting to %s", mountPoint)
 
 	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
 		err = os.MkdirAll(mountPoint, 0755)
@@ -188,7 +187,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
-			log.Fatalf("Unable to create blobfs root node dir metdata: %+v\n", err)
+			Logger.Fatalf("Unable to create blobfs root node dir metdata: %+v", err)
 		}
 	}
 

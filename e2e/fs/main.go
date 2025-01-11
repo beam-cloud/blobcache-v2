@@ -28,7 +28,7 @@ func main() {
 
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v\n", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	cfg := configManager.GetConfig()
@@ -40,7 +40,7 @@ func main() {
 
 	_, err = blobcache.NewBlobCacheClient(ctx, cfg)
 	if err != nil {
-		log.Fatalf("Unable to create client: %v\n", err)
+		log.Fatalf("Unable to create client: %v", err)
 	}
 
 	// Block until Ctrl+C (SIGINT) or SIGTERM is received
