@@ -25,9 +25,10 @@ import (
 )
 
 const (
-	writeBufferSizeBytes     = 128 * 1024
-	getContentBufferPoolSize = 128
-	getContentBufferSize     = 256 * 1024
+	writeBufferSizeBytes      int   = 128 * 1024
+	getContentBufferPoolSize  int   = 128
+	getContentBufferSize      int64 = 256 * 1024
+	getContentStreamChunkSize int64 = 32 * 1024 * 1024 // 32MB
 )
 
 type CacheServiceOpts struct {
@@ -157,6 +158,7 @@ func (cs *CacheService) StartServer(port uint) error {
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
 		grpc.WriteBufferSize(writeBufferSizeBytes),
+		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
@@ -204,23 +206,62 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 	dst = dst[:req.Length]
 
 	resp := &proto.GetContentResponse{Content: dst}
-	err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
+	_, err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
-	Logger.Debugf("Get - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
+	Logger.Debugf("Get[OK] - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
 
 	resp.Ok = true
 	return resp, nil
+}
+
+func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
+	const chunkSize = getContentStreamChunkSize
+	offset := req.Offset
+	remainingLength := req.Length
+	Logger.Infof("GetContentStream[ACK] - [%s] - %d bytes", req.Hash, remainingLength)
+
+	for remainingLength > 0 {
+		currentChunkSize := chunkSize
+		if remainingLength < int64(chunkSize) {
+			currentChunkSize = remainingLength
+		}
+
+		dst := make([]byte, currentChunkSize)
+		n, err := cs.cas.Get(req.Hash, offset, currentChunkSize, dst)
+		if err != nil {
+			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
+			return status.Errorf(codes.NotFound, "Content not found: %v", err)
+		}
+
+		Logger.Infof("GetContentStream[TX] - [%s] - %d bytes", req.Hash, n)
+		if err := stream.Send(&proto.GetContentResponse{
+			Ok:      true,
+			Content: dst[:n],
+		}); err != nil {
+			return status.Errorf(codes.Internal, "Failed to send content chunk: %v", err)
+		}
+
+		// Break if this is the last chunk
+		if n < currentChunkSize {
+			break
+		}
+
+		offset += int64(n)
+		remainingLength -= int64(n)
+	}
+
+	return nil
 }
 
 func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
 	content := buffer.Bytes()
 	size := buffer.Len()
 
-	Logger.Debugf("Store - rx (%d bytes)", size)
+	Logger.Infof("Store[ACK] (%d bytes)", size)
 
 	hashBytes := sha256.Sum256(content)
 	hash := hex.EncodeToString(hashBytes[:])
@@ -228,7 +269,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	// Store in local in-memory cache
 	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
 	if err != nil {
-		Logger.Infof("Store - [%s] - %v", hash, err)
+		Logger.Infof("Store[ERR] - [%s] - %v", hash, err)
 		return "", status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
@@ -236,12 +277,12 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
 		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
 		if err != nil {
-			Logger.Infof("Store - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
+			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
 			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
 		}
 	}
 
-	Logger.Infof("Store - [%s]", hash)
+	Logger.Infof("Store[OK] - [%s]", hash)
 	content = nil
 	return hash, nil
 }
@@ -257,14 +298,13 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 
 		if err != nil {
-			Logger.Infof("Store - error: %v", err)
+			Logger.Infof("Store[ERR] - error: %v", err)
 			return status.Errorf(codes.Unknown, "Received an error: %v", err)
 		}
 
-		Logger.Debugf("Store - rx chunk (%d bytes)", len(req.Content))
-
+		Logger.Debugf("Store[RX] - chunk (%d bytes)", len(req.Content))
 		if _, err := buffer.Write(req.Content); err != nil {
-			Logger.Debugf("Store - failed to write to buffer: %v", err)
+			Logger.Debugf("Store[ERR] - failed to write to buffer: %v", err)
 			return status.Errorf(codes.Internal, "Failed to write content to buffer: %v", err)
 		}
 	}
@@ -286,7 +326,6 @@ func (cs *CacheService) usagePct() float64 {
 }
 
 func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest) (*proto.GetStateResponse, error) {
-
 	return &proto.GetStateResponse{
 		Version:          BlobCacheVersion,
 		PrivateIpAddr:    cs.privateIpAddr,
@@ -296,17 +335,18 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
 	localPath := filepath.Join("/", req.SourcePath)
+	Logger.Infof("StoreFromContent[ACK] - [%s]", localPath)
 
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
-		Logger.Infof("StoreFromContent - source not found: %v", err)
+		Logger.Infof("StoreFromContent[ERR] - source not found: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
 	}
 
 	// Open the file
 	file, err := os.Open(localPath)
 	if err != nil {
-		Logger.Infof("StoreFromContent - error reading source: %v", err)
+		Logger.Infof("StoreFromContent[ERR] - error reading source: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
 	}
 	defer file.Close()
@@ -314,19 +354,19 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	var buffer bytes.Buffer
 
 	if _, err := io.Copy(&buffer, file); err != nil {
-		Logger.Infof("StoreFromContent - error copying source: %v", err)
+		Logger.Infof("StoreFromContent[ERR] - error copying source: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	// Store the content
 	hash, err := cs.store(ctx, &buffer, localPath, req.SourceOffset)
 	if err != nil {
-		Logger.Infof("StoreFromContent - error storing data in cache: %v", err)
+		Logger.Infof("StoreFromContent[ERR] - error storing data in cache: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, err
 	}
 
 	buffer.Reset()
-	Logger.Infof("StoreFromContent - [%s]", hash)
+	Logger.Infof("StoreFromContent[OK] - [%s]", hash)
 
 	// HOTFIX: Manually trigger garbage collection
 	go runtime.GC()

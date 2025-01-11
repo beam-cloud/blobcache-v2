@@ -7,3 +7,4 @@ tmp/
 config.yaml
 e2e/testclient/testdata/*.bin
 daemonset.yaml
+output.bin

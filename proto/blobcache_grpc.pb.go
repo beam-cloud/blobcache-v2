@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	BlobCache_GetContent_FullMethodName             = "/blobcache.BlobCache/GetContent"
+	BlobCache_GetContentStream_FullMethodName       = "/blobcache.BlobCache/GetContentStream"
 	BlobCache_StoreContent_FullMethodName           = "/blobcache.BlobCache/StoreContent"
 	BlobCache_StoreContentFromSource_FullMethodName = "/blobcache.BlobCache/StoreContentFromSource"
 	BlobCache_GetState_FullMethodName               = "/blobcache.BlobCache/GetState"
@@ -30,6 +31,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BlobCacheClient interface {
 	GetContent(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (*GetContentResponse, error)
+	GetContentStream(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (BlobCache_GetContentStreamClient, error)
 	StoreContent(ctx context.Context, opts ...grpc.CallOption) (BlobCache_StoreContentClient, error)
 	StoreContentFromSource(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
@@ -52,8 +54,40 @@ func (c *blobCacheClient) GetContent(ctx context.Context, in *GetContentRequest,
 	return out, nil
 }
 
+func (c *blobCacheClient) GetContentStream(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (BlobCache_GetContentStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &BlobCache_ServiceDesc.Streams[0], BlobCache_GetContentStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &blobCacheGetContentStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type BlobCache_GetContentStreamClient interface {
+	Recv() (*GetContentResponse, error)
+	grpc.ClientStream
+}
+
+type blobCacheGetContentStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *blobCacheGetContentStreamClient) Recv() (*GetContentResponse, error) {
+	m := new(GetContentResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *blobCacheClient) StoreContent(ctx context.Context, opts ...grpc.CallOption) (BlobCache_StoreContentClient, error) {
-	stream, err := c.cc.NewStream(ctx, &BlobCache_ServiceDesc.Streams[0], BlobCache_StoreContent_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &BlobCache_ServiceDesc.Streams[1], BlobCache_StoreContent_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +143,7 @@ func (c *blobCacheClient) GetState(ctx context.Context, in *GetStateRequest, opt
 // for forward compatibility
 type BlobCacheServer interface {
 	GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error)
+	GetContentStream(*GetContentRequest, BlobCache_GetContentStreamServer) error
 	StoreContent(BlobCache_StoreContentServer) error
 	StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
@@ -121,6 +156,9 @@ type UnimplementedBlobCacheServer struct {
 
 func (UnimplementedBlobCacheServer) GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetContent not implemented")
+}
+func (UnimplementedBlobCacheServer) GetContentStream(*GetContentRequest, BlobCache_GetContentStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetContentStream not implemented")
 }
 func (UnimplementedBlobCacheServer) StoreContent(BlobCache_StoreContentServer) error {
 	return status.Errorf(codes.Unimplemented, "method StoreContent not implemented")
@@ -160,6 +198,27 @@ func _BlobCache_GetContent_Handler(srv interface{}, ctx context.Context, dec fun
 		return srv.(BlobCacheServer).GetContent(ctx, req.(*GetContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_GetContentStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetContentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(BlobCacheServer).GetContentStream(m, &blobCacheGetContentStreamServer{stream})
+}
+
+type BlobCache_GetContentStreamServer interface {
+	Send(*GetContentResponse) error
+	grpc.ServerStream
+}
+
+type blobCacheGetContentStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *blobCacheGetContentStreamServer) Send(m *GetContentResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _BlobCache_StoreContent_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -245,6 +304,11 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetContentStream",
+			Handler:       _BlobCache_GetContentStream_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "StoreContent",
 			Handler:       _BlobCache_StoreContent_Handler,
