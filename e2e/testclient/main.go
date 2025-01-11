@@ -108,7 +108,8 @@ func main() {
 				if err != nil {
 					log.Fatalf("Error writing chunk to file: %v\n", err)
 				}
-				// content = append(content, chunk...) // Accumulate chunks into content
+
+				content = append(content, chunk...) // Accumulate chunks
 			}
 			close(done)
 		}()
