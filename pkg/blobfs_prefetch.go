@@ -31,12 +31,14 @@ func (pm *PrefetchManager) Start() {
 }
 
 // GetPrefetchBuffer returns an existing prefetch buffer if it exists, or nil.
-func (pm *PrefetchManager) GetPrefetchBuffer(hash string) *PrefetchBuffer {
+func (pm *PrefetchManager) GetPrefetchBuffer(hash string, fileSize uint64) *PrefetchBuffer {
 	if val, ok := pm.buffers.Load(hash); ok {
 		return val.(*PrefetchBuffer)
 	}
 
-	return nil
+	newBuffer := NewPrefetchBuffer(hash, fileSize, pm.config.BlobFs.Prefetch.MaxBufferSizeBytes)
+	pm.buffers.Store(hash, newBuffer)
+	return newBuffer
 }
 
 func (pm *PrefetchManager) evictIdleBuffers() {
@@ -48,7 +50,7 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 			pm.buffers.Range(func(key, value any) bool {
 				buffer := value.(*PrefetchBuffer)
 
-				if time.Since(buffer.lastRead) > PrefetchIdleTTL {
+				if buffer.IsStale() {
 					pm.buffers.Delete(key)
 				}
 
@@ -63,4 +65,30 @@ type PrefetchBuffer struct {
 	hash     string
 	buffer   []byte
 	lastRead time.Time
+	fileSize uint64
+}
+
+func NewPrefetchBuffer(hash string, fileSize uint64, bufferSize uint64) *PrefetchBuffer {
+	return &PrefetchBuffer{
+		hash:     hash,
+		lastRead: time.Now(),
+		buffer:   make([]byte, bufferSize),
+		fileSize: fileSize,
+	}
+}
+
+func (pb *PrefetchBuffer) IsStale() bool {
+	return time.Since(pb.lastRead) > PrefetchIdleTTL
+}
+
+func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
+	if offset+length > uint64(len(pb.buffer)) {
+		return nil
+	}
+
+	go func() {
+		pb.lastRead = time.Now()
+	}()
+
+	return pb.buffer[offset : offset+length]
 }

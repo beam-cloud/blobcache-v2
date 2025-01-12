@@ -103,8 +103,10 @@ type BlobFsConfig struct {
 }
 
 type BlobFsPrefetchConfig struct {
-	Enabled  bool `key:"enabled" json:"enabled"`
-	IdleTtlS int  `key:"idleTtlS" json:"idle_ttl_s"`
+	Enabled            bool   `key:"enabled" json:"enabled"`
+	IdleTtlS           int    `key:"idleTtlS" json:"idle_ttl_s"`
+	MinSizeBytes       uint64 `key:"minSizeBytes" json:"min_size_bytes"`
+	MaxBufferSizeBytes uint64 `key:"maxBufferSizeBytes" json:"max_buffer_size_bytes"`
 }
 
 type SourceConfig struct {

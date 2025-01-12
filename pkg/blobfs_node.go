@@ -119,7 +119,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
 		n.log("Storing content from source with path: %s", sourcePath)
-		hash, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
@@ -127,11 +127,6 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(sourcePath))
 		if err != nil {
 			return nil, syscall.ENOENT
-		}
-
-		if n.filesystem.Config.BlobFs.Prefetch.Enabled {
-			log.Printf("Prefetching file: %s", sourcePath)
-			n.filesystem.PrefetchManager.GetPrefetchBuffer(hash)
 		}
 
 		out.Attr = *attr
@@ -173,12 +168,13 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	log.Printf("Reading file: %s, offset: %v, length: %v", n.bfsNode.Path, off, len(dest))
-	if n.filesystem.Config.BlobFs.Prefetch.Enabled {
-		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash)
+	// If pre-fetch is enabled and the file is large enough, try to prefetch the file using streaming
+	if n.filesystem.Config.BlobFs.Prefetch.Enabled && n.bfsNode.Attr.Size >= n.filesystem.Config.BlobFs.Prefetch.MinSizeBytes {
+		log.Printf("Reading file: %s, offset: %v, length: %v", n.bfsNode.Path, off, len(dest))
+
+		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
 		if buffer != nil {
-			log.Printf("Prefetch buffer found for file: %s", n.bfsNode.Path)
-			return fuse.ReadResultData(buffer.buffer), fs.OK
+			return fuse.ReadResultData(buffer.GetRange(uint64(off), uint64(len(dest)))), fs.OK
 		}
 	}
 

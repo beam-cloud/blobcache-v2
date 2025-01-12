@@ -15,6 +15,8 @@ blobfs:
   prefetch:
     enabled: false
     idleTtlS: 60
+    minSizeBytes: 1048576 # 1MB
+    maxBufferSizeBytes: 134217728 # 128MB
   mountPoint: /tmp/test
   maxBackgroundTasks: 512
   maxReadAheadKB: 128
