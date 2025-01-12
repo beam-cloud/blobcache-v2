@@ -8,7 +8,7 @@ import (
 
 const (
 	PrefetchEvictionInterval = 30 * time.Second
-	PrefetchIdleTTL          = 60 * time.Second // e.g. remove buffer if no read in the past 60s
+	PrefetchIdleTTL          = 60 * time.Second // remove stale buffers if no read in the past 60s
 	PrefetchBufferSize       = 0                // if 0, no specific limit, just store all
 )
 
@@ -40,6 +40,22 @@ func (pm *PrefetchManager) GetPrefetchBuffer(hash string) *PrefetchBuffer {
 }
 
 func (pm *PrefetchManager) evictIdleBuffers() {
+	for {
+		select {
+		case <-pm.ctx.Done():
+			return
+		case <-time.After(PrefetchEvictionInterval):
+			pm.buffers.Range(func(key, value any) bool {
+				buffer := value.(*PrefetchBuffer)
+
+				if time.Since(buffer.lastRead) > PrefetchIdleTTL {
+					pm.buffers.Delete(key)
+				}
+
+				return true
+			})
+		}
+	}
 
 }
 

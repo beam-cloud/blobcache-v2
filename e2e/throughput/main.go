@@ -45,7 +45,7 @@ func main() {
 		log.Fatalf("Unable to create client: %v", err)
 	}
 
-	filePath := "e2e/testclient/testdata/test3.bin"
+	filePath := "e2e/throughput/testdata/test3.bin"
 	b, err := os.ReadFile(filePath)
 	if err != nil {
 		log.Fatalf("Unable to read input file: %v\n", err)

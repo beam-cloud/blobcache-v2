@@ -129,7 +129,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			return nil, syscall.ENOENT
 		}
 
-		if n.filesystem.Config.BlobFs.Prefetch {
+		if n.filesystem.Config.BlobFs.Prefetch.Enabled {
 			log.Printf("Prefetching file: %s", sourcePath)
 			n.filesystem.PrefetchManager.GetPrefetchBuffer(hash)
 		}
@@ -173,8 +173,13 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	if n.filesystem.Config.BlobFs.Prefetch {
-
+	log.Printf("Reading file: %s, offset: %v, length: %v", n.bfsNode.Path, off, len(dest))
+	if n.filesystem.Config.BlobFs.Prefetch.Enabled {
+		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash)
+		if buffer != nil {
+			log.Printf("Prefetch buffer found for file: %s", n.bfsNode.Path)
+			return fuse.ReadResultData(buffer.buffer), fs.OK
+		}
 	}
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
