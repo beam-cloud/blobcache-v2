@@ -222,7 +222,7 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 	const chunkSize = getContentStreamChunkSize
 	offset := req.Offset
 	remainingLength := req.Length
-	Logger.Infof("GetContentStream[ACK] - [%s] - %d bytes", req.Hash, remainingLength)
+	Logger.Infof("GetContentStream[ACK] - [%s] - offset=%d, length=%d, %d bytes", req.Hash, offset, req.Length, remainingLength)
 
 	for remainingLength > 0 {
 		currentChunkSize := chunkSize

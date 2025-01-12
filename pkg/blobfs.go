@@ -171,7 +171,7 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 	}
 
 	if opts.Config.BlobFs.Prefetch.Enabled {
-		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config)
+		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config, opts.Client)
 		bfs.PrefetchManager.Start()
 	}
 

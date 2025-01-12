@@ -2,6 +2,7 @@ package blobcache
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -16,13 +17,15 @@ type PrefetchManager struct {
 	ctx     context.Context
 	config  BlobCacheConfig
 	buffers sync.Map
+	client  *BlobCacheClient
 }
 
-func NewPrefetchManager(ctx context.Context, config BlobCacheConfig) *PrefetchManager {
+func NewPrefetchManager(ctx context.Context, config BlobCacheConfig, client *BlobCacheClient) *PrefetchManager {
 	return &PrefetchManager{
 		ctx:     ctx,
 		config:  config,
 		buffers: sync.Map{},
+		client:  client,
 	}
 }
 
@@ -30,13 +33,22 @@ func (pm *PrefetchManager) Start() {
 	go pm.evictIdleBuffers()
 }
 
-// GetPrefetchBuffer returns an existing prefetch buffer if it exists, or nil.
+// GetPrefetchBuffer returns an existing prefetch buffer if it exists, or nil
 func (pm *PrefetchManager) GetPrefetchBuffer(hash string, fileSize uint64) *PrefetchBuffer {
 	if val, ok := pm.buffers.Load(hash); ok {
 		return val.(*PrefetchBuffer)
 	}
 
-	newBuffer := NewPrefetchBuffer(hash, fileSize, pm.config.BlobFs.Prefetch.MaxBufferSizeBytes)
+	ctx, cancel := context.WithCancel(pm.ctx)
+	newBuffer := NewPrefetchBuffer(PrefetchOpts{
+		Ctx:        ctx,
+		CancelFunc: cancel,
+		Hash:       hash,
+		FileSize:   fileSize,
+		BufferSize: pm.config.BlobFs.Prefetch.MaxBufferSizeBytes,
+		Client:     pm.client,
+	})
+
 	pm.buffers.Store(hash, newBuffer)
 	return newBuffer
 }
@@ -51,6 +63,7 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 				buffer := value.(*PrefetchBuffer)
 
 				if buffer.IsStale() {
+					buffer.Stop()
 					pm.buffers.Delete(key)
 				}
 
@@ -62,33 +75,128 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 }
 
 type PrefetchBuffer struct {
-	hash     string
-	buffer   []byte
-	lastRead time.Time
-	fileSize uint64
+	ctx        context.Context
+	cancelFunc context.CancelFunc
+	hash       string
+	buffers    map[uint64]*internalBuffer
+	lastRead   time.Time
+	fileSize   uint64
+	client     *BlobCacheClient
+	mu         sync.Mutex
+	cond       *sync.Cond
+	bufferSize uint64
 }
 
-func NewPrefetchBuffer(hash string, fileSize uint64, bufferSize uint64) *PrefetchBuffer {
-	return &PrefetchBuffer{
-		hash:     hash,
-		lastRead: time.Now(),
-		buffer:   make([]byte, bufferSize),
-		fileSize: fileSize,
+type internalBuffer struct {
+	data       []byte
+	readLength uint64
+	fetching   bool
+}
+
+type PrefetchOpts struct {
+	Ctx        context.Context
+	CancelFunc context.CancelFunc
+	Hash       string
+	FileSize   uint64
+	BufferSize uint64
+	Offset     uint64
+	Client     *BlobCacheClient
+}
+
+func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
+	pb := &PrefetchBuffer{
+		ctx:        opts.Ctx,
+		cancelFunc: opts.CancelFunc,
+		hash:       opts.Hash,
+		lastRead:   time.Now(),
+		buffers:    make(map[uint64]*internalBuffer),
+		fileSize:   opts.FileSize,
+		client:     opts.Client,
+		bufferSize: opts.BufferSize,
 	}
+	pb.cond = sync.NewCond(&pb.mu)
+	return pb
 }
 
 func (pb *PrefetchBuffer) IsStale() bool {
 	return time.Since(pb.lastRead) > PrefetchIdleTTL
 }
 
-func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
-	if offset+length > uint64(len(pb.buffer)) {
-		return nil
+func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
+	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
+	if err != nil {
+		// TODO: do something with this error
+		return
 	}
 
-	go func() {
-		pb.lastRead = time.Now()
-	}()
+	defer log.Printf("Prefetch buffer fetched for: %s at offset %d", pb.hash, offset)
 
-	return pb.buffer[offset : offset+length]
+	bufferIndex := offset / bufferSize
+
+	// Initialize internal buffer for this chunk of the content
+	pb.mu.Lock()
+	state, exists := pb.buffers[bufferIndex]
+	if !exists {
+		state = &internalBuffer{
+			data:       make([]byte, 0, bufferSize),
+			fetching:   true,
+			readLength: 0,
+		}
+		pb.buffers[bufferIndex] = state
+	}
+	pb.mu.Unlock()
+
+	for {
+		select {
+		case <-pb.ctx.Done():
+			return
+		case chunk, ok := <-contentChan:
+			if !ok {
+				pb.mu.Lock()
+				state.fetching = false
+				state.readLength = uint64(len(state.data))
+				pb.cond.Broadcast()
+				pb.mu.Unlock()
+				return
+			}
+
+			pb.mu.Lock()
+			state.data = append(state.data, chunk...)
+			state.readLength = uint64(len(state.data))
+			pb.cond.Broadcast()
+			pb.mu.Unlock()
+		}
+	}
+}
+
+func (pb *PrefetchBuffer) Stop() {
+	pb.cancelFunc()
+}
+
+func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	bufferSize := pb.bufferSize
+	bufferIndex := offset / bufferSize
+	bufferOffset := offset % bufferSize
+
+	for {
+		state, exists := pb.buffers[bufferIndex]
+
+		// Initiate a fetch operation if the buffer does not exist
+		if !exists {
+			go pb.fetch(bufferIndex*bufferSize, bufferSize)
+		} else if state.readLength >= bufferOffset+length {
+			go func() {
+				pb.lastRead = time.Now()
+			}()
+
+			// Calculate the relative offset within the buffer
+			relativeOffset := offset - (bufferIndex * bufferSize)
+			return state.data[relativeOffset : relativeOffset+length]
+		}
+
+		pb.cond.Wait() // Wait for more data to be available
+	}
 }
