@@ -2,7 +2,6 @@ package blobcache
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 )
@@ -11,6 +10,7 @@ const (
 	PrefetchEvictionInterval = 30 * time.Second
 	PrefetchIdleTTL          = 60 * time.Second // remove stale buffers if no read in the past 60s
 	PrefetchBufferSize       = 0                // if 0, no specific limit, just store all
+	PreemptiveFetchThreshold = 32 * 1024 * 1024 // 32MB
 )
 
 type PrefetchManager struct {
@@ -123,27 +123,30 @@ func (pb *PrefetchBuffer) IsStale() bool {
 }
 
 func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
-	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
-	if err != nil {
-		// TODO: do something with this error
-		return
-	}
-
-	defer log.Printf("Prefetch buffer fetched for: %s at offset %d", pb.hash, offset)
-
 	bufferIndex := offset / bufferSize
 
 	// Initialize internal buffer for this chunk of the content
 	pb.mu.Lock()
-	state, exists := pb.buffers[bufferIndex]
-	if !exists {
-		state = &internalBuffer{
-			data:       make([]byte, 0, bufferSize),
-			fetching:   true,
-			readLength: 0,
-		}
-		pb.buffers[bufferIndex] = state
+	_, exists := pb.buffers[bufferIndex]
+	if exists {
+		pb.mu.Unlock()
+		return
 	}
+
+	state := &internalBuffer{
+		data:       make([]byte, 0, bufferSize),
+		fetching:   true,
+		readLength: 0,
+	}
+	pb.buffers[bufferIndex] = state
+
+	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
+	if err != nil {
+		pb.mu.Unlock()
+		// TODO: do something with this error
+		return
+	}
+
 	pb.mu.Unlock()
 
 	for {
@@ -188,12 +191,19 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 		if !exists {
 			go pb.fetch(bufferIndex*bufferSize, bufferSize)
 		} else if state.readLength >= bufferOffset+length {
-			go func() {
-				pb.lastRead = time.Now()
-			}()
+			pb.lastRead = time.Now()
 
 			// Calculate the relative offset within the buffer
 			relativeOffset := offset - (bufferIndex * bufferSize)
+
+			// Pre-emptively start fetching the next buffer if within the threshold
+			if state.readLength-relativeOffset <= PreemptiveFetchThreshold {
+				nextBufferIndex := bufferIndex + 1
+				if _, nextExists := pb.buffers[nextBufferIndex]; !nextExists {
+					go pb.fetch(nextBufferIndex*bufferSize, bufferSize)
+				}
+			}
+
 			return state.data[relativeOffset : relativeOffset+length]
 		}
 

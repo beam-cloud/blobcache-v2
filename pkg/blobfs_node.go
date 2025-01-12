@@ -3,7 +3,6 @@ package blobcache
 import (
 	"context"
 	"fmt"
-	"log"
 	"path"
 	"strings"
 	"syscall"
@@ -170,8 +169,7 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 
 	// If pre-fetch is enabled and the file is large enough, try to prefetch the file using streaming
 	if n.filesystem.Config.BlobFs.Prefetch.Enabled && n.bfsNode.Attr.Size >= n.filesystem.Config.BlobFs.Prefetch.MinSizeBytes {
-		log.Printf("Reading file: %s, offset: %v, length: %v", n.bfsNode.Path, off, len(dest))
-
+		// log.Printf("Reading file: %s, offset: %v, length: %v", n.bfsNode.Path, off, len(dest))
 		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
 		if buffer != nil {
 			return fuse.ReadResultData(buffer.GetRange(uint64(off), uint64(len(dest)))), fs.OK
