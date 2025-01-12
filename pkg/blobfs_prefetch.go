@@ -177,19 +177,20 @@ func (pb *PrefetchBuffer) Stop() {
 }
 
 func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
-	pb.mu.Lock()
-	defer pb.mu.Unlock()
-
 	bufferSize := pb.bufferSize
 	bufferIndex := offset / bufferSize
 	bufferOffset := offset % bufferSize
 
-	for {
+	tryGetDataRange := func() ([]byte, bool) {
+		pb.mu.Lock()
+		defer pb.mu.Unlock()
+
 		state, exists := pb.buffers[bufferIndex]
 
 		// Initiate a fetch operation if the buffer does not exist
 		if !exists {
 			go pb.fetch(bufferIndex*bufferSize, bufferSize)
+			return nil, false
 		} else if state.readLength >= bufferOffset+length {
 			pb.lastRead = time.Now()
 
@@ -204,9 +205,16 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 				}
 			}
 
-			return state.data[relativeOffset : relativeOffset+length]
+			return state.data[relativeOffset : relativeOffset+length], true
 		}
 
 		pb.cond.Wait() // Wait for more data to be available
+		return nil, false
+	}
+
+	for {
+		if data, ready := tryGetDataRange(); ready {
+			return data
+		}
 	}
 }
