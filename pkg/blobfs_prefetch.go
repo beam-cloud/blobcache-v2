@@ -228,10 +228,9 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 		segmentSize := uint64(len(segment.data))
 		segment.data = nil
 		delete(pb.segments, index)
-		pb.cond.Broadcast()
 		pb.manager.decrementPrefetchSize(segmentSize)
+		pb.cond.Broadcast()
 		pb.mu.Unlock()
-
 	}
 
 	return unused
