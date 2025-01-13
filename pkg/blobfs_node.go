@@ -12,13 +12,14 @@ import (
 )
 
 type BlobFsNode struct {
-	Path   string
-	ID     string
-	PID    string
-	Name   string
-	Target string
-	Hash   string
-	Attr   fuse.Attr
+	Path     string
+	ID       string
+	PID      string
+	Name     string
+	Target   string
+	Hash     string
+	Attr     fuse.Attr
+	Prefetch *bool
 }
 type FSNode struct {
 	fs.Inode
@@ -94,13 +95,14 @@ func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fu
 	// Create a new Inode on lookup
 	node := n.NewInode(ctx,
 		&FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
-			Path:   metadata.Path,
-			ID:     metadata.ID,
-			PID:    metadata.PID,
-			Name:   metadata.Name,
-			Hash:   metadata.Hash,
-			Attr:   attr,
-			Target: "",
+			Path:     metadata.Path,
+			ID:       metadata.ID,
+			PID:      metadata.PID,
+			Name:     metadata.Name,
+			Hash:     metadata.Hash,
+			Attr:     attr,
+			Target:   "",
+			Prefetch: nil,
 		}, attr: attr},
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino, Gen: metadata.Gen},
 	)
@@ -127,9 +129,6 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
-
-		// TODO: stream file to a temp file in the container somewhere
-		// /tmp/cache/path/to/file
 
 		out.Attr = *attr
 		return node, fs.OK
@@ -162,12 +161,47 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	return nil, 0, fs.OK
 }
 
+func (n *FSNode) shouldPrefetch(node *BlobFsNode) bool {
+	if node.Prefetch != nil {
+		return *node.Prefetch
+	}
+
+	if !n.filesystem.Config.BlobFs.Prefetch.Enabled {
+		return false
+	}
+
+	if n.bfsNode.Attr.Size < n.filesystem.Config.BlobFs.Prefetch.MinFileSizeBytes {
+		return false
+	}
+
+	for _, ext := range n.filesystem.Config.BlobFs.Prefetch.IgnoreFileExt {
+		if strings.HasSuffix(node.Name, ext) {
+			return false
+		}
+	}
+
+	prefetch := true
+	node.Prefetch = &prefetch
+	return true
+}
+
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n.log("Read called with offset: %v", off)
 
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:0]), fs.OK
+	}
+
+	// Attempt to prefetch the file
+	if n.shouldPrefetch(n.bfsNode) {
+		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
+		if buffer != nil {
+			data, err := buffer.GetRange(uint64(off), uint64(len(dest)))
+			if err == nil {
+				return fuse.ReadResultData(data), fs.OK
+			}
+		}
 	}
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))

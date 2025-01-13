@@ -12,7 +12,14 @@ discoveryMode: metadata
 directIO: false
 options: []
 blobfs:
-  enabled: false
+  prefetch:
+    enabled: false
+    idleTtlS: 60
+    minFileSizeBytes: 1048576 # 1MB
+    windowSizeBytes: 134217728 # 128MB
+    dataTimeoutS: 30
+    ignoreFileExt:
+      - .clip
   mountPoint: /tmp/test
   maxBackgroundTasks: 512
   maxReadAheadKB: 128

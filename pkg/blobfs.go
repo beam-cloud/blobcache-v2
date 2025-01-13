@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -67,17 +66,18 @@ type BlobFsSystemOpts struct {
 }
 
 type BlobFs struct {
-	ctx      context.Context
-	root     *FSNode
-	verbose  bool
-	Metadata *BlobCacheMetadata
-	Client   *BlobCacheClient
-	Config   BlobCacheConfig
+	ctx             context.Context
+	root            *FSNode
+	verbose         bool
+	Metadata        *BlobCacheMetadata
+	Client          *BlobCacheClient
+	Config          BlobCacheConfig
+	PrefetchManager *PrefetchManager
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
 	mountPoint := opts.Config.BlobFs.MountPoint
-	Logger.Infof("Mounting to %s\n", mountPoint)
+	Logger.Infof("Mounting to %s", mountPoint)
 
 	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
 		err = os.MkdirAll(mountPoint, 0755)
@@ -170,19 +170,24 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 		Metadata: metadata,
 	}
 
+	if opts.Config.BlobFs.Prefetch.Enabled {
+		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config, opts.Client)
+		bfs.PrefetchManager.Start()
+	}
+
 	rootID := GenerateFsID("/")
 	rootPID := "" // Root node has no parent
 	rootPath := "/"
 
 	dirMeta, err := metadata.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
-		log.Printf("Root node metadata not found, creating it now...\n")
+		Logger.Infof("Root node metadata not found, creating it now...")
 
 		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Path: rootPath, Ino: 1, Mode: fuse.S_IFDIR | 0755}
 
 		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
-			log.Fatalf("Unable to create blobfs root node dir metdata: %+v\n", err)
+			Logger.Fatalf("Unable to create blobfs root node dir metdata: %+v", err)
 		}
 	}
 

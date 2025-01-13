@@ -28,7 +28,7 @@ const (
 	writeBufferSizeBytes      int   = 128 * 1024
 	getContentBufferPoolSize  int   = 128
 	getContentBufferSize      int64 = 256 * 1024
-	getContentStreamChunkSize int64 = 32 * 1024 * 1024 // 32MB
+	getContentStreamChunkSize int64 = 16 * 1024 * 1024 // 16MB
 )
 
 type CacheServiceOpts struct {
@@ -81,11 +81,11 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		for _, sourceConfig := range cfg.BlobFs.Sources {
 			_, err := NewSource(sourceConfig)
 			if err != nil {
-				Logger.Errorf("Failed to configure content source: %+v\n", err)
+				Logger.Errorf("Failed to configure content source: %+v", err)
 				continue
 			}
 
-			Logger.Infof("Configured and mounted source: %+v\n", sourceConfig.FilesystemName)
+			Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
 		}
 	}
 
@@ -162,7 +162,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v\n", cs.hostname, addr, cs.cfg)
+	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(localListener)
 	go s.Serve(tailscaleListener)
@@ -222,7 +222,7 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 	const chunkSize = getContentStreamChunkSize
 	offset := req.Offset
 	remainingLength := req.Length
-	Logger.Infof("GetContentStream[ACK] - [%s] - %d bytes", req.Hash, remainingLength)
+	Logger.Infof("GetContentStream[ACK] - [%s] - offset=%d, length=%d, %d bytes", req.Hash, offset, req.Length, remainingLength)
 
 	for remainingLength > 0 {
 		currentChunkSize := chunkSize
@@ -235,6 +235,10 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
 			return status.Errorf(codes.NotFound, "Content not found: %v", err)
+		}
+
+		if n == 0 {
+			break
 		}
 
 		Logger.Infof("GetContentStream[TX] - [%s] - %d bytes", req.Hash, n)

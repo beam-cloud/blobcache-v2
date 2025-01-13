@@ -48,7 +48,7 @@ func (s *MountPointSource) Mount(localPath string) error {
 		}
 	}()
 
-	Logger.Infof("Mountpoint filesystem is being mounted to: '%s'\n", localPath)
+	Logger.Infof("Mountpoint filesystem is being mounted to: '%s'", localPath)
 	return nil
 }
 

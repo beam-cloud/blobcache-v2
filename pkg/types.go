@@ -90,15 +90,25 @@ type RedisConfig struct {
 }
 
 type BlobFsConfig struct {
-	Enabled            bool           `key:"enabled" json:"enabled"`
-	MountPoint         string         `key:"mountPoint" json:"mount_point"`
-	Sources            []SourceConfig `key:"sources" json:"sources"`
-	MaxBackgroundTasks int            `key:"maxBackgroundTasks" json:"max_background_tasks"`
-	MaxWriteKB         int            `key:"maxWriteKB" json:"max_write_kb"`
-	MaxReadAheadKB     int            `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
-	DirectMount        bool           `key:"directMount" json:"direct_mount"`
-	DirectIO           bool           `key:"directIO" json:"direct_io"`
-	Options            []string       `key:"options" json:"options"`
+	Enabled            bool                 `key:"enabled" json:"enabled"`
+	Prefetch           BlobFsPrefetchConfig `key:"prefetch" json:"prefetch"`
+	MountPoint         string               `key:"mountPoint" json:"mount_point"`
+	Sources            []SourceConfig       `key:"sources" json:"sources"`
+	MaxBackgroundTasks int                  `key:"maxBackgroundTasks" json:"max_background_tasks"`
+	MaxWriteKB         int                  `key:"maxWriteKB" json:"max_write_kb"`
+	MaxReadAheadKB     int                  `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
+	DirectMount        bool                 `key:"directMount" json:"direct_mount"`
+	DirectIO           bool                 `key:"directIO" json:"direct_io"`
+	Options            []string             `key:"options" json:"options"`
+}
+
+type BlobFsPrefetchConfig struct {
+	Enabled          bool     `key:"enabled" json:"enabled"`
+	MinFileSizeBytes uint64   `key:"minFileSizeBytes" json:"min_file_size_bytes"`
+	IdleTtlS         int      `key:"idleTtlS" json:"idle_ttl_s"`
+	WindowSizeBytes  uint64   `key:"windowSizeBytes" json:"window_size_bytes"`
+	IgnoreFileExt    []string `key:"ignoreFileExt" json:"ignore_file_ext"`
+	DataTimeoutS     int      `key:"dataTimeoutS" json:"data_timeout_s"`
 }
 
 type SourceConfig struct {

@@ -10,7 +10,7 @@ import (
 func main() {
 	configManager, err := blobcache.NewConfigManager[blobcache.BlobCacheConfig]()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v\n", err)
+		log.Fatalf("Failed to load config: %v", err)
 	}
 
 	ctx := context.Background()
