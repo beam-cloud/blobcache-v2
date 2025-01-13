@@ -8,7 +8,7 @@ import (
 
 const (
 	prefetchEvictionInterval      = 10 * time.Second
-	prefetchIdleTTL               = 10 * time.Second // remove stale buffers if no read in the past 60s
+	prefetchSegmentIdleTTL        = 30 * time.Second // remove stale buffers if no read in the past 60s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
@@ -95,6 +95,7 @@ type segment struct {
 	data       []byte
 	readLength uint64
 	lastRead   time.Time
+	fetching   bool
 }
 
 type PrefetchOpts struct {
@@ -137,6 +138,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		index:      bufferIndex,
 		data:       make([]byte, 0, bufferSize),
 		readLength: 0,
+		lastRead:   time.Now(),
+		fetching:   true,
 	}
 	pb.segments[bufferIndex] = s
 
@@ -156,6 +159,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		case chunk, ok := <-contentChan:
 			if !ok {
 				pb.mu.Lock()
+				s.fetching = false
+				s.lastRead = time.Now()
 				pb.cond.Broadcast()
 				pb.mu.Unlock()
 				return
@@ -176,7 +181,7 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 
 	pb.mu.Lock()
 	for index, segment := range pb.segments {
-		if time.Since(segment.lastRead) > prefetchIdleTTL {
+		if time.Since(segment.lastRead) > prefetchSegmentIdleTTL && !segment.fetching {
 			indicesToDelete = append(indicesToDelete, index)
 		} else {
 			unused = false
@@ -186,6 +191,7 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 
 	for _, index := range indicesToDelete {
 		pb.mu.Lock()
+		Logger.Debugf("Evicting segment %s-%d", pb.hash, index)
 		delete(pb.segments, index)
 		pb.cond.Broadcast()
 		pb.mu.Unlock()
