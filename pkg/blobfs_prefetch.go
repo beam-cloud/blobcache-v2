@@ -8,7 +8,7 @@ import (
 
 const (
 	prefetchEvictionInterval      = 30 * time.Second
-	prefetchIdleTTL               = 60 * time.Second // remove stale buffers if no read in the past 60s
+	prefetchIdleTTL               = 10 * time.Second // remove stale buffers if no read in the past 60s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
@@ -61,8 +61,12 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 			pm.buffers.Range(func(key, value any) bool {
 				buffer := value.(*PrefetchBuffer)
 
-				if buffer.IsStale() {
-					buffer.Stop()
+				// If no reads have happened in any segments in the buffer
+				// stop any fetch operations and clear the buffer so it can
+				// be garbage collected
+				unused := buffer.evictIdle()
+				if unused {
+					buffer.Clear()
 					pm.buffers.Delete(key)
 				}
 
@@ -87,8 +91,10 @@ type PrefetchBuffer struct {
 }
 
 type segment struct {
+	index      uint64
 	data       []byte
 	readLength uint64
+	lastRead   time.Time
 }
 
 type PrefetchOpts struct {
@@ -107,17 +113,13 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 		cancelFunc:  opts.CancelFunc,
 		hash:        opts.Hash,
 		lastRead:    time.Now(),
-		segments:    make(map[uint64]*segment),
 		fileSize:    opts.FileSize,
 		client:      opts.Client,
+		segments:    make(map[uint64]*segment),
 		segmentSize: opts.SegmentSize,
 	}
 	pb.cond = sync.NewCond(&pb.mu)
 	return pb
-}
-
-func (pb *PrefetchBuffer) IsStale() bool {
-	return time.Since(pb.lastRead) > prefetchIdleTTL
 }
 
 func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
@@ -132,6 +134,7 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	}
 
 	s := &segment{
+		index:      bufferIndex,
 		data:       make([]byte, 0, bufferSize),
 		readLength: 0,
 	}
@@ -167,8 +170,35 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	}
 }
 
-func (pb *PrefetchBuffer) Stop() {
-	pb.cancelFunc()
+func (pb *PrefetchBuffer) evictIdle() bool {
+	unused := true
+	var indicesToDelete []uint64
+
+	pb.mu.Lock()
+	for index, segment := range pb.segments {
+		if time.Since(segment.lastRead) > prefetchIdleTTL {
+			indicesToDelete = append(indicesToDelete, index)
+		} else {
+			unused = false
+		}
+	}
+	pb.mu.Unlock()
+
+	for _, index := range indicesToDelete {
+		pb.mu.Lock()
+		delete(pb.segments, index)
+		pb.mu.Unlock()
+	}
+
+	return unused
+}
+
+func (pb *PrefetchBuffer) Clear() {
+	pb.cancelFunc() // Stop any fetch operations
+
+	pb.mu.Lock()
+	pb.segments = make(map[uint64]*segment) // Reinitialize the map to clear all entries
+	pb.mu.Unlock()
 }
 
 func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
@@ -208,7 +238,7 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 		go pb.fetch(bufferIndex*pb.segmentSize, pb.segmentSize)
 		return nil, false
 	} else if segment.readLength > bufferOffset {
-		pb.lastRead = time.Now()
+		segment.lastRead = time.Now()
 
 		// Calculate the relative offset within the buffer
 		relativeOffset := offset - (bufferIndex * pb.segmentSize)
