@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	prefetchEvictionInterval = 30 * time.Second
-	prefetchIdleTTL          = 60 * time.Second // remove stale buffers if no read in the past 60s
-	preemptiveFetchThreshold = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
+	prefetchEvictionInterval      = 30 * time.Second
+	prefetchIdleTTL               = 60 * time.Second // remove stale buffers if no read in the past 60s
+	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
 type PrefetchManager struct {
@@ -216,7 +216,7 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 		readLength := min(int64(length), int64(availableLength))
 
 		// Pre-emptively start fetching the next buffer if within the threshold
-		if segment.readLength-relativeOffset <= preemptiveFetchThreshold {
+		if segment.readLength-relativeOffset <= preemptiveFetchThresholdBytes {
 			nextBufferIndex := bufferIndex + 1
 			if _, nextExists := pb.segments[nextBufferIndex]; !nextExists {
 				go pb.fetch(nextBufferIndex*pb.segmentSize, pb.segmentSize)
