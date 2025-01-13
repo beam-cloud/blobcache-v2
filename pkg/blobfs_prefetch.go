@@ -80,17 +80,18 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 }
 
 type PrefetchBuffer struct {
-	ctx         context.Context
-	cancelFunc  context.CancelFunc
-	hash        string
-	segments    map[uint64]*segment
-	segmentSize uint64
-	lastRead    time.Time
-	fileSize    uint64
-	client      *BlobCacheClient
-	mu          sync.Mutex
-	cond        *sync.Cond
-	dataTimeout time.Duration
+	ctx               context.Context
+	cancelFunc        context.CancelFunc
+	hash              string
+	segments          map[uint64]*segment
+	segmentSize       uint64
+	lastRead          time.Time
+	fileSize          uint64
+	client            *BlobCacheClient
+	mu                sync.Mutex
+	cond              *sync.Cond
+	dataTimeout       time.Duration
+	totalPrefetchSize uint64
 }
 
 type segment struct {
@@ -102,27 +103,29 @@ type segment struct {
 }
 
 type PrefetchOpts struct {
-	Ctx         context.Context
-	CancelFunc  context.CancelFunc
-	Hash        string
-	FileSize    uint64
-	SegmentSize uint64
-	Offset      uint64
-	Client      *BlobCacheClient
-	DataTimeout time.Duration
+	Ctx               context.Context
+	CancelFunc        context.CancelFunc
+	Hash              string
+	FileSize          uint64
+	SegmentSize       uint64
+	Offset            uint64
+	Client            *BlobCacheClient
+	DataTimeout       time.Duration
+	TotalPrefetchSize uint64
 }
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 	pb := &PrefetchBuffer{
-		ctx:         opts.Ctx,
-		cancelFunc:  opts.CancelFunc,
-		hash:        opts.Hash,
-		lastRead:    time.Now(),
-		fileSize:    opts.FileSize,
-		client:      opts.Client,
-		segments:    make(map[uint64]*segment),
-		segmentSize: opts.SegmentSize,
-		dataTimeout: opts.DataTimeout,
+		ctx:               opts.Ctx,
+		cancelFunc:        opts.CancelFunc,
+		hash:              opts.Hash,
+		lastRead:          time.Now(),
+		fileSize:          opts.FileSize,
+		client:            opts.Client,
+		segments:          make(map[uint64]*segment),
+		segmentSize:       opts.SegmentSize,
+		totalPrefetchSize: opts.TotalPrefetchSize,
+		dataTimeout:       opts.DataTimeout,
 	}
 	pb.cond = sync.NewCond(&pb.mu)
 	return pb
@@ -196,7 +199,7 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 
 	for _, index := range indicesToDelete {
 		pb.mu.Lock()
-		Logger.Debugf("Evicting segment %s-%d", pb.hash, index)
+		Logger.Infof("Evicting segment %s-%d", pb.hash, index)
 		segment := pb.segments[index]
 		segment.data = nil
 		delete(pb.segments, index)

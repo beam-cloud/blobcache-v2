@@ -17,6 +17,7 @@ blobfs:
     idleTtlS: 60
     minFileSizeBytes: 1048576 # 1MB
     segmentSizeBytes: 134217728 # 128MB
+    totalPrefetchSizeBytes: 1073741824 # 1GB
     dataTimeoutS: 30
     ignoreFileExt:
       - .clip
