@@ -10,7 +10,7 @@ const (
 	PrefetchEvictionInterval = 30 * time.Second
 	PrefetchIdleTTL          = 60 * time.Second // remove stale buffers if no read in the past 60s
 	PrefetchBufferSize       = 0                // if 0, no specific limit, just store all
-	PreemptiveFetchThreshold = 32 * 1024 * 1024 // 32MB
+	PreemptiveFetchThreshold = 16 * 1024 * 1024 // 16MB
 )
 
 type PrefetchManager struct {
@@ -78,7 +78,7 @@ type PrefetchBuffer struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 	hash       string
-	buffers    map[uint64]*internalBuffer
+	segments   map[uint64]*segment
 	lastRead   time.Time
 	fileSize   uint64
 	client     *BlobCacheClient
@@ -87,10 +87,9 @@ type PrefetchBuffer struct {
 	bufferSize uint64
 }
 
-type internalBuffer struct {
+type segment struct {
 	data       []byte
 	readLength uint64
-	fetching   bool
 }
 
 type PrefetchOpts struct {
@@ -109,7 +108,7 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 		cancelFunc: opts.CancelFunc,
 		hash:       opts.Hash,
 		lastRead:   time.Now(),
-		buffers:    make(map[uint64]*internalBuffer),
+		segments:   make(map[uint64]*segment),
 		fileSize:   opts.FileSize,
 		client:     opts.Client,
 		bufferSize: opts.BufferSize,
@@ -127,23 +126,22 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 
 	// Initialize internal buffer for this chunk of the content
 	pb.mu.Lock()
-	_, exists := pb.buffers[bufferIndex]
+	_, exists := pb.segments[bufferIndex]
 	if exists {
 		pb.mu.Unlock()
 		return
 	}
 
-	state := &internalBuffer{
+	s := &segment{
 		data:       make([]byte, 0, bufferSize),
-		fetching:   true,
 		readLength: 0,
 	}
-	pb.buffers[bufferIndex] = state
+	pb.segments[bufferIndex] = s
 
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
 	if err != nil {
 		pb.mu.Unlock()
-		// TODO: do something with this error
+		// TODO: handle this error appropriately
 		return
 	}
 
@@ -156,16 +154,14 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		case chunk, ok := <-contentChan:
 			if !ok {
 				pb.mu.Lock()
-				state.fetching = false
-				state.readLength = uint64(len(state.data))
 				pb.cond.Broadcast()
 				pb.mu.Unlock()
 				return
 			}
 
 			pb.mu.Lock()
-			state.data = append(state.data, chunk...)
-			state.readLength = uint64(len(state.data))
+			s.data = append(s.data, chunk...)
+			s.readLength += uint64(len(chunk))
 			pb.cond.Broadcast()
 			pb.mu.Unlock()
 		}
@@ -181,40 +177,56 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 	bufferIndex := offset / bufferSize
 	bufferOffset := offset % bufferSize
 
-	tryGetDataRange := func() ([]byte, bool) {
-		pb.mu.Lock()
-		defer pb.mu.Unlock()
+	var result []byte
 
-		state, exists := pb.buffers[bufferIndex]
-
-		// Initiate a fetch operation if the buffer does not exist
-		if !exists {
-			go pb.fetch(bufferIndex*bufferSize, bufferSize)
-			return nil, false
-		} else if state.readLength >= bufferOffset+length {
-			pb.lastRead = time.Now()
-
-			// Calculate the relative offset within the buffer
-			relativeOffset := offset - (bufferIndex * bufferSize)
-
-			// Pre-emptively start fetching the next buffer if within the threshold
-			if state.readLength-relativeOffset <= PreemptiveFetchThreshold {
-				nextBufferIndex := bufferIndex + 1
-				if _, nextExists := pb.buffers[nextBufferIndex]; !nextExists {
-					go pb.fetch(nextBufferIndex*bufferSize, bufferSize)
-				}
-			}
-
-			return state.data[relativeOffset : relativeOffset+length], true
+	for length > 0 {
+		data, ready := pb.tryGetDataRange(bufferIndex, bufferOffset, offset, length)
+		if ready {
+			result = append(result, data...)
+			dataLen := uint64(len(data))
+			length -= dataLen
+			offset += dataLen
+			bufferIndex = offset / bufferSize
+			bufferOffset = offset % bufferSize
+		} else {
+			// If data is not ready, wait for more data to be available
+			pb.mu.Lock()
+			pb.cond.Wait()
+			pb.mu.Unlock()
 		}
+	}
 
-		pb.cond.Wait() // Wait for more data to be available
+	return result
+}
+
+func (pb *PrefetchBuffer) tryGetDataRange(bufferIndex, bufferOffset, offset, length uint64) ([]byte, bool) {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	segment, exists := pb.segments[bufferIndex]
+
+	// Initiate a fetch operation if the buffer does not exist
+	if !exists {
+		go pb.fetch(bufferIndex*pb.bufferSize, pb.bufferSize)
 		return nil, false
+	} else if segment.readLength > bufferOffset {
+		pb.lastRead = time.Now()
+
+		// Calculate the relative offset within the buffer
+		relativeOffset := offset - (bufferIndex * pb.bufferSize)
+		availableLength := segment.readLength - relativeOffset
+		readLength := min(int64(length), int64(availableLength))
+
+		// Pre-emptively start fetching the next buffer if within the threshold
+		if segment.readLength-relativeOffset <= PreemptiveFetchThreshold {
+			nextBufferIndex := bufferIndex + 1
+			if _, nextExists := pb.segments[nextBufferIndex]; !nextExists {
+				go pb.fetch(nextBufferIndex*pb.bufferSize, pb.bufferSize)
+			}
+		}
+
+		return segment.data[relativeOffset : int64(relativeOffset)+int64(readLength)], true
 	}
 
-	for {
-		if data, ready := tryGetDataRange(); ready {
-			return data
-		}
-	}
+	return nil, false
 }

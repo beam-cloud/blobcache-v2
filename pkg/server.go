@@ -28,7 +28,7 @@ const (
 	writeBufferSizeBytes      int   = 128 * 1024
 	getContentBufferPoolSize  int   = 128
 	getContentBufferSize      int64 = 256 * 1024
-	getContentStreamChunkSize int64 = 32 * 1024 * 1024 // 32MB
+	getContentStreamChunkSize int64 = 16 * 1024 * 1024 // 16MB
 )
 
 type CacheServiceOpts struct {
@@ -235,6 +235,10 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)
 			return status.Errorf(codes.NotFound, "Content not found: %v", err)
+		}
+
+		if n == 0 {
+			break
 		}
 
 		Logger.Infof("GetContentStream[TX] - [%s] - %d bytes", req.Hash, n)
