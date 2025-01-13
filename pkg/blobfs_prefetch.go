@@ -206,8 +206,14 @@ func (pb *PrefetchBuffer) Clear() {
 	pb.cancelFunc() // Stop any fetch operations
 
 	pb.mu.Lock()
-	pb.segments = make(map[uint64]*segment) // Reinitialize the map to clear all entries
-	pb.mu.Unlock()
+	defer pb.mu.Unlock()
+
+	// Clear all segment data
+	for _, segment := range pb.segments {
+		segment.data = nil
+	}
+	// Reinitialize the map to clear all entries
+	pb.segments = make(map[uint64]*segment)
 }
 
 func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
