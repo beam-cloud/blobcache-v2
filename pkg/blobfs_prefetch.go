@@ -192,6 +192,8 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 	for _, index := range indicesToDelete {
 		pb.mu.Lock()
 		Logger.Debugf("Evicting segment %s-%d", pb.hash, index)
+		segment := pb.segments[index]
+		segment.data = nil
 		delete(pb.segments, index)
 		pb.cond.Broadcast()
 		pb.mu.Unlock()
