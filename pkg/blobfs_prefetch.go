@@ -187,6 +187,7 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 	for _, index := range indicesToDelete {
 		pb.mu.Lock()
 		delete(pb.segments, index)
+		pb.cond.Broadcast()
 		pb.mu.Unlock()
 	}
 
