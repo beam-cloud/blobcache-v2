@@ -177,9 +177,8 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 	bufferOffset := offset % bufferSize
 
 	var result []byte
-
 	for length > 0 {
-		data, ready := pb.tryGetDataRange(bufferIndex, bufferOffset, offset, length)
+		data, ready := pb.tryGetRange(bufferIndex, bufferOffset, offset, length)
 		if ready {
 			result = append(result, data...)
 			dataLen := uint64(len(data))
@@ -198,7 +197,7 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 	return result
 }
 
-func (pb *PrefetchBuffer) tryGetDataRange(bufferIndex, bufferOffset, offset, length uint64) ([]byte, bool) {
+func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length uint64) ([]byte, bool) {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
