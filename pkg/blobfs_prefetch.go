@@ -200,7 +200,7 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
 	for _, w := range windows {
 		if w != nil && time.Since(w.lastRead) > prefetchSegmentIdleTTL && !w.fetching {
-			Logger.Infof("Evicting segment %s-%d", pb.hash, w.index)
+			Logger.Debugf("Evicting segment %s-%d", pb.hash, w.index)
 			w.data = nil
 		} else {
 			unused = false
@@ -242,7 +242,6 @@ func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
 			bufferIndex = offset / bufferSize
 			bufferOffset = offset % bufferSize
 		} else {
-			Logger.Infof("Waiting for prefetch signal")
 			if err := pb.waitForSignal(); err != nil {
 				return nil, err
 			}
@@ -258,7 +257,6 @@ func (pb *PrefetchBuffer) waitForSignal() error {
 	for {
 		select {
 		case <-waitForCondition(pb.dataCond):
-			Logger.Infof("Prefetch data ready")
 			return nil
 		case <-timeoutChan:
 			return fmt.Errorf("timeout occurred waiting for prefetch data")
@@ -282,7 +280,6 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 	}
 
 	if w == nil {
-		Logger.Infof("Fetching segment %s-%d", pb.hash, bufferIndex)
 		go pb.fetch(bufferIndex*pb.windowSize, pb.windowSize)
 		return nil, false
 	}
