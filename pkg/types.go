@@ -108,6 +108,7 @@ type BlobFsPrefetchConfig struct {
 	IdleTtlS         int      `key:"idleTtlS" json:"idle_ttl_s"`
 	SegmentSizeBytes uint64   `key:"segmentSizeBytes" json:"segment_size_bytes"`
 	IgnoreFileExt    []string `key:"ignoreFileExt" json:"ignore_file_ext"`
+	DataTimeoutS     int      `key:"dataTimeoutS" json:"data_timeout_s"`
 }
 
 type SourceConfig struct {

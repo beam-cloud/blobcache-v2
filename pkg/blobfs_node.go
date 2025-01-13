@@ -197,7 +197,10 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 	if n.shouldPrefetch(n.bfsNode) {
 		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
 		if buffer != nil {
-			return fuse.ReadResultData(buffer.GetRange(uint64(off), uint64(len(dest)))), fs.OK
+			data, err := buffer.GetRange(uint64(off), uint64(len(dest)))
+			if err == nil {
+				return fuse.ReadResultData(data), fs.OK
+			}
 		}
 	}
 

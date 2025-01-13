@@ -2,13 +2,14 @@ package blobcache
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
 
 const (
 	prefetchEvictionInterval      = 5 * time.Second
-	prefetchSegmentIdleTTL        = 30 * time.Second // remove stale segments if no reads in the past 30s
+	prefetchSegmentIdleTTL        = 10 * time.Second // remove stale segments if no reads in the past 30s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
@@ -45,6 +46,7 @@ func (pm *PrefetchManager) GetPrefetchBuffer(hash string, fileSize uint64) *Pref
 		Hash:        hash,
 		FileSize:    fileSize,
 		SegmentSize: pm.config.BlobFs.Prefetch.SegmentSizeBytes,
+		DataTimeout: time.Second * time.Duration(pm.config.BlobFs.Prefetch.DataTimeoutS),
 		Client:      pm.client,
 	})
 
@@ -88,6 +90,7 @@ type PrefetchBuffer struct {
 	client      *BlobCacheClient
 	mu          sync.Mutex
 	cond        *sync.Cond
+	dataTimeout time.Duration
 }
 
 type segment struct {
@@ -106,6 +109,7 @@ type PrefetchOpts struct {
 	SegmentSize uint64
 	Offset      uint64
 	Client      *BlobCacheClient
+	DataTimeout time.Duration
 }
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
@@ -118,6 +122,7 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 		client:      opts.Client,
 		segments:    make(map[uint64]*segment),
 		segmentSize: opts.SegmentSize,
+		dataTimeout: opts.DataTimeout,
 	}
 	pb.cond = sync.NewCond(&pb.mu)
 	return pb
@@ -212,16 +217,19 @@ func (pb *PrefetchBuffer) Clear() {
 	for _, segment := range pb.segments {
 		segment.data = nil
 	}
+
 	// Reinitialize the map to clear all entries
 	pb.segments = make(map[uint64]*segment)
 }
 
-func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
+func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) ([]byte, error) {
 	bufferSize := pb.segmentSize
 	bufferIndex := offset / bufferSize
 	bufferOffset := offset % bufferSize
 
 	var result []byte
+	timeoutChan := time.After(pb.dataTimeout)
+
 	for length > 0 {
 		data, ready := pb.tryGetRange(bufferIndex, bufferOffset, offset, length)
 		if ready {
@@ -232,14 +240,19 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
 			bufferIndex = offset / bufferSize
 			bufferOffset = offset % bufferSize
 		} else {
-			// If data is not ready, wait for more data to be available
-			pb.mu.Lock()
-			pb.cond.Wait()
-			pb.mu.Unlock()
+			select {
+			case <-timeoutChan:
+				return nil, fmt.Errorf("timeout occurred waiting for prefetch data")
+			default:
+				// If data is not ready, wait for more data to be available
+				pb.mu.Lock()
+				pb.cond.Wait()
+				pb.mu.Unlock()
+			}
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length uint64) ([]byte, bool) {
