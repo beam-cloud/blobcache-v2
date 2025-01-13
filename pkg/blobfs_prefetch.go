@@ -198,10 +198,11 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 
 	pb.mu.Lock()
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
-	for _, w := range windows {
+	for i, w := range windows {
 		if w != nil && time.Since(w.lastRead) > prefetchSegmentIdleTTL && !w.fetching {
 			Logger.Debugf("Evicting segment %s-%d", pb.hash, w.index)
 			w.data = nil
+			windows[i] = nil
 		} else {
 			unused = false
 		}
