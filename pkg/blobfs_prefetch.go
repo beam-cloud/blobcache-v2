@@ -40,12 +40,12 @@ func (pm *PrefetchManager) GetPrefetchBuffer(hash string, fileSize uint64) *Pref
 
 	ctx, cancel := context.WithCancel(pm.ctx)
 	newBuffer := NewPrefetchBuffer(PrefetchOpts{
-		Ctx:        ctx,
-		CancelFunc: cancel,
-		Hash:       hash,
-		FileSize:   fileSize,
-		BufferSize: pm.config.BlobFs.Prefetch.MaxBufferSizeBytes,
-		Client:     pm.client,
+		Ctx:         ctx,
+		CancelFunc:  cancel,
+		Hash:        hash,
+		FileSize:    fileSize,
+		SegmentSize: pm.config.BlobFs.Prefetch.SegmentSizeBytes,
+		Client:      pm.client,
 	})
 
 	pm.buffers.Store(hash, newBuffer)
@@ -74,16 +74,16 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 }
 
 type PrefetchBuffer struct {
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-	hash       string
-	segments   map[uint64]*segment
-	lastRead   time.Time
-	fileSize   uint64
-	client     *BlobCacheClient
-	mu         sync.Mutex
-	cond       *sync.Cond
-	bufferSize uint64
+	ctx         context.Context
+	cancelFunc  context.CancelFunc
+	hash        string
+	segments    map[uint64]*segment
+	segmentSize uint64
+	lastRead    time.Time
+	fileSize    uint64
+	client      *BlobCacheClient
+	mu          sync.Mutex
+	cond        *sync.Cond
 }
 
 type segment struct {
@@ -92,25 +92,25 @@ type segment struct {
 }
 
 type PrefetchOpts struct {
-	Ctx        context.Context
-	CancelFunc context.CancelFunc
-	Hash       string
-	FileSize   uint64
-	BufferSize uint64
-	Offset     uint64
-	Client     *BlobCacheClient
+	Ctx         context.Context
+	CancelFunc  context.CancelFunc
+	Hash        string
+	FileSize    uint64
+	SegmentSize uint64
+	Offset      uint64
+	Client      *BlobCacheClient
 }
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 	pb := &PrefetchBuffer{
-		ctx:        opts.Ctx,
-		cancelFunc: opts.CancelFunc,
-		hash:       opts.Hash,
-		lastRead:   time.Now(),
-		segments:   make(map[uint64]*segment),
-		fileSize:   opts.FileSize,
-		client:     opts.Client,
-		bufferSize: opts.BufferSize,
+		ctx:         opts.Ctx,
+		cancelFunc:  opts.CancelFunc,
+		hash:        opts.Hash,
+		lastRead:    time.Now(),
+		segments:    make(map[uint64]*segment),
+		fileSize:    opts.FileSize,
+		client:      opts.Client,
+		segmentSize: opts.SegmentSize,
 	}
 	pb.cond = sync.NewCond(&pb.mu)
 	return pb
@@ -172,7 +172,7 @@ func (pb *PrefetchBuffer) Stop() {
 }
 
 func (pb *PrefetchBuffer) GetRange(offset uint64, length uint64) []byte {
-	bufferSize := pb.bufferSize
+	bufferSize := pb.segmentSize
 	bufferIndex := offset / bufferSize
 	bufferOffset := offset % bufferSize
 
@@ -205,13 +205,13 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 
 	// Initiate a fetch operation if the buffer does not exist
 	if !exists {
-		go pb.fetch(bufferIndex*pb.bufferSize, pb.bufferSize)
+		go pb.fetch(bufferIndex*pb.segmentSize, pb.segmentSize)
 		return nil, false
 	} else if segment.readLength > bufferOffset {
 		pb.lastRead = time.Now()
 
 		// Calculate the relative offset within the buffer
-		relativeOffset := offset - (bufferIndex * pb.bufferSize)
+		relativeOffset := offset - (bufferIndex * pb.segmentSize)
 		availableLength := segment.readLength - relativeOffset
 		readLength := min(int64(length), int64(availableLength))
 
@@ -219,7 +219,7 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 		if segment.readLength-relativeOffset <= preemptiveFetchThreshold {
 			nextBufferIndex := bufferIndex + 1
 			if _, nextExists := pb.segments[nextBufferIndex]; !nextExists {
-				go pb.fetch(nextBufferIndex*pb.bufferSize, pb.bufferSize)
+				go pb.fetch(nextBufferIndex*pb.segmentSize, pb.segmentSize)
 			}
 		}
 
