@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,18 +15,22 @@ const (
 )
 
 type PrefetchManager struct {
-	ctx     context.Context
-	config  BlobCacheConfig
-	buffers sync.Map
-	client  *BlobCacheClient
+	ctx                      context.Context
+	config                   BlobCacheConfig
+	buffers                  sync.Map
+	client                   *BlobCacheClient
+	currentPrefetchSizeBytes uint64
+	totalPrefetchSizeBytes   uint64
 }
 
 func NewPrefetchManager(ctx context.Context, config BlobCacheConfig, client *BlobCacheClient) *PrefetchManager {
 	return &PrefetchManager{
-		ctx:     ctx,
-		config:  config,
-		buffers: sync.Map{},
-		client:  client,
+		ctx:                      ctx,
+		config:                   config,
+		buffers:                  sync.Map{},
+		client:                   client,
+		currentPrefetchSizeBytes: 0,
+		totalPrefetchSizeBytes:   config.BlobFs.Prefetch.TotalPrefetchSizeBytes,
 	}
 }
 
@@ -76,22 +81,34 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 			})
 		}
 	}
+}
 
+func (pm *PrefetchManager) incrementPrefetchSize(size uint64) bool {
+	newTotal := atomic.AddUint64(&pm.currentPrefetchSizeBytes, size)
+	if newTotal > pm.totalPrefetchSizeBytes {
+		atomic.AddUint64(&pm.currentPrefetchSizeBytes, ^uint64(size-1))
+		return false
+	}
+	return true
+}
+
+func (pm *PrefetchManager) decrementPrefetchSize(size uint64) {
+	atomic.AddUint64(&pm.currentPrefetchSizeBytes, ^uint64(size-1))
 }
 
 type PrefetchBuffer struct {
-	ctx               context.Context
-	cancelFunc        context.CancelFunc
-	hash              string
-	segments          map[uint64]*segment
-	segmentSize       uint64
-	lastRead          time.Time
-	fileSize          uint64
-	client            *BlobCacheClient
-	mu                sync.Mutex
-	cond              *sync.Cond
-	dataTimeout       time.Duration
-	totalPrefetchSize uint64
+	ctx         context.Context
+	cancelFunc  context.CancelFunc
+	manager     *PrefetchManager
+	hash        string
+	segments    map[uint64]*segment
+	segmentSize uint64
+	lastRead    time.Time
+	fileSize    uint64
+	client      *BlobCacheClient
+	mu          sync.Mutex
+	cond        *sync.Cond
+	dataTimeout time.Duration
 }
 
 type segment struct {
@@ -103,29 +120,29 @@ type segment struct {
 }
 
 type PrefetchOpts struct {
-	Ctx               context.Context
-	CancelFunc        context.CancelFunc
-	Hash              string
-	FileSize          uint64
-	SegmentSize       uint64
-	Offset            uint64
-	Client            *BlobCacheClient
-	DataTimeout       time.Duration
-	TotalPrefetchSize uint64
+	Ctx         context.Context
+	CancelFunc  context.CancelFunc
+	Hash        string
+	FileSize    uint64
+	SegmentSize uint64
+	Offset      uint64
+	Client      *BlobCacheClient
+	DataTimeout time.Duration
+	Manager     *PrefetchManager
 }
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 	pb := &PrefetchBuffer{
-		ctx:               opts.Ctx,
-		cancelFunc:        opts.CancelFunc,
-		hash:              opts.Hash,
-		lastRead:          time.Now(),
-		fileSize:          opts.FileSize,
-		client:            opts.Client,
-		segments:          make(map[uint64]*segment),
-		segmentSize:       opts.SegmentSize,
-		totalPrefetchSize: opts.TotalPrefetchSize,
-		dataTimeout:       opts.DataTimeout,
+		ctx:         opts.Ctx,
+		cancelFunc:  opts.CancelFunc,
+		hash:        opts.Hash,
+		manager:     opts.Manager,
+		lastRead:    time.Now(),
+		fileSize:    opts.FileSize,
+		client:      opts.Client,
+		segments:    make(map[uint64]*segment),
+		segmentSize: opts.SegmentSize,
+		dataTimeout: opts.DataTimeout,
 	}
 	pb.cond = sync.NewCond(&pb.mu)
 	return pb
@@ -134,11 +151,15 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	bufferIndex := offset / bufferSize
 
-	// Initialize internal buffer for this chunk of the content
 	pb.mu.Lock()
-	_, exists := pb.segments[bufferIndex]
-	if exists {
+	if !pb.manager.incrementPrefetchSize(bufferSize) {
 		pb.mu.Unlock()
+		return
+	}
+
+	if _, exists := pb.segments[bufferIndex]; exists {
+		pb.mu.Unlock()
+		pb.manager.decrementPrefetchSize(bufferSize)
 		return
 	}
 
@@ -150,15 +171,16 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		fetching:   true,
 	}
 	pb.segments[bufferIndex] = s
+	pb.mu.Unlock()
 
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
 	if err != nil {
+		pb.mu.Lock()
 		delete(pb.segments, bufferIndex)
 		pb.mu.Unlock()
+		pb.manager.decrementPrefetchSize(bufferSize)
 		return
 	}
-
-	pb.mu.Unlock()
 
 	for {
 		select {
@@ -201,10 +223,13 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 		pb.mu.Lock()
 		Logger.Infof("Evicting segment %s-%d", pb.hash, index)
 		segment := pb.segments[index]
+		segmentSize := uint64(len(segment.data))
 		segment.data = nil
 		delete(pb.segments, index)
 		pb.cond.Broadcast()
 		pb.mu.Unlock()
+
+		pb.manager.decrementPrefetchSize(segmentSize)
 	}
 
 	return unused
