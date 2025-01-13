@@ -139,8 +139,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
 	if err != nil {
+		delete(pb.segments, bufferIndex)
 		pb.mu.Unlock()
-		// TODO: handle this error appropriately
 		return
 	}
 
