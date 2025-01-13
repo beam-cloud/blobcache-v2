@@ -103,10 +103,11 @@ type BlobFsConfig struct {
 }
 
 type BlobFsPrefetchConfig struct {
-	Enabled          bool   `key:"enabled" json:"enabled"`
-	MinFileSizeBytes uint64 `key:"minFileSizeBytes" json:"min_file_size_bytes"`
-	IdleTtlS         int    `key:"idleTtlS" json:"idle_ttl_s"`
-	SegmentSizeBytes uint64 `key:"segmentSizeBytes" json:"segment_size_bytes"`
+	Enabled          bool     `key:"enabled" json:"enabled"`
+	MinFileSizeBytes uint64   `key:"minFileSizeBytes" json:"min_file_size_bytes"`
+	IdleTtlS         int      `key:"idleTtlS" json:"idle_ttl_s"`
+	SegmentSizeBytes uint64   `key:"segmentSizeBytes" json:"segment_size_bytes"`
+	IgnoreFileExt    []string `key:"ignoreFileExt" json:"ignore_file_ext"`
 }
 
 type SourceConfig struct {
