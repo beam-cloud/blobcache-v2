@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	prefetchEvictionInterval      = 30 * time.Second
+	prefetchEvictionInterval      = 10 * time.Second
 	prefetchIdleTTL               = 10 * time.Second // remove stale buffers if no read in the past 60s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
