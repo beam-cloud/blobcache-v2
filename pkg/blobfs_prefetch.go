@@ -82,18 +82,20 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 }
 
 type PrefetchBuffer struct {
-	ctx         context.Context
-	cancelFunc  context.CancelFunc
-	manager     *PrefetchManager
-	hash        string
-	windows     map[uint64]*window
-	windowSize  uint64
-	lastRead    time.Time
-	fileSize    uint64
-	client      *BlobCacheClient
-	mu          sync.Mutex
-	dataCond    *sync.Cond
-	dataTimeout time.Duration
+	ctx           context.Context
+	cancelFunc    context.CancelFunc
+	manager       *PrefetchManager
+	hash          string
+	windowSize    uint64
+	lastRead      time.Time
+	fileSize      uint64
+	client        *BlobCacheClient
+	mu            sync.Mutex
+	dataCond      *sync.Cond
+	dataTimeout   time.Duration
+	currentWindow *window
+	nextWindow    *window
+	prevWindow    *window
 }
 
 type window struct {
@@ -118,17 +120,19 @@ type PrefetchOpts struct {
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 	pb := &PrefetchBuffer{
-		ctx:         opts.Ctx,
-		cancelFunc:  opts.CancelFunc,
-		hash:        opts.Hash,
-		manager:     opts.Manager,
-		lastRead:    time.Now(),
-		fileSize:    opts.FileSize,
-		client:      opts.Client,
-		windows:     make(map[uint64]*window),
-		windowSize:  opts.WindowSize,
-		dataTimeout: opts.DataTimeout,
-		mu:          sync.Mutex{},
+		ctx:           opts.Ctx,
+		cancelFunc:    opts.CancelFunc,
+		hash:          opts.Hash,
+		manager:       opts.Manager,
+		lastRead:      time.Now(),
+		fileSize:      opts.FileSize,
+		client:        opts.Client,
+		windowSize:    opts.WindowSize,
+		dataTimeout:   opts.DataTimeout,
+		mu:            sync.Mutex{},
+		currentWindow: nil,
+		nextWindow:    nil,
+		prevWindow:    nil,
 	}
 	pb.dataCond = sync.NewCond(&pb.mu)
 	return pb
@@ -138,9 +142,12 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	bufferIndex := offset / bufferSize
 
 	pb.mu.Lock()
-	if _, exists := pb.windows[bufferIndex]; exists {
-		pb.mu.Unlock()
-		return
+	windows := []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
+	for _, w := range windows {
+		if w != nil && w.index == bufferIndex {
+			pb.mu.Unlock()
+			return
+		}
 	}
 
 	w := &window{
@@ -150,14 +157,15 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		lastRead:   time.Now(),
 		fetching:   true,
 	}
-	pb.windows[bufferIndex] = w
+
+	// Slide windows
+	pb.prevWindow = pb.currentWindow
+	pb.currentWindow = pb.nextWindow
+	pb.nextWindow = w
 	pb.mu.Unlock()
 
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
 	if err != nil {
-		pb.mu.Lock()
-		delete(pb.windows, bufferIndex)
-		pb.mu.Unlock()
 		return
 	}
 
@@ -187,26 +195,19 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 
 func (pb *PrefetchBuffer) evictIdle() bool {
 	unused := true
-	var indicesToDelete []uint64
 
 	pb.mu.Lock()
-	for index, window := range pb.windows {
-		if time.Since(window.lastRead) > prefetchSegmentIdleTTL && !window.fetching {
-			indicesToDelete = append(indicesToDelete, index)
+	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
+	for _, w := range windows {
+		if w != nil && time.Since(w.lastRead) > prefetchSegmentIdleTTL && !w.fetching {
+			Logger.Infof("Evicting segment %s-%d", pb.hash, w.index)
+			w.data = nil
 		} else {
 			unused = false
 		}
 	}
+	pb.prevWindow, pb.currentWindow, pb.nextWindow = windows[0], windows[1], windows[2]
 	pb.mu.Unlock()
-
-	for _, index := range indicesToDelete {
-		pb.mu.Lock()
-		Logger.Infof("Evicting segment %s-%d", pb.hash, index)
-		window := pb.windows[index]
-		window.data = nil
-		delete(pb.windows, index)
-		pb.mu.Unlock()
-	}
 
 	return unused
 }
@@ -218,12 +219,10 @@ func (pb *PrefetchBuffer) Clear() {
 	defer pb.mu.Unlock()
 
 	// Clear all window data
-	for _, window := range pb.windows {
+	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
+	for _, window := range windows {
 		window.data = nil
 	}
-
-	// Reinitialize the map to clear all entries
-	pb.windows = make(map[uint64]*window)
 }
 
 func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
@@ -262,10 +261,9 @@ func (pb *PrefetchBuffer) waitForSignal() error {
 			Logger.Infof("Prefetch data ready")
 			return nil
 		case <-timeoutChan:
-			Logger.Infof("Timeout occurred waiting for prefetch data")
 			return fmt.Errorf("timeout occurred waiting for prefetch data")
 		case <-pb.ctx.Done():
-			return fmt.Errorf("context canceled")
+			return pb.ctx.Err()
 		}
 	}
 }
@@ -274,30 +272,38 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
-	window, exists := pb.windows[bufferIndex]
+	var w *window
+	var windows []*window = []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
+	for _, win := range windows {
+		if win != nil && win.index == bufferIndex {
+			w = win
+			break
+		}
+	}
 
-	// Initiate a fetch operation if the buffer does not exist
-	if !exists {
+	if w == nil {
 		Logger.Infof("Fetching segment %s-%d", pb.hash, bufferIndex)
 		go pb.fetch(bufferIndex*pb.windowSize, pb.windowSize)
 		return nil, false
-	} else if window.readLength > bufferOffset {
-		window.lastRead = time.Now()
+	}
+
+	if w.readLength > bufferOffset {
+		w.lastRead = time.Now()
 
 		// Calculate the relative offset within the buffer
 		relativeOffset := offset - (bufferIndex * pb.windowSize)
-		availableLength := window.readLength - relativeOffset
+		availableLength := w.readLength - relativeOffset
 		readLength := min(int64(length), int64(availableLength))
 
 		// Pre-emptively start fetching the next buffer if within the threshold
-		if window.readLength-relativeOffset <= preemptiveFetchThresholdBytes {
+		if w.readLength-relativeOffset <= preemptiveFetchThresholdBytes {
 			nextBufferIndex := bufferIndex + 1
-			if _, nextExists := pb.windows[nextBufferIndex]; !nextExists {
+			if pb.nextWindow == nil || pb.nextWindow.index != nextBufferIndex {
 				go pb.fetch(nextBufferIndex*pb.windowSize, pb.windowSize)
 			}
 		}
 
-		return window.data[relativeOffset : int64(relativeOffset)+int64(readLength)], true
+		return w.data[relativeOffset : int64(relativeOffset)+int64(readLength)], true
 	}
 
 	return nil, false
