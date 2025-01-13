@@ -2,6 +2,7 @@ package blobcache
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -72,6 +73,8 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 
 				return true
 			})
+
+			runtime.GC()
 		}
 	}
 
