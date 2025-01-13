@@ -10,7 +10,7 @@ import (
 
 const (
 	prefetchEvictionInterval      = 5 * time.Second
-	prefetchSegmentIdleTTL        = 10 * time.Second // remove stale segments if no reads in the past 30s
+	prefetchSegmentIdleTTL        = 5 * time.Second  // remove stale segments if no reads in the past 30s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
@@ -53,6 +53,7 @@ func (pm *PrefetchManager) GetPrefetchBuffer(hash string, fileSize uint64) *Pref
 		SegmentSize: pm.config.BlobFs.Prefetch.SegmentSizeBytes,
 		DataTimeout: time.Second * time.Duration(pm.config.BlobFs.Prefetch.DataTimeoutS),
 		Client:      pm.client,
+		Manager:     pm,
 	})
 
 	pm.buffers.Store(hash, newBuffer)
@@ -89,6 +90,7 @@ func (pm *PrefetchManager) incrementPrefetchSize(size uint64) bool {
 		atomic.AddUint64(&pm.currentPrefetchSizeBytes, ^uint64(size-1))
 		return false
 	}
+
 	return true
 }
 
@@ -158,8 +160,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	}
 
 	if _, exists := pb.segments[bufferIndex]; exists {
-		pb.mu.Unlock()
 		pb.manager.decrementPrefetchSize(bufferSize)
+		pb.mu.Unlock()
 		return
 	}
 
@@ -177,8 +179,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	if err != nil {
 		pb.mu.Lock()
 		delete(pb.segments, bufferIndex)
-		pb.mu.Unlock()
 		pb.manager.decrementPrefetchSize(bufferSize)
+		pb.mu.Unlock()
 		return
 	}
 
@@ -227,9 +229,9 @@ func (pb *PrefetchBuffer) evictIdle() bool {
 		segment.data = nil
 		delete(pb.segments, index)
 		pb.cond.Broadcast()
+		pb.manager.decrementPrefetchSize(segmentSize)
 		pb.mu.Unlock()
 
-		pb.manager.decrementPrefetchSize(segmentSize)
 	}
 
 	return unused
