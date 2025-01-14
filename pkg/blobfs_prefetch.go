@@ -222,8 +222,12 @@ func (pb *PrefetchBuffer) Clear() {
 	// Clear all window data
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
 	for _, window := range windows {
-		window.data = nil
+		if window != nil {
+			window.data = nil
+		}
 	}
+
+	pb.prevWindow, pb.currentWindow, pb.nextWindow = nil, nil, nil
 }
 
 func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
