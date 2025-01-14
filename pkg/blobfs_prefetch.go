@@ -99,7 +99,7 @@ type PrefetchBuffer struct {
 }
 
 type window struct {
-	index      uint64
+	index      int64
 	data       []byte
 	readLength uint64
 	lastRead   time.Time
@@ -143,7 +143,7 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 
 	pb.mu.Lock()
 	for _, w := range []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow} {
-		if w != nil && w.index == bufferIndex {
+		if w != nil && w.index == int64(bufferIndex) {
 			pb.mu.Unlock()
 			return
 		}
@@ -153,14 +153,14 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	var w *window
 	if existingWindow != nil {
 		w = existingWindow
-		w.index = bufferIndex
+		w.index = int64(bufferIndex)
 		w.readLength = 0
 		w.data = make([]byte, 0, bufferSize)
 		w.lastRead = time.Now()
 		w.fetching = true
 	} else {
 		w = &window{
-			index:      bufferIndex,
+			index:      int64(bufferIndex),
 			data:       make([]byte, 0, bufferSize),
 			readLength: 0,
 			lastRead:   time.Now(),
@@ -172,13 +172,14 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	pb.prevWindow = pb.currentWindow
 	pb.currentWindow = pb.nextWindow
 	pb.nextWindow = w
-	pb.mu.Unlock()
 
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
 	if err != nil {
+		pb.mu.Unlock()
 		return
 	}
 
+	pb.mu.Unlock()
 	for {
 		select {
 		case <-pb.ctx.Done():
@@ -186,8 +187,20 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		case chunk, ok := <-contentChan:
 			if !ok {
 				pb.mu.Lock()
+
+				// We didn't read anything for this window, so we should try again
+				if w.readLength == 0 {
+					w.data = nil
+					w.index = -1
+					pb.nextWindow = nil
+					pb.dataCond.Broadcast()
+					pb.mu.Unlock()
+					return
+				}
+
 				w.fetching = false
 				w.lastRead = time.Now()
+
 				pb.dataCond.Broadcast()
 				pb.mu.Unlock()
 				return
@@ -226,7 +239,7 @@ func (pb *PrefetchBuffer) Clear() {
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
 
-	Logger.Infof("Evicting idle prefetch buffer - %s", pb.hash)
+	Logger.Debugf("Evicting idle prefetch buffer - %s", pb.hash)
 
 	// Clear all window data
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
@@ -292,7 +305,7 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 	var w *window
 	var windows []*window = []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
 	for _, win := range windows {
-		if win != nil && win.index == bufferIndex {
+		if win != nil && win.index == int64(bufferIndex) {
 			w = win
 			break
 		}
@@ -315,7 +328,7 @@ func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length 
 		// Pre-emptively start fetching the next buffer if within the threshold
 		if w.readLength-relativeOffset <= preemptiveFetchThresholdBytes && !lastWindow {
 			nextBufferIndex := bufferIndex + 1
-			if pb.nextWindow == nil || pb.nextWindow.index != nextBufferIndex {
+			if pb.nextWindow == nil || pb.nextWindow.index != int64(nextBufferIndex) {
 				go pb.fetch(nextBufferIndex*pb.windowSize, pb.windowSize)
 			}
 		}

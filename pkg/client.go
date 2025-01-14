@@ -266,7 +266,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 }
 
 func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
-	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
+	ctx, cancel := context.WithTimeout(c.ctx, getContentStreamRequestTimeout)
 	contentChan := make(chan []byte)
 
 	go func() {
