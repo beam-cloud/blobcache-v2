@@ -10,4 +10,4 @@ dev:
       BUILD_BINARY_PATH: "/workspace/bin/blobcache"
       CONFIG_PATH: /workspace/config.yaml
     forward:
-    - 6060:6060
+      - 6666:6666

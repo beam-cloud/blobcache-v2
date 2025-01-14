@@ -14,7 +14,8 @@ options: []
 blobfs:
   prefetch:
     enabled: false
-    idleTtlS: 60
+    idleTtlS: 5
+    evictionIntervalS: 5
     minFileSizeBytes: 1048576 # 1MB
     windowSizeBytes: 134217728 # 128MB
     dataTimeoutS: 30

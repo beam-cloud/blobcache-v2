@@ -8,26 +8,26 @@ import (
 )
 
 const (
-	prefetchEvictionInterval      = 5 * time.Second
-	prefetchSegmentIdleTTL        = 10 * time.Second // remove stale segments if no reads in the past 30s
 	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
 )
 
 type PrefetchManager struct {
-	ctx                      context.Context
-	config                   BlobCacheConfig
-	buffers                  sync.Map
-	client                   *BlobCacheClient
-	currentPrefetchSizeBytes uint64
+	ctx              context.Context
+	config           BlobCacheConfig
+	buffers          sync.Map
+	client           *BlobCacheClient
+	segmentIdleTTL   time.Duration
+	evictionInterval time.Duration
 }
 
 func NewPrefetchManager(ctx context.Context, config BlobCacheConfig, client *BlobCacheClient) *PrefetchManager {
 	return &PrefetchManager{
-		ctx:                      ctx,
-		config:                   config,
-		buffers:                  sync.Map{},
-		client:                   client,
-		currentPrefetchSizeBytes: 0,
+		ctx:              ctx,
+		config:           config,
+		buffers:          sync.Map{},
+		client:           client,
+		segmentIdleTTL:   time.Duration(config.BlobFs.Prefetch.IdleTtlS) * time.Second,
+		evictionInterval: time.Duration(config.BlobFs.Prefetch.EvictionIntervalS) * time.Second,
 	}
 }
 
@@ -62,15 +62,15 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 		select {
 		case <-pm.ctx.Done():
 			return
-		case <-time.After(prefetchEvictionInterval):
+		case <-time.After(pm.evictionInterval):
 			pm.buffers.Range(func(key, value any) bool {
 				buffer := value.(*PrefetchBuffer)
 
-				// If no reads have happened in any segments in the buffer
+				// If no reads have happened in any windows in the buffer
 				// stop any fetch operations and clear the buffer so it can
 				// be garbage collected
-				unused := buffer.evictIdle()
-				if unused {
+				idle := buffer.IsIdle()
+				if idle {
 					buffer.Clear()
 					pm.buffers.Delete(key)
 				}
@@ -149,12 +149,23 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 		}
 	}
 
-	w := &window{
-		index:      bufferIndex,
-		data:       make([]byte, 0, bufferSize),
-		readLength: 0,
-		lastRead:   time.Now(),
-		fetching:   true,
+	existingWindow := pb.prevWindow
+	var w *window
+	if existingWindow != nil {
+		w = existingWindow
+		w.index = bufferIndex
+		w.readLength = 0
+		w.data = make([]byte, 0, bufferSize)
+		w.lastRead = time.Now()
+		w.fetching = true
+	} else {
+		w = &window{
+			index:      bufferIndex,
+			data:       make([]byte, 0, bufferSize),
+			readLength: 0,
+			lastRead:   time.Now(),
+			fetching:   true,
+		}
 	}
 
 	// Slide windows
@@ -192,24 +203,21 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	}
 }
 
-func (pb *PrefetchBuffer) evictIdle() bool {
-	unused := true
+func (pb *PrefetchBuffer) IsIdle() bool {
+	idle := true
 
 	pb.mu.Lock()
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
-	for i, w := range windows {
-		if w != nil && time.Since(w.lastRead) > prefetchSegmentIdleTTL && !w.fetching {
-			Logger.Debugf("Evicting segment %s-%d", pb.hash, w.index)
-			w.data = nil
-			windows[i] = nil
+	for _, w := range windows {
+		if w != nil && time.Since(w.lastRead) > pb.manager.segmentIdleTTL && !w.fetching {
+			continue
 		} else {
-			unused = false
+			idle = false
 		}
 	}
-	pb.prevWindow, pb.currentWindow, pb.nextWindow = windows[0], windows[1], windows[2]
 	pb.mu.Unlock()
 
-	return unused
+	return idle
 }
 
 func (pb *PrefetchBuffer) Clear() {
@@ -217,6 +225,8 @@ func (pb *PrefetchBuffer) Clear() {
 
 	pb.mu.Lock()
 	defer pb.mu.Unlock()
+
+	Logger.Infof("Evicting idle prefetch buffer - %s", pb.hash)
 
 	// Clear all window data
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
