@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	getContentRequestTimeout        = 30 * time.Second
+	getContentRequestTimeout        = 60 * time.Second
 	getContentStreamRequestTimeout  = 600 * time.Second
 	storeContentRequestTimeout      = 300 * time.Second
 	closestHostTimeout              = 30 * time.Second
