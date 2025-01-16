@@ -302,6 +302,10 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 	windowHead := (windowIndex * pb.windowSize) + w.readLength
 	isLastWindow := ((windowIndex * pb.windowSize) + pb.windowSize) >= pb.fileSize
 
+	if w.fetching && windowHead < uint64(min(int64(offset+length), int64((windowIndex+1)*pb.windowSize))) {
+		return nil, false, false
+	}
+
 	if windowHead > offset {
 		w.lastRead = time.Now()
 
