@@ -82,20 +82,18 @@ func (pm *PrefetchManager) evictIdleBuffers() {
 }
 
 type PrefetchBuffer struct {
-	ctx           context.Context
-	cancelFunc    context.CancelFunc
-	manager       *PrefetchManager
-	hash          string
-	lastRead      time.Time
-	windowSize    uint64
-	fileSize      uint64
-	client        *BlobCacheClient
-	mu            sync.Mutex
-	dataCond      *sync.Cond
-	dataTimeout   time.Duration
-	currentWindow *window
-	nextWindow    *window
-	prevWindow    *window
+	ctx         context.Context
+	cancelFunc  context.CancelFunc
+	manager     *PrefetchManager
+	hash        string
+	lastRead    time.Time
+	windowSize  uint64
+	fileSize    uint64
+	client      *BlobCacheClient
+	mu          sync.Mutex
+	dataCond    *sync.Cond
+	dataTimeout time.Duration
+	windows     sync.Map
 }
 
 type window struct {
@@ -104,6 +102,7 @@ type window struct {
 	readLength uint64
 	lastRead   time.Time
 	fetching   bool
+	mu         sync.Mutex
 }
 
 type PrefetchOpts struct {
@@ -120,19 +119,17 @@ type PrefetchOpts struct {
 
 func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 	pb := &PrefetchBuffer{
-		ctx:           opts.Ctx,
-		cancelFunc:    opts.CancelFunc,
-		hash:          opts.Hash,
-		manager:       opts.Manager,
-		lastRead:      time.Now(),
-		fileSize:      opts.FileSize,
-		client:        opts.Client,
-		windowSize:    opts.WindowSize,
-		dataTimeout:   opts.DataTimeout,
-		mu:            sync.Mutex{},
-		currentWindow: nil,
-		nextWindow:    nil,
-		prevWindow:    nil,
+		ctx:         opts.Ctx,
+		cancelFunc:  opts.CancelFunc,
+		hash:        opts.Hash,
+		manager:     opts.Manager,
+		lastRead:    time.Now(),
+		fileSize:    opts.FileSize,
+		client:      opts.Client,
+		windows:     sync.Map{},
+		windowSize:  opts.WindowSize,
+		dataTimeout: opts.DataTimeout,
+		mu:          sync.Mutex{},
 	}
 
 	pb.dataCond = sync.NewCond(&pb.mu)
@@ -142,36 +139,22 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 
 func (pb *PrefetchBuffer) fetch(windowIndex uint64) {
 	pb.mu.Lock()
-	for _, w := range []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow} {
-		if w != nil && w.index == int64(windowIndex) {
-			pb.mu.Unlock()
-			return
-		}
+
+	// If a window for this index is already present, don't refetch
+	if _, found := pb.windows.Load(windowIndex); found {
+		pb.mu.Unlock()
+		return
 	}
 
-	existingWindow := pb.prevWindow
-	var w *window
-	if existingWindow != nil {
-		w = existingWindow
-		w.index = int64(windowIndex)
-		w.readLength = 0
-		w.data = make([]byte, 0, pb.windowSize)
-		w.lastRead = time.Now()
-		w.fetching = true
-	} else {
-		w = &window{
-			index:      int64(windowIndex),
-			data:       make([]byte, 0, pb.windowSize),
-			readLength: 0,
-			lastRead:   time.Now(),
-			fetching:   true,
-		}
+	w := &window{
+		index:      int64(windowIndex),
+		data:       make([]byte, 0, pb.windowSize),
+		readLength: 0,
+		fetching:   true,
+		lastRead:   time.Now(),
+		mu:         sync.Mutex{},
 	}
-
-	// Slide windows
-	pb.prevWindow = pb.currentWindow
-	pb.currentWindow = pb.nextWindow
-	pb.nextWindow = w
+	pb.windows.Store(windowIndex, w)
 
 	offset := windowIndex * pb.windowSize
 	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(pb.windowSize))
@@ -189,30 +172,30 @@ func (pb *PrefetchBuffer) fetch(windowIndex uint64) {
 			if !ok {
 				pb.mu.Lock()
 
+				w.mu.Lock()
+				w.fetching = false
+				w.lastRead = time.Now()
+				w.mu.Unlock()
+
 				// We didn't read anything for this window, so we should try again
 				if w.readLength == 0 {
-					w.data = nil
-					w.index = -1
-					pb.nextWindow = nil
+					pb.windows.Delete(windowIndex)
 					pb.dataCond.Broadcast()
 					pb.mu.Unlock()
 					return
 				}
-
-				w.fetching = false
-				w.lastRead = time.Now()
 
 				pb.dataCond.Broadcast()
 				pb.mu.Unlock()
 				return
 			}
 
-			pb.mu.Lock()
+			w.mu.Lock()
 			w.data = append(w.data, chunk...)
 			w.readLength += uint64(len(chunk))
 			w.lastRead = time.Now()
 			pb.dataCond.Broadcast()
-			pb.mu.Unlock()
+			w.mu.Unlock()
 		}
 	}
 }
@@ -221,15 +204,18 @@ func (pb *PrefetchBuffer) IsIdle() bool {
 	idle := true
 
 	pb.mu.Lock()
-	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
-	for _, w := range windows {
+	defer pb.mu.Unlock()
+
+	pb.windows.Range(func(key, value any) bool {
+		w := value.(*window)
 		if w != nil && time.Since(w.lastRead) > pb.manager.windowIdleTTL && !w.fetching {
-			continue
+			return true
 		} else {
 			idle = false
 		}
-	}
-	pb.mu.Unlock()
+
+		return true
+	})
 
 	return idle
 }
@@ -243,14 +229,13 @@ func (pb *PrefetchBuffer) Clear() {
 	Logger.Debugf("Evicting idle prefetch buffer - %s", pb.hash)
 
 	// Clear all window data
-	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
-	for _, window := range windows {
-		if window != nil {
-			window.data = nil
+	pb.windows.Range(func(key, value any) bool {
+		w := value.(*window)
+		if w != nil {
+			w.data = nil
 		}
-	}
-
-	pb.prevWindow, pb.currentWindow, pb.nextWindow = nil, nil, nil
+		return true
+	})
 }
 
 func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
@@ -285,18 +270,23 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 	windowIndex := offset / pb.windowSize
 
 	var w *window
-	windows := []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
-	for _, win := range windows {
+	pb.windows.Range(func(key, value any) bool {
+		win := value.(*window)
 		if win != nil && win.index == int64(windowIndex) {
 			w = win
-			break
+			return false
 		}
-	}
+
+		return true
+	})
 
 	if w == nil {
 		go pb.fetch(windowIndex)
 		return nil, false, false
 	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	windowOffset := offset - (windowIndex * pb.windowSize)
 	windowHead := (windowIndex * pb.windowSize) + w.readLength
@@ -315,7 +305,7 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 		// Pre-emptively start fetching the next buffer if within the threshold
 		if w.readLength-windowOffset <= preemptiveFetchThresholdBytes && !isLastWindow {
 			nextWindowIndex := windowIndex + 1
-			if pb.nextWindow == nil || pb.nextWindow.index != int64(nextWindowIndex) {
+			if _, found := pb.windows.Load(nextWindowIndex); !found {
 				go pb.fetch(nextWindowIndex)
 			}
 		}
