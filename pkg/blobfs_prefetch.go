@@ -265,7 +265,6 @@ func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
 			offset += dataLen
 
 			if doneReading {
-				Logger.Infof("Done reading")
 				break
 			}
 		} else {
