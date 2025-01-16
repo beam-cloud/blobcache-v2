@@ -224,13 +224,13 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 	remainingLength := req.Length
 	Logger.Infof("GetContentStream[ACK] - [%s] - offset=%d, length=%d, %d bytes", req.Hash, offset, req.Length, remainingLength)
 
+	dst := make([]byte, chunkSize)
 	for remainingLength > 0 {
 		currentChunkSize := chunkSize
 		if remainingLength < int64(chunkSize) {
 			currentChunkSize = remainingLength
 		}
 
-		dst := make([]byte, currentChunkSize)
 		n, err := cs.cas.Get(req.Hash, offset, currentChunkSize, dst)
 		if err != nil {
 			Logger.Debugf("GetContentStream - [%s] - %v", req.Hash, err)

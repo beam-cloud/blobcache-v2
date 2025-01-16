@@ -16,7 +16,7 @@ type PrefetchManager struct {
 	config           BlobCacheConfig
 	buffers          sync.Map
 	client           *BlobCacheClient
-	segmentIdleTTL   time.Duration
+	windowIdleTTL    time.Duration
 	evictionInterval time.Duration
 }
 
@@ -26,7 +26,7 @@ func NewPrefetchManager(ctx context.Context, config BlobCacheConfig, client *Blo
 		config:           config,
 		buffers:          sync.Map{},
 		client:           client,
-		segmentIdleTTL:   time.Duration(config.BlobFs.Prefetch.IdleTtlS) * time.Second,
+		windowIdleTTL:    time.Duration(config.BlobFs.Prefetch.IdleTtlS) * time.Second,
 		evictionInterval: time.Duration(config.BlobFs.Prefetch.EvictionIntervalS) * time.Second,
 	}
 }
@@ -86,8 +86,8 @@ type PrefetchBuffer struct {
 	cancelFunc    context.CancelFunc
 	manager       *PrefetchManager
 	hash          string
-	windowSize    uint64
 	lastRead      time.Time
+	windowSize    uint64
 	fileSize      uint64
 	client        *BlobCacheClient
 	mu            sync.Mutex
@@ -134,16 +134,16 @@ func NewPrefetchBuffer(opts PrefetchOpts) *PrefetchBuffer {
 		nextWindow:    nil,
 		prevWindow:    nil,
 	}
+
 	pb.dataCond = sync.NewCond(&pb.mu)
+
 	return pb
 }
 
-func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
-	bufferIndex := offset / bufferSize
-
+func (pb *PrefetchBuffer) fetch(windowIndex uint64) {
 	pb.mu.Lock()
 	for _, w := range []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow} {
-		if w != nil && w.index == int64(bufferIndex) {
+		if w != nil && w.index == int64(windowIndex) {
 			pb.mu.Unlock()
 			return
 		}
@@ -153,15 +153,15 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	var w *window
 	if existingWindow != nil {
 		w = existingWindow
-		w.index = int64(bufferIndex)
+		w.index = int64(windowIndex)
 		w.readLength = 0
-		w.data = make([]byte, 0, bufferSize)
+		w.data = make([]byte, 0, pb.windowSize)
 		w.lastRead = time.Now()
 		w.fetching = true
 	} else {
 		w = &window{
-			index:      int64(bufferIndex),
-			data:       make([]byte, 0, bufferSize),
+			index:      int64(windowIndex),
+			data:       make([]byte, 0, pb.windowSize),
 			readLength: 0,
 			lastRead:   time.Now(),
 			fetching:   true,
@@ -173,7 +173,8 @@ func (pb *PrefetchBuffer) fetch(offset uint64, bufferSize uint64) {
 	pb.currentWindow = pb.nextWindow
 	pb.nextWindow = w
 
-	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(bufferSize))
+	offset := windowIndex * pb.windowSize
+	contentChan, err := pb.client.GetContentStream(pb.hash, int64(offset), int64(pb.windowSize))
 	if err != nil {
 		pb.mu.Unlock()
 		return
@@ -222,7 +223,7 @@ func (pb *PrefetchBuffer) IsIdle() bool {
 	pb.mu.Lock()
 	windows := []*window{pb.prevWindow, pb.currentWindow, pb.nextWindow}
 	for _, w := range windows {
-		if w != nil && time.Since(w.lastRead) > pb.manager.segmentIdleTTL && !w.fetching {
+		if w != nil && time.Since(w.lastRead) > pb.manager.windowIdleTTL && !w.fetching {
 			continue
 		} else {
 			idle = false
@@ -253,23 +254,18 @@ func (pb *PrefetchBuffer) Clear() {
 }
 
 func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
-	bufferSize := pb.windowSize
-	bufferIndex := offset / bufferSize
-	bufferOffset := offset % bufferSize
-
 	var result []byte
 
 	for length > 0 {
-		data, ready, doneReading := pb.tryGetRange(bufferIndex, bufferOffset, offset, length)
+		data, ready, doneReading := pb.tryGetRange(offset, length)
 		if ready {
 			result = append(result, data...)
 			dataLen := uint64(len(data))
 			length -= dataLen
 			offset += dataLen
-			bufferIndex = offset / bufferSize
-			bufferOffset = offset % bufferSize
 
 			if doneReading {
+				Logger.Infof("Done reading")
 				break
 			}
 		} else {
@@ -281,6 +277,51 @@ func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
 	}
 
 	return result, nil
+}
+
+func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool) {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	windowIndex := offset / pb.windowSize
+
+	var w *window
+	windows := []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
+	for _, win := range windows {
+		if win != nil && win.index == int64(windowIndex) {
+			w = win
+			break
+		}
+	}
+
+	if w == nil {
+		go pb.fetch(windowIndex)
+		return nil, false, false
+	}
+
+	windowOffset := offset - (windowIndex * pb.windowSize)
+	windowHead := (windowIndex * pb.windowSize) + w.readLength
+	isLastWindow := ((windowIndex * pb.windowSize) + pb.windowSize) >= pb.fileSize
+
+	if windowHead > offset {
+		w.lastRead = time.Now()
+
+		bytesAvailable := windowHead - offset
+		bytesToRead := min(int64(length), int64(bytesAvailable))
+
+		// Pre-emptively start fetching the next buffer if within the threshold
+		if w.readLength-windowOffset <= preemptiveFetchThresholdBytes && !isLastWindow {
+			nextWindowIndex := windowIndex + 1
+			if pb.nextWindow == nil || pb.nextWindow.index != int64(nextWindowIndex) {
+				go pb.fetch(nextWindowIndex)
+			}
+		}
+
+		doneReading := !w.fetching && isLastWindow
+		return w.data[windowOffset : int64(windowOffset)+int64(bytesToRead)], true, doneReading
+	}
+
+	return nil, false, false
 }
 
 func (pb *PrefetchBuffer) waitForSignal() error {
@@ -296,48 +337,6 @@ func (pb *PrefetchBuffer) waitForSignal() error {
 			return pb.ctx.Err()
 		}
 	}
-}
-
-func (pb *PrefetchBuffer) tryGetRange(bufferIndex, bufferOffset, offset, length uint64) ([]byte, bool, bool) {
-	pb.mu.Lock()
-	defer pb.mu.Unlock()
-
-	var w *window
-	var windows []*window = []*window{pb.currentWindow, pb.nextWindow, pb.prevWindow}
-	for _, win := range windows {
-		if win != nil && win.index == int64(bufferIndex) {
-			w = win
-			break
-		}
-	}
-
-	if w == nil {
-		go pb.fetch(bufferIndex*pb.windowSize, pb.windowSize)
-		return nil, false, false
-	}
-
-	lastWindow := ((bufferIndex * pb.windowSize) + pb.windowSize) >= pb.fileSize
-	if w.readLength > bufferOffset {
-		w.lastRead = time.Now()
-
-		// Calculate the relative offset within the buffer
-		relativeOffset := offset - (bufferIndex * pb.windowSize)
-		availableLength := w.readLength - relativeOffset
-		readLength := min(int64(length), int64(availableLength))
-
-		// Pre-emptively start fetching the next buffer if within the threshold
-		if w.readLength-relativeOffset <= preemptiveFetchThresholdBytes && !lastWindow {
-			nextBufferIndex := bufferIndex + 1
-			if pb.nextWindow == nil || pb.nextWindow.index != int64(nextBufferIndex) {
-				go pb.fetch(nextBufferIndex*pb.windowSize, pb.windowSize)
-			}
-		}
-
-		doneReading := !w.fetching && lastWindow
-		return w.data[relativeOffset : int64(relativeOffset)+int64(readLength)], true, doneReading
-	}
-
-	return nil, false, false
 }
 
 func waitForCondition(cond *sync.Cond) <-chan struct{} {

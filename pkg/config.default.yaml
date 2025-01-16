@@ -9,9 +9,9 @@ grpcMessageSizeBytes: 1000000000
 grpcDialTimeoutS: 1
 discoveryIntervalS: 5
 discoveryMode: metadata
-directIO: false
 options: []
 blobfs:
+  directIO: false
   prefetch:
     enabled: false
     idleTtlS: 5
