@@ -241,7 +241,7 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 			break
 		}
 
-		Logger.Infof("GetContentStream[TX] - [%s] - %d bytes", req.Hash, n)
+		Logger.Debugf("GetContentStream[TX] - [%s] - %d bytes", req.Hash, n)
 		if err := stream.Send(&proto.GetContentResponse{
 			Ok:      true,
 			Content: dst[:n],
