@@ -180,9 +180,6 @@ func (pb *PrefetchBuffer) fetch(windowIndex uint64) {
 				// We didn't read anything for this window, so we should try again
 				if w.readLength == 0 {
 					pb.windows.Delete(windowIndex)
-					pb.dataCond.Broadcast()
-					pb.mu.Unlock()
-					return
 				}
 
 				pb.dataCond.Broadcast()
