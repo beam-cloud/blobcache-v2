@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -200,19 +201,26 @@ func (pb *PrefetchBuffer) fetch(windowIndex uint64) {
 func (pb *PrefetchBuffer) IsIdle() bool {
 	idle := true
 
-	pb.mu.Lock()
-	defer pb.mu.Unlock()
-
+	windowsToDelete := make([]int64, 0)
 	pb.windows.Range(func(key, value any) bool {
 		w := value.(*window)
 		if w != nil && time.Since(w.lastRead) > pb.manager.windowIdleTTL && !w.fetching {
-			return true
+			windowsToDelete = append(windowsToDelete, w.index)
 		} else {
 			idle = false
 		}
 
 		return true
 	})
+
+	for _, index := range windowsToDelete {
+		w, exists := pb.windows.Load(index)
+		if exists {
+			w.(*window).data = nil
+		}
+
+		pb.windows.Delete(index)
+	}
 
 	return idle
 }
@@ -231,8 +239,11 @@ func (pb *PrefetchBuffer) Clear() {
 		if w != nil {
 			w.data = nil
 		}
+
 		return true
 	})
+
+	runtime.GC()
 }
 
 func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
