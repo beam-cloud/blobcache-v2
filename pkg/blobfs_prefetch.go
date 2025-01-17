@@ -266,6 +266,8 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 
 	windowIndex := offset / pb.windowSize
 
+	Logger.Infof("tryGetRange - [%s] (offset=%d, length=%d, windowIndex=%d)", pb.hash, offset, length, windowIndex)
+
 	var w *window
 	pb.windows.Range(func(key, value any) bool {
 		win := value.(*window)
