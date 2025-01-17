@@ -12,7 +12,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"syscall"
 	"time"
 
@@ -26,8 +25,6 @@ import (
 
 const (
 	writeBufferSizeBytes      int   = 128 * 1024
-	getContentBufferPoolSize  int   = 128
-	getContentBufferSize      int64 = 256 * 1024
 	getContentStreamChunkSize int64 = 16 * 1024 * 1024 // 16MB
 )
 
@@ -180,42 +177,16 @@ func (cs *CacheService) StartServer(port uint) error {
 	return nil
 }
 
-var getContentBufferPool = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, getContentBufferSize)
-		return &b
-	},
-}
-
-func init() {
-	for i := 0; i < getContentBufferPoolSize; i++ {
-		//lint:ignore SA6002 reason: pre-allocating buffers for performance
-		getContentBufferPool.Put(make([]byte, getContentBufferSize))
-	}
-}
-
 func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentRequest) (*proto.GetContentResponse, error) {
-	bufPtr := getContentBufferPool.Get().(*[]byte)
-	defer getContentBufferPool.Put(bufPtr)
-	dst := *bufPtr
-
-	if cap(dst) < int(req.Length) {
-		dst = make([]byte, req.Length)
-		*bufPtr = dst
-	}
-	dst = dst[:req.Length]
-
-	resp := &proto.GetContentResponse{Content: dst}
-	_, err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
+	dst := make([]byte, req.Length)
+	n, err := cs.cas.Get(req.Hash, req.Offset, req.Length, dst)
 	if err != nil {
 		Logger.Debugf("Get - [%s] - %v", req.Hash, err)
 		return &proto.GetContentResponse{Content: nil, Ok: false}, nil
 	}
 
 	Logger.Debugf("Get[OK] - [%s] (offset=%d, length=%d)", req.Hash, req.Offset, req.Length)
-
-	resp.Ok = true
-	return resp, nil
+	return &proto.GetContentResponse{Content: dst[:n], Ok: true}, nil
 }
 
 func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {

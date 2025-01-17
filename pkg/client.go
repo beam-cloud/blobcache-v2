@@ -28,7 +28,6 @@ const (
 	closestHostTimeout              = 30 * time.Second
 	localClientCacheCleanupInterval = 5 * time.Second
 	localClientCacheTTL             = 300 * time.Second
-	readBufferSizeBytes             = 128 * 1024
 )
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
@@ -165,7 +164,6 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(maxMessageSize),
 			grpc.MaxCallSendMsgSize(maxMessageSize),
 		),
-		grpc.WithReadBufferSize(readBufferSizeBytes),
 	}
 
 	if c.cfg.Token != "" {

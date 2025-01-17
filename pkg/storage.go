@@ -175,7 +175,6 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 
 		remainingLength -= readLength
 		o += readLength
-		dstOffset += readLength
 	}
 
 	return dstOffset, nil
