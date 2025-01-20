@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-const (
-	preemptiveFetchThresholdBytes = 16 * 1024 * 1024 // if the next segment is within 16MB of where we are reading, start fetching it
-)
-
 type PrefetchManager struct {
 	ctx              context.Context
 	config           BlobCacheConfig
@@ -309,8 +305,8 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 		bytesAvailable := windowHead - offset
 		bytesToRead := min(int64(length), int64(bytesAvailable))
 
-		// Pre-emptively start fetching the next buffer if within the threshold
-		if w.readLength-windowOffset <= preemptiveFetchThresholdBytes && !isLastWindow {
+		// Pre-emptively start fetching the next buffer
+		if !isLastWindow {
 			nextWindowIndex := windowIndex + 1
 			if _, found := pb.windows.Load(nextWindowIndex); !found {
 				go pb.fetch(nextWindowIndex)
