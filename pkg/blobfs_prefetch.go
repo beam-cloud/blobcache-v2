@@ -242,13 +242,14 @@ func (pb *PrefetchBuffer) Clear() {
 	runtime.GC()
 }
 
-func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
-	var result []byte
+func (pb *PrefetchBuffer) GetRange(offset uint64, dst []byte) error {
+	length := uint64(len(dst))
 
 	for length > 0 {
 		data, ready, doneReading := pb.tryGetRange(offset, length)
 		if ready {
-			result = append(result, data...)
+			currentPos := uint64(len(dst)) - length
+			copy(dst[currentPos:], data)
 			dataLen := uint64(len(data))
 			length -= dataLen
 			offset += dataLen
@@ -258,13 +259,13 @@ func (pb *PrefetchBuffer) GetRange(offset, length uint64) ([]byte, error) {
 			}
 		} else {
 			if err := pb.waitForSignal(); err != nil {
-				return nil, err
+				return err
 			}
 		}
 
 	}
 
-	return result, nil
+	return nil
 }
 
 func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool) {
