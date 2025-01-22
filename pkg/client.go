@@ -31,7 +31,7 @@ const (
 
 	// NOTE: This value for readAheadKB is separate from the blobfs config since the FUSE library does
 	// weird stuff with the other read_ahead_kb value internally
-	readAheadKB = 128
+	readAheadKB = 32768
 )
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
