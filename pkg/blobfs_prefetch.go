@@ -269,6 +269,9 @@ func (pb *PrefetchBuffer) GetRange(offset uint64, dst []byte) error {
 }
 
 func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool) {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
 	windowIndex := offset / pb.windowSize
 
 	var w *window
@@ -287,10 +290,8 @@ func (pb *PrefetchBuffer) tryGetRange(offset, length uint64) ([]byte, bool, bool
 		return nil, false, false
 	}
 
-	if w.fetching {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
 	windowOffset := offset - (windowIndex * pb.windowSize)
 	windowHead := (windowIndex * pb.windowSize) + w.readLength
