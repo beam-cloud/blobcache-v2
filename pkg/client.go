@@ -28,6 +28,10 @@ const (
 	closestHostTimeout              = 30 * time.Second
 	localClientCacheCleanupInterval = 5 * time.Second
 	localClientCacheTTL             = 300 * time.Second
+
+	// NOTE: This value for readAheadKB is separate from the blobfs config since the FUSE library does
+	// weird stuff with the other read_ahead_kb value internally
+	readAheadKB = 128
 )
 
 func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
@@ -124,6 +128,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		err = startServer()
 		if err != nil {
 			return nil, err
+		}
+
+		err = updateReadAheadKB(cfg.BlobFs.MountPoint, readAheadKB)
+		if err != nil {
+			Logger.Errorf("Failed to update read_ahead_kb: %v", err)
 		}
 
 		bc.blobfsServer = server
