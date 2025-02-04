@@ -330,14 +330,19 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 			select {
 			case <-ticker.C:
 				now := time.Now()
+				stale := make([]string, 0)
 
 				for hash, entry := range c.localHostCache {
 					if now.Sub(entry.timestamp) > ttl {
-						c.mu.Lock()
-						delete(c.localHostCache, hash)
-						c.mu.Unlock()
+						stale = append(stale, hash)
 					}
 				}
+
+				c.mu.Lock()
+				for _, hash := range stale {
+					delete(c.localHostCache, hash)
+				}
+				c.mu.Unlock()
 
 			case <-c.ctx.Done():
 				return
