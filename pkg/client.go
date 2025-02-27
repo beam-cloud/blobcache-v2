@@ -66,7 +66,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 	tailscale := NewTailscale(ctx, hostname, cfg)
 
-	InitLogger(cfg.DebugMode)
+	InitLogger(cfg.DebugMode, cfg.PrettyLogs)
 
 	server, err := tailscale.GetOrCreateServer()
 	if err != nil {
@@ -349,6 +349,16 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 			}
 		}
 	}()
+}
+
+func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
+	hostAddrs, err := c.metadata.GetEntryLocations(ctx, hash)
+	if err != nil {
+		return false
+	}
+
+	intersection := hostAddrs.Intersect(c.hostMap.Members())
+	return intersection.Cardinality() > 0
 }
 
 func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {

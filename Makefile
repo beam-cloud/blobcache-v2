@@ -12,10 +12,10 @@ build:
 	docker push localhost:5001/blobcache:$(imageVersion)
 
 start:
-	cd hack; okteto up --file okteto.yml
+	cd hack; okteto up --file okteto.yaml
 
 stop:
-	cd hack; okteto down --file okteto.yml
+	cd hack; okteto down --file okteto.yaml
 
 build-chart:
 	helm package --dependency-update deploy/charts/blobcache --version $(chartVersion)
