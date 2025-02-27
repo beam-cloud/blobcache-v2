@@ -139,13 +139,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return nil, syscall.ENOENT
 	}
 
-	n.log("A")
-	if n.bfsNode.Hash != "" && n.bfsNode.Attr.Size > 0 {
-		n.log("B")
-		if !n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash) {
-			n.log("C")
-			return nil, syscall.ENOENT
-		}
+	if !n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash) {
+		return nil, syscall.ENOENT
 	}
 
 	out.Attr = *attr
