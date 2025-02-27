@@ -183,7 +183,7 @@ func updateReadAheadKB(mountPoint string, valueKB int) error {
 	// Update read_ahead_kb
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("echo %d > %s", valueKB, readAheadPath))
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to update read_ahead_kb: %w", err)
+		return fmt.Errorf("failed to update read_ahead_kb: %w read_ahead_path: %s", err, readAheadPath)
 	}
 
 	return nil
