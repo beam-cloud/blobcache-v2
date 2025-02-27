@@ -16,8 +16,7 @@ func main() {
 	ctx := context.Background()
 	cfg := configManager.GetConfig()
 
-	blobcache.InitLogger(cfg.DebugMode)
-	defer blobcache.Logger.Sync()
+	blobcache.InitLogger(cfg.DebugMode, cfg.PrettyLogs)
 
 	s, err := blobcache.NewCacheService(ctx, cfg)
 	if err != nil {

@@ -1,16 +1,17 @@
 package blobcache
 
 import (
-	"fmt"
+	"io"
+	"os"
 	"sync"
+	"time"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	"github.com/rs/zerolog"
 )
 
 type logger struct {
-	zapLogger *zap.Logger
-	debug     bool
+	logger zerolog.Logger
+	debug  bool
 }
 
 var (
@@ -18,28 +19,31 @@ var (
 	once   sync.Once
 )
 
-func InitLogger(debugMode bool) {
+func InitLogger(debugMode bool, prettyLogs bool) {
 	once.Do(func() {
-		var cfg zap.Config
+		var output io.Writer = os.Stderr
+
+		// Configure Zerolog
+		zerolog.TimeFieldFormat = time.RFC3339
+		logLevel := zerolog.InfoLevel
 		if debugMode {
-			cfg = zap.NewDevelopmentConfig()
-		} else {
-			cfg = zap.NewProductionConfig()
+			logLevel = zerolog.DebugLevel
 		}
 
-		cfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-
-		var err error
-		zapLogger, err := cfg.Build()
-		if err != nil {
-			panic(err)
+		if prettyLogs {
+			output = zerolog.ConsoleWriter{Out: os.Stdout}
 		}
+
+		zerologLogger := zerolog.New(output).
+			Level(logLevel).
+			With().
+			Timestamp().
+			Logger()
 
 		Logger = &logger{
-			zapLogger: zapLogger,
-			debug:     debugMode,
+			logger: zerologLogger,
+			debug:  debugMode,
 		}
-
 	})
 }
 
@@ -50,50 +54,64 @@ func GetLogger() *logger {
 	return Logger
 }
 
-func (l *logger) Debug(msg string, fields ...zap.Field) {
+func (l *logger) Debug(msg string, fields ...any) {
 	if l.debug {
-		l.zapLogger.Debug(msg, fields...)
+		event := l.logger.Debug()
+		l.addFields(event, fields...).Msg(msg)
 	}
 }
 
 func (l *logger) Debugf(template string, args ...interface{}) {
 	if l.debug {
-		l.zapLogger.Debug(fmt.Sprintf(template, args...))
+		l.logger.Debug().Msgf(template, args...)
 	}
 }
 
-func (l *logger) Info(msg string, fields ...zap.Field) {
-	l.zapLogger.Info(msg, fields...)
+func (l *logger) Info(msg string, fields ...any) {
+	event := l.logger.Info()
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Infof(template string, args ...interface{}) {
-	l.zapLogger.Info(fmt.Sprintf(template, args...))
+	l.logger.Info().Msgf(template, args...)
 }
 
-func (l *logger) Warn(msg string, fields ...zap.Field) {
-	l.zapLogger.Warn(msg, fields...)
+func (l *logger) Warn(msg string, fields ...any) {
+	event := l.logger.Warn()
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Warnf(template string, args ...interface{}) {
-	l.zapLogger.Warn(fmt.Sprintf(template, args...))
+	l.logger.Warn().Msgf(template, args...)
 }
 
-func (l *logger) Error(msg string, fields ...zap.Field) {
-	l.zapLogger.Error(msg, fields...)
+func (l *logger) Error(msg string, fields ...any) {
+	event := l.logger.Error()
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Errorf(template string, args ...interface{}) {
-	l.zapLogger.Error(fmt.Sprintf(template, args...))
+	l.logger.Error().Msgf(template, args...)
 }
 
-func (l *logger) Fatal(msg string, fields ...zap.Field) {
-	l.zapLogger.Fatal(msg, fields...)
+func (l *logger) Fatal(msg string, fields ...any) {
+	event := l.logger.Fatal()
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Fatalf(template string, args ...interface{}) {
-	l.zapLogger.Fatal(fmt.Sprintf(template, args...))
+	l.logger.Fatal().Msgf(template, args...)
 }
 
-func (l *logger) Sync() {
-	_ = l.zapLogger.Sync()
+func (l *logger) addFields(event *zerolog.Event, fields ...any) *zerolog.Event {
+	for i := 0; i < len(fields); i += 2 {
+		if i+1 < len(fields) {
+			key, ok := fields[i].(string)
+			if !ok {
+				continue
+			}
+			event = event.Interface(key, fields[i+1])
+		}
+	}
+	return event
 }

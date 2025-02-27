@@ -36,7 +36,7 @@ func main() {
 	cfg := configManager.GetConfig()
 
 	// Initialize logger
-	blobcache.InitLogger(cfg.DebugMode)
+	blobcache.InitLogger(cfg.DebugMode, cfg.PrettyLogs)
 
 	ctx := context.Background()
 

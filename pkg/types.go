@@ -27,6 +27,7 @@ const (
 type BlobCacheConfig struct {
 	Token                           string          `key:"token" json:"token"`
 	DebugMode                       bool            `key:"debugMode" json:"debug_mode"`
+	PrettyLogs                      bool            `key:"prettyLogs" json:"pretty_logs"`
 	TLSEnabled                      bool            `key:"tlsEnabled" json:"tls_enabled"`
 	Port                            uint            `key:"port" json:"port"`
 	HostStorageCapacityThresholdPct float64         `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
@@ -132,11 +133,12 @@ type JuiceFSConfig struct {
 }
 
 type MountPointConfig struct {
-	BucketName  string `key:"bucketName" json:"bucket_name"`
-	AccessKey   string `key:"accessKey" json:"access_key"`
-	SecretKey   string `key:"secretKey" json:"secret_key"`
-	Region      string `key:"region" json:"region"`
-	EndpointURL string `key:"endpointUrl" json:"endpoint_url"`
+	BucketName     string `key:"bucketName" json:"bucket_name"`
+	AccessKey      string `key:"accessKey" json:"access_key"`
+	SecretKey      string `key:"secretKey" json:"secret_key"`
+	Region         string `key:"region" json:"region"`
+	EndpointURL    string `key:"endpointUrl" json:"endpoint_url"`
+	ForcePathStyle bool   `key:"forcePathStyle" json:"force_path_style"`
 }
 
 type BlobCacheHost struct {

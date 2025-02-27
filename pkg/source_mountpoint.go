@@ -34,6 +34,10 @@ func (s *MountPointSource) Mount(localPath string) error {
 		"--read-only",
 	)
 
+	if s.config.ForcePathStyle {
+		s.mountCmd.Args = append(s.mountCmd.Args, "--force-path-style")
+	}
+
 	if s.config.AccessKey != "" || s.config.SecretKey != "" {
 		s.mountCmd.Env = append(s.mountCmd.Env,
 			fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", s.config.AccessKey),
