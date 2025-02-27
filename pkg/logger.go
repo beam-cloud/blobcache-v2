@@ -57,16 +57,7 @@ func GetLogger() *logger {
 func (l *logger) Debug(msg string, fields ...any) {
 	if l.debug {
 		event := l.logger.Debug()
-		for i := 0; i < len(fields); i += 2 {
-			if i+1 < len(fields) {
-				key, ok := fields[i].(string)
-				if !ok {
-					continue
-				}
-				event = event.Interface(key, fields[i+1])
-			}
-		}
-		event.Msg(msg)
+		l.addFields(event, fields...).Msg(msg)
 	}
 }
 
@@ -78,16 +69,7 @@ func (l *logger) Debugf(template string, args ...interface{}) {
 
 func (l *logger) Info(msg string, fields ...any) {
 	event := l.logger.Info()
-	for i := 0; i < len(fields); i += 2 {
-		if i+1 < len(fields) {
-			key, ok := fields[i].(string)
-			if !ok {
-				continue
-			}
-			event = event.Interface(key, fields[i+1])
-		}
-	}
-	event.Msg(msg)
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Infof(template string, args ...interface{}) {
@@ -96,16 +78,7 @@ func (l *logger) Infof(template string, args ...interface{}) {
 
 func (l *logger) Warn(msg string, fields ...any) {
 	event := l.logger.Warn()
-	for i := 0; i < len(fields); i += 2 {
-		if i+1 < len(fields) {
-			key, ok := fields[i].(string)
-			if !ok {
-				continue
-			}
-			event = event.Interface(key, fields[i+1])
-		}
-	}
-	event.Msg(msg)
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Warnf(template string, args ...interface{}) {
@@ -114,16 +87,7 @@ func (l *logger) Warnf(template string, args ...interface{}) {
 
 func (l *logger) Error(msg string, fields ...any) {
 	event := l.logger.Error()
-	for i := 0; i < len(fields); i += 2 {
-		if i+1 < len(fields) {
-			key, ok := fields[i].(string)
-			if !ok {
-				continue
-			}
-			event = event.Interface(key, fields[i+1])
-		}
-	}
-	event.Msg(msg)
+	l.addFields(event, fields...).Msg(msg)
 }
 
 func (l *logger) Errorf(template string, args ...interface{}) {
@@ -132,6 +96,14 @@ func (l *logger) Errorf(template string, args ...interface{}) {
 
 func (l *logger) Fatal(msg string, fields ...any) {
 	event := l.logger.Fatal()
+	l.addFields(event, fields...).Msg(msg)
+}
+
+func (l *logger) Fatalf(template string, args ...interface{}) {
+	l.logger.Fatal().Msgf(template, args...)
+}
+
+func (l *logger) addFields(event *zerolog.Event, fields ...any) *zerolog.Event {
 	for i := 0; i < len(fields); i += 2 {
 		if i+1 < len(fields) {
 			key, ok := fields[i].(string)
@@ -141,9 +113,5 @@ func (l *logger) Fatal(msg string, fields ...any) {
 			event = event.Interface(key, fields[i+1])
 		}
 	}
-	event.Msg(msg)
-}
-
-func (l *logger) Fatalf(template string, args ...interface{}) {
-	l.logger.Fatal().Msgf(template, args...)
+	return event
 }
