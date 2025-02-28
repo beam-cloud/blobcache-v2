@@ -139,6 +139,10 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return nil, syscall.ENOENT
 	}
 
+	if !n.attr.IsDir() && !n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash) {
+		return nil, syscall.ENOENT
+	}
+
 	out.Attr = *attr
 	return node, fs.OK
 }
