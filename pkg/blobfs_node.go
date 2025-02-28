@@ -139,6 +139,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return nil, syscall.ENOENT
 	}
 
+	n.log("name: %s, attr vs n.attr: %+v vs %+v", name, *attr, n.attr)
+
 	n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash)
 	if !n.attr.IsDir() && !n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash) {
 		n.log("File is not cached nearby")
