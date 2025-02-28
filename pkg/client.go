@@ -589,7 +589,7 @@ func (c *BlobCacheClient) GetState() error {
 func (c *BlobCacheClient) PathContentLocal(ctx context.Context, path string) bool {
 	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
-		Logger.Errorf("error getting fs node: %v", err)
+		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
 		return false
 	}
 
