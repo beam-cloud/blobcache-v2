@@ -134,6 +134,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return node, fs.OK
 	}
 
+	Logger.Infof("Lookup called with path: %s", fullPath)
+	Logger.Infof("FsID: %s", GenerateFsID(fullPath))
 	node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(fullPath))
 	if err != nil {
 		return nil, syscall.ENOENT
