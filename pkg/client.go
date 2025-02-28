@@ -586,9 +586,7 @@ func (c *BlobCacheClient) GetState() error {
 	return nil
 }
 
-func (c *BlobCacheClient) PathContentLocal(ctx context.Context, path string) bool {
-	Logger.Infof("PathContentLocal called with path: %s", path)
-	Logger.Infof("FsID: %s", GenerateFsID(path))
+func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
 	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
 		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
