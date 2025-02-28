@@ -352,15 +352,12 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 }
 
 func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
-	Logger.Infof("checking if hash is cached nearby: %s", hash)
 	hostAddrs, err := c.metadata.GetEntryLocations(ctx, hash)
 	if err != nil {
-		Logger.Errorf("error getting entry locations: %v", err)
 		return false
 	}
 
 	intersection := hostAddrs.Intersect(c.hostMap.Members())
-	Logger.Infof("intersection: %s", intersection.String())
 	return intersection.Cardinality() > 0
 }
 

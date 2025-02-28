@@ -139,8 +139,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return nil, syscall.ENOENT
 	}
 
+	// FSNode's attrs are not yet initialized so the attrs and hash retrieved from the cache are used
 	if !attr.IsDir() && !n.filesystem.Client.IsCachedNearby(ctx, hash) {
-		n.log("File is not cached nearby")
 		return nil, syscall.ENOENT
 	}
 
