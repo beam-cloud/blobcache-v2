@@ -83,10 +83,10 @@ func metaToAttr(metadata *BlobFsMetadata) fuse.Attr {
 	}
 }
 
-func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fuse.Attr, error) {
+func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fuse.Attr, string, error) {
 	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, fsId)
 	if err != nil {
-		return nil, nil, syscall.ENOENT
+		return nil, nil, "", syscall.ENOENT
 	}
 
 	// Fill out the child node's attributes
@@ -107,7 +107,7 @@ func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fu
 		fs.StableAttr{Mode: metadata.Mode, Ino: metadata.Ino, Gen: metadata.Gen},
 	)
 
-	return node, &attr, nil
+	return node, &attr, metadata.Hash, nil
 }
 
 func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
@@ -125,7 +125,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			return nil, syscall.ENOENT
 		}
 
-		node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(sourcePath))
+		node, attr, _, err := n.inodeFromFsId(ctx, GenerateFsID(sourcePath))
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
@@ -134,13 +134,12 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		return node, fs.OK
 	}
 
-	node, attr, err := n.inodeFromFsId(ctx, GenerateFsID(fullPath))
+	node, attr, hash, err := n.inodeFromFsId(ctx, GenerateFsID(fullPath))
 	if err != nil {
 		return nil, syscall.ENOENT
 	}
 
-	n.log("name: %s, attr vs n.attr: %+v vs %+v", name, *attr, n.attr)
-	if !attr.IsDir() && !n.filesystem.Client.IsCachedNearby(ctx, n.bfsNode.Hash) {
+	if !attr.IsDir() && !n.filesystem.Client.IsCachedNearby(ctx, hash) {
 		n.log("File is not cached nearby")
 		return nil, syscall.ENOENT
 	}
