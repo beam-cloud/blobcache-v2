@@ -224,7 +224,6 @@ func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path strin
 
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	key := MetadataKeys.MetadataFsNode(id)
-	Logger.Infof("Getting fs node: %s", key)
 
 	res, err := m.rdb.HGetAll(ctx, key).Result()
 	if err != nil && err != redis.Nil {
