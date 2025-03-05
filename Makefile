@@ -27,3 +27,7 @@ publish-chart:
 testclients:
 	GOOS=linux GOARCH=amd64 go build -o bin/throughput e2e/throughput/main.go
 	GOOS=linux GOARCH=amd64 go build -o bin/fs e2e/fs/main.go
+
+local:
+	helm install blobcache-redis bitnami/redis --set architecture=standalone --set auth.password=password
+	cd hack; kubectl apply -f deployment.yaml
