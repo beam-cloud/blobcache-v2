@@ -332,12 +332,13 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 				now := time.Now()
 				stale := make([]string, 0)
 
+				c.mu.RLock()
 				for hash, entry := range c.localHostCache {
 					if now.Sub(entry.timestamp) > ttl {
 						stale = append(stale, hash)
 					}
 				}
-
+				c.mu.RUnlock()
 				c.mu.Lock()
 				for _, hash := range stale {
 					delete(c.localHostCache, hash)
