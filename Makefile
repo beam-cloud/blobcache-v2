@@ -27,3 +27,12 @@ publish-chart:
 testclients:
 	GOOS=linux GOARCH=amd64 go build -o bin/throughput e2e/throughput/main.go
 	GOOS=linux GOARCH=amd64 go build -o bin/fs e2e/fs/main.go
+
+
+setup: build
+	@if [ "$(shell kubectl config current-context)" != "k3d-beta9" ]; then \
+		echo "Current context is not k3d-beta9"; \
+		exit 1; \
+	fi
+	helm install blobcache-valkey oci://registry-1.docker.io/bitnamicharts/valkey --set architecture=standalone --set auth.password=password
+	cd hack; kubectl apply -f deployment.yaml; cd ..
