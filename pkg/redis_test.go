@@ -54,13 +54,16 @@ func Test_CopyConfig(t *testing.T) {
 			name:     "sentinel config",
 			sentinel: true,
 			inputConfig: RedisConfig{
-				Addrs:          []string{"localhost:26379"},
-				MasterName:     "mymaster",
-				RouteByLatency: true,
+				Addrs:            []string{"localhost:26379"},
+				MasterName:       "mymaster",
+				RouteByLatency:   true,
+				Password:         "password",
+				SentinelPassword: "sentinel_password",
 			},
 			expectedOptions: redis.UniversalOptions{
 				Addrs:      []string{"localhost:26379"},
 				MasterName: "mymaster",
+				Password:   "password",
 			},
 		},
 	}
@@ -82,6 +85,7 @@ func Test_CopyConfig(t *testing.T) {
 				failoverOpts := actualOptions.Failover()
 				assert.Equal(t, test.inputConfig.Addrs[0], failoverOpts.SentinelAddrs[0])
 				assert.Equal(t, test.inputConfig.MasterName, failoverOpts.MasterName)
+				assert.Equal(t, test.inputConfig.SentinelPassword, failoverOpts.SentinelPassword)
 			}
 		})
 	}

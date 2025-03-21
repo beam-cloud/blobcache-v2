@@ -92,6 +92,7 @@ type RedisConfig struct {
 	Password           string        `key:"password" json:"password"`
 	RouteByLatency     bool          `key:"routeByLatency" json:"route_by_latency"`
 	MasterName         string        `key:"masterName" json:"master_name"`
+	SentinelPassword   string        `key:"sentinelPassword" json:"sentinel_password"`
 }
 
 type BlobFsConfig struct {
