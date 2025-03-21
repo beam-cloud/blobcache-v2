@@ -57,9 +57,11 @@ type TailscaleConfig struct {
 }
 
 type MetadataConfig struct {
-	RedisAddr       string `key:"redisAddr" json:"redis_addr"`
-	RedisPasswd     string `key:"redisPasswd" json:"redis_passwd"`
-	RedisTLSEnabled bool   `key:"redisTLSEnabled" json:"redis_tls_enabled"`
+	RedisAddr       string    `key:"redisAddr" json:"redis_addr"`
+	RedisPasswd     string    `key:"redisPasswd" json:"redis_passwd"`
+	RedisTLSEnabled bool      `key:"redisTLSEnabled" json:"redis_tls_enabled"`
+	RedisMode       RedisMode `key:"redisMode" json:"redis_mode"`
+	RedisMasterName string    `key:"redisMasterName" json:"redis_master_name"`
 }
 
 type RedisMode string
