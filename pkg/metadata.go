@@ -31,6 +31,7 @@ func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
 		Addrs:              []string{cfg.RedisAddr},
 		Mode:               redisMode,
 		Password:           cfg.RedisPasswd,
+		SentinelPassword:   cfg.RedisPasswd,
 		EnableTLS:          cfg.RedisTLSEnabled,
 		MasterName:         cfg.RedisMasterName,
 		InsecureSkipVerify: true, // HOTFIX: tailscale certs don't match in-cluster certs
