@@ -58,10 +58,14 @@ func NewRedisClient(config RedisConfig, options ...func(*redis.UniversalOptions)
 	var client redis.UniversalClient
 	switch config.Mode {
 	case RedisModeSingle:
+		Logger.Infof("Creating single Redis client")
 		client = redis.NewClient(opts.Simple())
 	case RedisModeCluster:
+		Logger.Infof("Creating cluster Redis client")
 		client = redis.NewClusterClient(opts.Cluster())
 	case RedisModeSentinel:
+		Logger.Infof("Creating sentinel Redis client")
+		Logger.Infof("Calling NewFailoverClient with opts: %+v", opts.Failover())
 		client = redis.NewFailoverClient(opts.Failover())
 	default:
 		return nil, ErrUnknownRedisMode
