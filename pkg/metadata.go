@@ -21,16 +21,18 @@ type BlobCacheMetadata struct {
 	lock *RedisLock
 }
 
-const (
-	redisMode RedisMode = "single"
-)
-
 func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
+	redisMode := RedisModeSingle
+	if cfg.RedisMode != "" {
+		redisMode = cfg.RedisMode
+	}
+
 	rdb, err := NewRedisClient(RedisConfig{
 		Addrs:              []string{cfg.RedisAddr},
 		Mode:               redisMode,
 		Password:           cfg.RedisPasswd,
 		EnableTLS:          cfg.RedisTLSEnabled,
+		MasterName:         cfg.RedisMasterName,
 		InsecureSkipVerify: true, // HOTFIX: tailscale certs don't match in-cluster certs
 	})
 	if err != nil {
