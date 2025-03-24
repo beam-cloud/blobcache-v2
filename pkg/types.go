@@ -87,6 +87,7 @@ type MetadataConfig struct {
 	RedisTLSEnabled bool      `key:"redisTLSEnabled" json:"redis_tls_enabled"`
 	RedisMode       RedisMode `key:"redisMode" json:"redis_mode"`
 	RedisMasterName string    `key:"redisMasterName" json:"redis_master_name"`
+	RedisNodeCount  int       `key:"redisNodeCount" json:"redis_node_count"`
 }
 
 type RedisMode string
