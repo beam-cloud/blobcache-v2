@@ -44,6 +44,31 @@ type BlobCacheConfig struct {
 	BlobFs                          BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
+type BlobCacheMetadataConfig struct {
+	ValkeyConfig ValkeyConfig `key:"valkey" json:"valkey"`
+}
+
+type ValkeyConfig struct {
+	Enabled         bool                  `key:"enabled" json:"enabled"`
+	Password        string                `key:"password" json:"password"`
+	TLS             bool                  `key:"tls" json:"tls"`
+	PersistenceSize string                `key:"persistenceSize" json:"persistenceSize"`
+	ReplicaCount    int                   `key:"replicaCount" json:"replicaCount"`
+	PoolNodeCount   int                   `key:"poolNodeCount" json:"poolNodeCount"`
+	ExistingPrimary ValkeyExistingPrimary `key:"existingPrimary" json:"existingPrimary"`
+	Sentinel        ValkeySentinelConfig  `key:"sentinel" json:"sentinel"`
+}
+
+type ValkeyExistingPrimary struct {
+	Host string `key:"host" json:"host"`
+	Port int    `key:"port" json:"port"`
+}
+
+type ValkeySentinelConfig struct {
+	Enabled bool `key:"enabled" json:"enabled"`
+	Quorum  int  `key:"quorum" json:"quorum"`
+}
+
 type TailscaleConfig struct {
 	WaitForAuth  bool   `key:"waitForAuth" json:"wait_for_auth"`
 	ControlURL   string `key:"controlUrl" json:"control_url"`
