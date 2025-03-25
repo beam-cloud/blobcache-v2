@@ -55,6 +55,8 @@ type ValkeyConfig struct {
 	PersistenceSize string                `key:"persistenceSize" json:"persistenceSize"`
 	ReplicaCount    int                   `key:"replicaCount" json:"replicaCount"`
 	PoolNodeCount   int                   `key:"poolNodeCount" json:"poolNodeCount"`
+	Host            string                `key:"host" json:"host"`
+	Port            int                   `key:"port" json:"port"`
 	ExistingPrimary ValkeyExistingPrimary `key:"existingPrimary" json:"existingPrimary"`
 	Sentinel        ValkeySentinelConfig  `key:"sentinel" json:"sentinel"`
 }
