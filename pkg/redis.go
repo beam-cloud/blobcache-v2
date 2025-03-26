@@ -65,7 +65,7 @@ func NewRedisClient(config RedisConfig, options ...func(*redis.UniversalOptions)
 		failoverOpts := opts.Failover()
 		failoverOpts.RouteByLatency = true
 		failoverOpts.UseDisconnectedReplicas = true
-		client = redis.NewFailoverClient(failoverOpts)
+		client = redis.NewFailoverClusterClient(failoverOpts)
 	default:
 		return nil, ErrUnknownRedisMode
 	}
