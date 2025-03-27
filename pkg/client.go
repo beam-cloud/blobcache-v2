@@ -357,6 +357,8 @@ func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool 
 	if err != nil {
 		return false
 	}
+	Logger.Infof("hostAddrs: %s", hostAddrs.String())
+	Logger.Infof("hostMap: %s", c.hostMap.Members().String())
 	intersection := hostAddrs.Intersect(c.hostMap.Members())
 	return intersection.Cardinality() > 0
 }
