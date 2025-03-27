@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 
-FROM golang:1.22-bookworm AS build
+FROM golang:1.22-bullseye AS build
 
 WORKDIR /workspace
 
