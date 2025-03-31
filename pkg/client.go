@@ -615,10 +615,12 @@ func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) b
 	}
 
 	for _, child := range children {
+		Logger.Infof("child: %+v", child)
 		if child.Size == 0 {
 			if !c.childrenCachedNearby(ctx, child.ID) {
 				return false
 			}
+			continue
 		}
 
 		if !c.IsCachedNearby(ctx, child.Hash) {
