@@ -615,7 +615,7 @@ func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) b
 	}
 
 	for _, child := range children {
-		if child.Size == 0 {
+		if (child.Mode & fuse.S_IFDIR) != 0 {
 			if !c.childrenCachedNearby(ctx, child.ID) {
 				return false
 			}
