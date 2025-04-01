@@ -51,32 +51,18 @@ const (
 	BlobCacheMetadataModeLocal   BlobCacheMetadataMode = "local"
 )
 
-type BlobCacheMetadataConfig struct {
-	Mode         BlobCacheMetadataMode `key:"mode" json:"mode"`
-	ValkeyConfig ValkeyConfig          `key:"valkey" json:"valkey"`
-}
-
 type ValkeyConfig struct {
 	PrimaryName     string                `key:"primaryName" json:"primary_name"`
 	Password        string                `key:"password" json:"password"`
 	TLS             bool                  `key:"tls" json:"tls"`
-	PersistenceSize string                `key:"persistenceSize" json:"persistenceSize"`
-	ReplicaCount    int                   `key:"replicaCount" json:"replicaCount"`
-	PoolNodeCount   int                   `key:"poolNodeCount" json:"poolNodeCount"`
 	Host            string                `key:"host" json:"host"`
 	Port            int                   `key:"port" json:"port"`
 	ExistingPrimary ValkeyExistingPrimary `key:"existingPrimary" json:"existingPrimary"`
-	Sentinel        ValkeySentinelConfig  `key:"sentinel" json:"sentinel"`
 }
 
 type ValkeyExistingPrimary struct {
 	Host string `key:"host" json:"host"`
 	Port int    `key:"port" json:"port"`
-}
-
-type ValkeySentinelConfig struct {
-	Enabled bool `key:"enabled" json:"enabled"`
-	Quorum  int  `key:"quorum" json:"quorum"`
 }
 
 type TailscaleConfig struct {
@@ -92,6 +78,10 @@ type TailscaleConfig struct {
 }
 
 type MetadataConfig struct {
+	Mode         BlobCacheMetadataMode `key:"mode" json:"mode"`
+	ValkeyConfig ValkeyConfig          `key:"valkey" json:"valkey"`
+
+	// Default config
 	RedisAddr       string    `key:"redisAddr" json:"redis_addr"`
 	RedisPasswd     string    `key:"redisPasswd" json:"redis_passwd"`
 	RedisTLSEnabled bool      `key:"redisTLSEnabled" json:"redis_tls_enabled"`
