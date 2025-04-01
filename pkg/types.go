@@ -57,6 +57,7 @@ type BlobCacheMetadataConfig struct {
 }
 
 type ValkeyConfig struct {
+	PrimaryName     string                `key:"primaryName" json:"primary_name"`
 	Password        string                `key:"password" json:"password"`
 	TLS             bool                  `key:"tls" json:"tls"`
 	PersistenceSize string                `key:"persistenceSize" json:"persistenceSize"`
