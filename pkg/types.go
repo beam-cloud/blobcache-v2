@@ -44,12 +44,19 @@ type BlobCacheConfig struct {
 	BlobFs                          BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
+type BlobCacheMetadataMode string
+
+const (
+	BlobCacheMetadataModeDefault BlobCacheMetadataMode = "default"
+	BlobCacheMetadataModeLocal   BlobCacheMetadataMode = "local"
+)
+
 type BlobCacheMetadataConfig struct {
-	ValkeyConfig ValkeyConfig `key:"valkey" json:"valkey"`
+	Mode         BlobCacheMetadataMode `key:"mode" json:"mode"`
+	ValkeyConfig ValkeyConfig          `key:"valkey" json:"valkey"`
 }
 
 type ValkeyConfig struct {
-	Enabled         bool                  `key:"enabled" json:"enabled"`
 	Password        string                `key:"password" json:"password"`
 	TLS             bool                  `key:"tls" json:"tls"`
 	PersistenceSize string                `key:"persistenceSize" json:"persistenceSize"`
