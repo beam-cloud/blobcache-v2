@@ -44,6 +44,27 @@ type BlobCacheConfig struct {
 	BlobFs                          BlobFsConfig    `key:"blobfs" json:"blobfs"`
 }
 
+type BlobCacheMetadataMode string
+
+const (
+	BlobCacheMetadataModeDefault BlobCacheMetadataMode = "default"
+	BlobCacheMetadataModeLocal   BlobCacheMetadataMode = "local"
+)
+
+type ValkeyConfig struct {
+	PrimaryName     string                `key:"primaryName" json:"primary_name"`
+	Password        string                `key:"password" json:"password"`
+	TLS             bool                  `key:"tls" json:"tls"`
+	Host            string                `key:"host" json:"host"`
+	Port            int                   `key:"port" json:"port"`
+	ExistingPrimary ValkeyExistingPrimary `key:"existingPrimary" json:"existingPrimary"`
+}
+
+type ValkeyExistingPrimary struct {
+	Host string `key:"host" json:"host"`
+	Port int    `key:"port" json:"port"`
+}
+
 type TailscaleConfig struct {
 	WaitForAuth  bool   `key:"waitForAuth" json:"wait_for_auth"`
 	ControlURL   string `key:"controlUrl" json:"control_url"`
@@ -57,6 +78,10 @@ type TailscaleConfig struct {
 }
 
 type MetadataConfig struct {
+	Mode         BlobCacheMetadataMode `key:"mode" json:"mode"`
+	ValkeyConfig ValkeyConfig          `key:"valkey" json:"valkey"`
+
+	// Default config
 	RedisAddr       string    `key:"redisAddr" json:"redis_addr"`
 	RedisPasswd     string    `key:"redisPasswd" json:"redis_passwd"`
 	RedisTLSEnabled bool      `key:"redisTLSEnabled" json:"redis_tls_enabled"`

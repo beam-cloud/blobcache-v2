@@ -257,6 +257,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		if err != nil || !getContentResponse.Ok {
 
 			// If we had an issue getting the content, remove this location from metadata
+			Logger.Infof("Removing location entry from metadata after failed GetContent: %s", host.Addr)
 			c.metadata.RemoveEntryLocation(ctx, hash, host)
 
 			c.mu.Lock()
@@ -292,6 +293,7 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 
 			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 			if err != nil {
+				Logger.Infof("Removing location entry from metadata after failed GetContentStream: %s", host.Addr)
 				c.metadata.RemoveEntryLocation(ctx, hash, host)
 				c.mu.Lock()
 				delete(c.localHostCache, hash)
@@ -306,6 +308,7 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 				}
 
 				if err != nil || !resp.Ok {
+					Logger.Infof("Removing location entry from metadata after failed stream recv: %s", host.Addr)
 					c.metadata.RemoveEntryLocation(ctx, hash, host)
 					c.mu.Lock()
 					delete(c.localHostCache, hash)
@@ -357,7 +360,6 @@ func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool 
 	if err != nil {
 		return false
 	}
-
 	intersection := hostAddrs.Intersect(c.hostMap.Members())
 	return intersection.Cardinality() > 0
 }
