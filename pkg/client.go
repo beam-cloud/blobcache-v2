@@ -598,3 +598,36 @@ func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) b
 
 	return c.IsCachedNearby(ctx, metadata.Hash)
 }
+
+func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bool {
+	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
+	if err != nil {
+		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
+		return false
+	}
+
+	return c.childrenCachedNearby(ctx, metadata.ID)
+}
+
+func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) bool {
+	children, err := c.metadata.GetFsNodeChildren(ctx, id)
+	if err != nil {
+		Logger.Errorf("error getting fs node children: %v, id: %s", err, id)
+		return false
+	}
+
+	for _, child := range children {
+		if (child.Mode & fuse.S_IFDIR) != 0 {
+			if !c.childrenCachedNearby(ctx, child.ID) {
+				return false
+			}
+			continue
+		}
+
+		if !c.IsCachedNearby(ctx, child.Hash) {
+			return false
+		}
+	}
+
+	return true
+}
