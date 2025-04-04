@@ -368,17 +368,30 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 	return nil
 }
 
+func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: 2, Retries: 0})
+}
+
+func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: 2, Retries: 0})
+}
+
+func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return m.lock.Release(MetadataKeys.MetadataStoreFromContentLock(sourcePath))
+}
+
 // Metadata key storage format
 var (
-	metadataPrefix         string = "blobcache"
-	metadataHostIndex      string = "blobcache:host_index"
-	metadataEntry          string = "blobcache:entry:%s"
-	metadataClientLock     string = "blobcache:client_lock:%s:%s"
-	metadataLocation       string = "blobcache:location:%s"
-	metadataRef            string = "blobcache:ref:%s"
-	metadataFsNode         string = "blobcache:fs:node:%s"
-	metadataFsNodeChildren string = "blobcache:fs:node:%s:children"
-	metadataHostKeepAlive  string = "blobcache:host:keepalive:%s"
+	metadataPrefix               string = "blobcache"
+	metadataHostIndex            string = "blobcache:host_index"
+	metadataEntry                string = "blobcache:entry:%s"
+	metadataClientLock           string = "blobcache:client_lock:%s:%s"
+	metadataLocation             string = "blobcache:location:%s"
+	metadataRef                  string = "blobcache:ref:%s"
+	metadataFsNode               string = "blobcache:fs:node:%s"
+	metadataFsNodeChildren       string = "blobcache:fs:node:%s:children"
+	metadataHostKeepAlive        string = "blobcache:host:keepalive:%s"
+	metadataStoreFromContentLock string = "blobcache:store_from_content_lock:%s"
 )
 
 // Metadata keys
@@ -416,6 +429,11 @@ func (k *metadataKeys) MetadataFsNodeChildren(id string) string {
 
 func (k *metadataKeys) MetadataClientLock(hostname, hash string) string {
 	return fmt.Sprintf(metadataClientLock, hostname, hash)
+}
+
+func (k *metadataKeys) MetadataStoreFromContentLock(sourcePath string) string {
+	sourcePath = strings.ReplaceAll(sourcePath, "/", "_")
+	return fmt.Sprintf(metadataStoreFromContentLock, sourcePath)
 }
 
 var MetadataKeys = &metadataKeys{}

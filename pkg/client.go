@@ -540,6 +540,18 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
+func (c *BlobCacheClient) AcquireStoreContentFromSourceLock(ctx context.Context, sourcePath string) error {
+	return c.metadata.SetStoreFromContentLock(ctx, sourcePath)
+}
+
+func (c *BlobCacheClient) RefreshStoreContentFromSourceLock(ctx context.Context, sourcePath string) error {
+	return c.metadata.RefreshStoreFromContentLock(ctx, sourcePath)
+}
+
+func (c *BlobCacheClient) ReleaseStoreContentFromSourceLock(ctx context.Context, sourcePath string) error {
+	return c.metadata.RemoveStoreFromContentLock(ctx, sourcePath)
+}
+
 func (c *BlobCacheClient) HostsAvailable() bool {
 	return c.hostMap.Members().Cardinality() > 0
 }
