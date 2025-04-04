@@ -312,6 +312,20 @@ func (l *RedisLock) Release(key string) error {
 	return redislock.ErrLockNotHeld
 }
 
+func (l *RedisLock) Refresh(key string, opts RedisLockOptions) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	lock, ok := l.locks[key]
+	if !ok {
+		return redislock.ErrLockNotHeld
+	}
+
+	return lock.Refresh(context.TODO(), time.Duration(opts.TtlS)*time.Second, &redislock.Options{
+		RetryStrategy: redislock.LimitRetry(redislock.LinearBackoff(100*time.Millisecond), opts.Retries),
+	})
+}
+
 // Copies the result of HGetAll to a provided struct.
 // If a field cannot be parsed, we use Go's default value.
 // Struct fields must have the redis tag on them otherwise they will be ignored.
