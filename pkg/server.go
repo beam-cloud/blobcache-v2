@@ -348,3 +348,38 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
+
+func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
+	sourcePath := req.SourcePath
+	if err := cs.metadata.SetStoreFromContentLock(ctx, sourcePath); err != nil {
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	}
+
+	storeContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-storeContext.Done():
+				return
+			case <-ticker.C:
+				Logger.Infof("StoreContentFromSourceWithLock[REFRESH] - [%s]", sourcePath)
+				cs.metadata.RefreshStoreFromContentLock(ctx, sourcePath)
+			}
+		}
+	}()
+
+	hash, err := cs.StoreContentFromSource(storeContext, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cs.metadata.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
+		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
+	}
+
+	return hash, nil
+}

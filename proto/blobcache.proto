@@ -9,6 +9,7 @@ service BlobCache {
   rpc GetContentStream(GetContentRequest) returns (stream GetContentResponse) {}
   rpc StoreContent(stream StoreContentRequest) returns (StoreContentResponse) {}
   rpc StoreContentFromSource(StoreContentFromSourceRequest) returns (StoreContentFromSourceResponse) {}
+  rpc StoreContentFromSourceWithLock(StoreContentFromSourceRequest) returns (StoreContentFromSourceResponse) {}
   rpc GetState(GetStateRequest)  returns (GetStateResponse) {}
 }
 
