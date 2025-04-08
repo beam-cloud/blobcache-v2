@@ -556,6 +556,10 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 		return "", err
 	}
 
+	if resp.FailedToAcquireLock {
+		return "", ErrUnableToAcquireLock
+	}
+
 	return resp.Hash, nil
 
 }

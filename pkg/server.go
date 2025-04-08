@@ -349,10 +349,10 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
 
-func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
+func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
 	if err := cs.metadata.SetStoreFromContentLock(ctx, sourcePath); err != nil {
-		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+		return &proto.StoreContentFromSourceWithLockResponse{FailedToAcquireLock: true}, nil
 	}
 
 	storeContext, cancel := context.WithCancel(ctx)
@@ -372,7 +372,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 		}
 	}()
 
-	hash, err := cs.StoreContentFromSource(storeContext, req)
+	storeContentFromSourceResp, err := cs.StoreContentFromSource(storeContext, req)
 	if err != nil {
 		return nil, err
 	}
@@ -381,5 +381,5 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
 	}
 
-	return hash, nil
+	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash}, nil
 }

@@ -35,7 +35,7 @@ type BlobCacheClient interface {
 	GetContentStream(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (BlobCache_GetContentStreamClient, error)
 	StoreContent(ctx context.Context, opts ...grpc.CallOption) (BlobCache_StoreContentClient, error)
 	StoreContentFromSource(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
-	StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
+	StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 }
 
@@ -131,8 +131,8 @@ func (c *blobCacheClient) StoreContentFromSource(ctx context.Context, in *StoreC
 	return out, nil
 }
 
-func (c *blobCacheClient) StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error) {
-	out := new(StoreContentFromSourceResponse)
+func (c *blobCacheClient) StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceWithLockResponse, error) {
+	out := new(StoreContentFromSourceWithLockResponse)
 	err := c.cc.Invoke(ctx, BlobCache_StoreContentFromSourceWithLock_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ type BlobCacheServer interface {
 	GetContentStream(*GetContentRequest, BlobCache_GetContentStreamServer) error
 	StoreContent(BlobCache_StoreContentServer) error
 	StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
-	StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
+	StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	mustEmbedUnimplementedBlobCacheServer()
 }
@@ -178,7 +178,7 @@ func (UnimplementedBlobCacheServer) StoreContent(BlobCache_StoreContentServer) e
 func (UnimplementedBlobCacheServer) StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StoreContentFromSource not implemented")
 }
-func (UnimplementedBlobCacheServer) StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error) {
+func (UnimplementedBlobCacheServer) StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceWithLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StoreContentFromSourceWithLock not implemented")
 }
 func (UnimplementedBlobCacheServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
