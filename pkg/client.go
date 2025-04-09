@@ -540,6 +540,30 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
+func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sourceOffset int64) (string, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
+	defer cancel()
+
+	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
+		rt: ClientRequestTypeStorage,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
+	if err != nil {
+		return "", err
+	}
+
+	if resp.FailedToAcquireLock {
+		return "", ErrUnableToAcquireLock
+	}
+
+	return resp.Hash, nil
+
+}
+
 func (c *BlobCacheClient) HostsAvailable() bool {
 	return c.hostMap.Members().Cardinality() > 0
 }

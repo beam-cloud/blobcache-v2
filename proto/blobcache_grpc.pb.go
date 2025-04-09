@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	BlobCache_GetContent_FullMethodName             = "/blobcache.BlobCache/GetContent"
-	BlobCache_GetContentStream_FullMethodName       = "/blobcache.BlobCache/GetContentStream"
-	BlobCache_StoreContent_FullMethodName           = "/blobcache.BlobCache/StoreContent"
-	BlobCache_StoreContentFromSource_FullMethodName = "/blobcache.BlobCache/StoreContentFromSource"
-	BlobCache_GetState_FullMethodName               = "/blobcache.BlobCache/GetState"
+	BlobCache_GetContent_FullMethodName                     = "/blobcache.BlobCache/GetContent"
+	BlobCache_GetContentStream_FullMethodName               = "/blobcache.BlobCache/GetContentStream"
+	BlobCache_StoreContent_FullMethodName                   = "/blobcache.BlobCache/StoreContent"
+	BlobCache_StoreContentFromSource_FullMethodName         = "/blobcache.BlobCache/StoreContentFromSource"
+	BlobCache_StoreContentFromSourceWithLock_FullMethodName = "/blobcache.BlobCache/StoreContentFromSourceWithLock"
+	BlobCache_GetState_FullMethodName                       = "/blobcache.BlobCache/GetState"
 )
 
 // BlobCacheClient is the client API for BlobCache service.
@@ -34,6 +35,7 @@ type BlobCacheClient interface {
 	GetContentStream(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (BlobCache_GetContentStreamClient, error)
 	StoreContent(ctx context.Context, opts ...grpc.CallOption) (BlobCache_StoreContentClient, error)
 	StoreContentFromSource(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
+	StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 }
 
@@ -129,6 +131,15 @@ func (c *blobCacheClient) StoreContentFromSource(ctx context.Context, in *StoreC
 	return out, nil
 }
 
+func (c *blobCacheClient) StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceWithLockResponse, error) {
+	out := new(StoreContentFromSourceWithLockResponse)
+	err := c.cc.Invoke(ctx, BlobCache_StoreContentFromSourceWithLock_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *blobCacheClient) GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error) {
 	out := new(GetStateResponse)
 	err := c.cc.Invoke(ctx, BlobCache_GetState_FullMethodName, in, out, opts...)
@@ -146,6 +157,7 @@ type BlobCacheServer interface {
 	GetContentStream(*GetContentRequest, BlobCache_GetContentStreamServer) error
 	StoreContent(BlobCache_StoreContentServer) error
 	StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
+	StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	mustEmbedUnimplementedBlobCacheServer()
 }
@@ -165,6 +177,9 @@ func (UnimplementedBlobCacheServer) StoreContent(BlobCache_StoreContentServer) e
 }
 func (UnimplementedBlobCacheServer) StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StoreContentFromSource not implemented")
+}
+func (UnimplementedBlobCacheServer) StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceWithLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StoreContentFromSourceWithLock not implemented")
 }
 func (UnimplementedBlobCacheServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
@@ -265,6 +280,24 @@ func _BlobCache_StoreContentFromSource_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlobCache_StoreContentFromSourceWithLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StoreContentFromSourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).StoreContentFromSourceWithLock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_StoreContentFromSourceWithLock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).StoreContentFromSourceWithLock(ctx, req.(*StoreContentFromSourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BlobCache_GetState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetStateRequest)
 	if err := dec(in); err != nil {
@@ -297,6 +330,10 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StoreContentFromSource",
 			Handler:    _BlobCache_StoreContentFromSource_Handler,
+		},
+		{
+			MethodName: "StoreContentFromSourceWithLock",
+			Handler:    _BlobCache_StoreContentFromSourceWithLock_Handler,
 		},
 		{
 			MethodName: "GetState",
