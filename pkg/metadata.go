@@ -16,6 +16,10 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
+const (
+	storeFromContentLockTtlS = 5
+)
+
 type BlobCacheMetadata struct {
 	rdb  *RedisClient
 	lock *RedisLock
@@ -369,7 +373,7 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 }
 
 func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: 2, Retries: 0})
+	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
 func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
