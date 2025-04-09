@@ -377,7 +377,7 @@ func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, sourceP
 }
 
 func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: 2, Retries: 0})
+	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
 func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
