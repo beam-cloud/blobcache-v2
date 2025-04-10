@@ -25,6 +25,7 @@ require (
 )
 
 require (
+	github.com/beam-cloud/beta9 v0.0.0-20250410174738-8e3f032ab025 // indirect
 	github.com/jellydator/ttlcache/v3 v3.2.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 )
