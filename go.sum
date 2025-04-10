@@ -38,8 +38,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.30.1 h1:+woJ607dllHJQtsnJLi52ycuqHMw
 github.com/aws/aws-sdk-go-v2/service/sts v1.30.1/go.mod h1:jiNR3JqT15Dm+QWq2SRgh0x0bCNSRP2L25+CqPNpJlQ=
 github.com/aws/smithy-go v1.20.3 h1:ryHwveWzPV5BIof6fyDvor6V3iUL7nTfiTKXHiW05nE=
 github.com/aws/smithy-go v1.20.3/go.mod h1:krry+ya/rV9RDcV/Q16kpu6ypI4K2czasz0NC3qS14E=
-github.com/beam-cloud/beta9 v0.0.0-20250410174738-8e3f032ab025 h1:C8uaRyk1kGgBMhFP6GB8Ielr8n77SaSbzxn7zPE/Nno=
-github.com/beam-cloud/beta9 v0.0.0-20250410174738-8e3f032ab025/go.mod h1:4NPosQdo+qt/2PocB2GFFKBwv8o8/iAmSXrT9Lb3Z3Q=
 github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2 h1:RvgYbYPfBiq2IvimR4Vll2ImJsElX3oPLU9OjVvjE0c=
 github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2/go.mod h1:62+lvDbHv0JqIFy0bR8z8TJ7nIxTbDey7TDNMSWQXjA=
 github.com/bits-and-blooms/bitset v1.13.0 h1:bAQ9OPNFYbGHV6Nez0tmNI0RiEu7/hxlYJRUA0wFAVE=
