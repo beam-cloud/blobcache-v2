@@ -152,11 +152,11 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	n.log("Open called with flags: %v", flags)
 
 	// Enable DirectIO if specified
-	// if n.filesystem.Config.BlobFs.DirectIO {
-	// 	fuseFlags |= fuse.FOPEN_DIRECT_IO
-	// 	fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
-	// 	return nil, fuseFlags, fs.OK
-	// }
+	if n.filesystem.Config.Client.BlobFs.DirectIO {
+		fuseFlags |= fuse.FOPEN_DIRECT_IO
+		fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
+		return nil, fuseFlags, fs.OK
+	}
 
 	return nil, 0, fs.OK
 }

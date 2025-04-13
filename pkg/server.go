@@ -68,16 +68,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	// Mount cache as a FUSE filesystem if blobfs is enabled
-	// for _, sourceConfig := range cfg.Sources {
-	// 	_, err := NewSource(sourceConfig)
-	// 	if err != nil {
-	// 		Logger.Errorf("Failed to configure content source: %+v", err)
-	// 		continue
-	// 	}
+	for _, sourceConfig := range cfg.Global.Sources {
+		_, err := NewSource(sourceConfig)
+		if err != nil {
+			Logger.Errorf("Failed to configure content source: %+v", err)
+			continue
+		}
 
-	// 	Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
-	// }
+		Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
+	}
 
 	cs := &CacheService{
 		ctx:           ctx,
