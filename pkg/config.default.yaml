@@ -1,4 +1,5 @@
 server:
+  mode: cache
   token:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
@@ -28,3 +29,4 @@ global:
   debugMode: false
   prettyLogs: false
   tlsEnabled: false
+  sources: []

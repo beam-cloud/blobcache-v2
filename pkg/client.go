@@ -33,7 +33,7 @@ const (
 	readAheadKB = 32768
 )
 
-func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
+func GrpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
 		return invoker(newCtx, method, req, reply, cc, opts...)
@@ -154,7 +154,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	}
 
 	if c.clientConfig.Token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.clientConfig.Token)))
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(GrpcAuthInterceptor(c.clientConfig.Token)))
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)

@@ -30,17 +30,18 @@ type BlobCacheConfig struct {
 }
 
 type BlobCacheGlobalConfig struct {
-	CoordinatorHost                 string  `key:"coordinatorHost" json:"coordinator_host"`
-	ServerPort                      uint    `key:"serverPort" json:"server_port"`
-	DiscoveryIntervalS              int     `key:"discoveryIntervalS" json:"discovery_interval_s"`
-	DiscoveryMode                   string  `key:"discoveryMode" json:"discovery_mode"`
-	RoundTripThresholdMilliseconds  uint    `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
-	HostStorageCapacityThresholdPct float64 `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
-	GRPCDialTimeoutS                int     `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
-	GRPCMessageSizeBytes            int     `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
-	DebugMode                       bool    `key:"debugMode" json:"debug_mode"`
-	TLSEnabled                      bool    `key:"tlsEnabled" json:"tls_enabled"`
-	PrettyLogs                      bool    `key:"prettyLogs" json:"pretty_logs"`
+	CoordinatorHost                 string         `key:"coordinatorHost" json:"coordinator_host"`
+	ServerPort                      uint           `key:"serverPort" json:"server_port"`
+	DiscoveryIntervalS              int            `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	DiscoveryMode                   string         `key:"discoveryMode" json:"discovery_mode"`
+	RoundTripThresholdMilliseconds  uint           `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
+	HostStorageCapacityThresholdPct float64        `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
+	GRPCDialTimeoutS                int            `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
+	GRPCMessageSizeBytes            int            `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	DebugMode                       bool           `key:"debugMode" json:"debug_mode"`
+	TLSEnabled                      bool           `key:"tlsEnabled" json:"tls_enabled"`
+	PrettyLogs                      bool           `key:"prettyLogs" json:"pretty_logs"`
+	Sources                         []SourceConfig `key:"sources" json:"sources"`
 }
 
 type BlobCacheServerMode string
@@ -130,26 +131,14 @@ type RedisConfig struct {
 }
 
 type BlobFsConfig struct {
-	Enabled            bool                 `key:"enabled" json:"enabled"`
-	Prefetch           BlobFsPrefetchConfig `key:"prefetch" json:"prefetch"`
-	MountPoint         string               `key:"mountPoint" json:"mount_point"`
-	Sources            []SourceConfig       `key:"sources" json:"sources"`
-	MaxBackgroundTasks int                  `key:"maxBackgroundTasks" json:"max_background_tasks"`
-	MaxWriteKB         int                  `key:"maxWriteKB" json:"max_write_kb"`
-	MaxReadAheadKB     int                  `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
-	DirectMount        bool                 `key:"directMount" json:"direct_mount"`
-	DirectIO           bool                 `key:"directIO" json:"direct_io"`
-	Options            []string             `key:"options" json:"options"`
-}
-
-type BlobFsPrefetchConfig struct {
-	Enabled           bool     `key:"enabled" json:"enabled"`
-	MinFileSizeBytes  uint64   `key:"minFileSizeBytes" json:"min_file_size_bytes"`
-	EvictionIntervalS int      `key:"evictionIntervalS" json:"eviction_interval_s"`
-	IdleTtlS          int      `key:"idleTtlS" json:"idle_ttl_s"`
-	WindowSizeBytes   uint64   `key:"windowSizeBytes" json:"window_size_bytes"`
-	IgnoreFileExt     []string `key:"ignoreFileExt" json:"ignore_file_ext"`
-	DataTimeoutS      int      `key:"dataTimeoutS" json:"data_timeout_s"`
+	Enabled            bool     `key:"enabled" json:"enabled"`
+	MountPoint         string   `key:"mountPoint" json:"mount_point"`
+	MaxBackgroundTasks int      `key:"maxBackgroundTasks" json:"max_background_tasks"`
+	MaxWriteKB         int      `key:"maxWriteKB" json:"max_write_kb"`
+	MaxReadAheadKB     int      `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
+	DirectMount        bool     `key:"directMount" json:"direct_mount"`
+	DirectIO           bool     `key:"directIO" json:"direct_io"`
+	Options            []string `key:"options" json:"options"`
 }
 
 type SourceConfig struct {
