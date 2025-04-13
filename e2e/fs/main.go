@@ -31,7 +31,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	cfg := configManager.GetConfig()
+	cfg := configManager.GetConfig().Client
 
 	// Initialize logger
 	blobcache.InitLogger(cfg.DebugMode, cfg.PrettyLogs)

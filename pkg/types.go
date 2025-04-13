@@ -24,22 +24,45 @@ const (
 )
 
 type BlobCacheConfig struct {
-	Token                           string         `key:"token" json:"token"`
-	DebugMode                       bool           `key:"debugMode" json:"debug_mode"`
-	PrettyLogs                      bool           `key:"prettyLogs" json:"pretty_logs"`
-	TLSEnabled                      bool           `key:"tlsEnabled" json:"tls_enabled"`
-	Port                            uint           `key:"port" json:"port"`
-	HostStorageCapacityThresholdPct float64        `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
-	ObjectTtlS                      int            `key:"objectTtlS" json:"object_ttl_s"`
-	RoundTripThresholdMilliseconds  uint           `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
-	MaxCachePct                     int64          `key:"maxCachePct" json:"max_cache_pct"`
-	PageSizeBytes                   int64          `key:"pageSizeBytes" json:"page_size_bytes"`
-	GRPCDialTimeoutS                int            `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
-	GRPCMessageSizeBytes            int            `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
-	Metadata                        MetadataConfig `key:"metadata" json:"metadata"`
-	DiscoveryIntervalS              int            `key:"discoveryIntervalS" json:"discovery_interval_s"`
-	DiscoveryMode                   string         `key:"discoveryMode" json:"discovery_mode"`
-	BlobFs                          BlobFsConfig   `key:"blobfs" json:"blobfs"`
+	Server BlobCacheServerConfig `key:"server" json:"server"`
+	Client BlobCacheClientConfig `key:"client" json:"client"`
+}
+
+type BlobCacheServerMode string
+
+const (
+	BlobCacheServerModeCoordinator BlobCacheServerMode = "coordinator"
+	BlobCacheServerModeCache       BlobCacheServerMode = "cache"
+)
+
+type BlobCacheServerConfig struct {
+	Mode                            BlobCacheServerMode `key:"mode" json:"mode"`
+	Token                           string              `key:"token" json:"token"`
+	DebugMode                       bool                `key:"debugMode" json:"debug_mode"`
+	PrettyLogs                      bool                `key:"prettyLogs" json:"pretty_logs"`
+	TLSEnabled                      bool                `key:"tlsEnabled" json:"tls_enabled"`
+	Port                            uint                `key:"port" json:"port"`
+	HostStorageCapacityThresholdPct float64             `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
+	ObjectTtlS                      int                 `key:"objectTtlS" json:"object_ttl_s"`
+	RoundTripThresholdMilliseconds  uint                `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
+	MaxCachePct                     int64               `key:"maxCachePct" json:"max_cache_pct"`
+	PageSizeBytes                   int64               `key:"pageSizeBytes" json:"page_size_bytes"`
+	GRPCDialTimeoutS                int                 `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
+	GRPCMessageSizeBytes            int                 `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	Metadata                        MetadataConfig      `key:"metadata" json:"metadata"`
+	DiscoveryIntervalS              int                 `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	DiscoveryMode                   string              `key:"discoveryMode" json:"discovery_mode"`
+}
+
+type BlobCacheClientConfig struct {
+	CoordinatorHost      string       `key:"coordinatorHost" json:"coordinator_host"`
+	Token                string       `key:"token" json:"token"`
+	DebugMode            bool         `key:"debugMode" json:"debug_mode"`
+	PrettyLogs           bool         `key:"prettyLogs" json:"pretty_logs"`
+	TLSEnabled           bool         `key:"tlsEnabled" json:"tls_enabled"`
+	GRPCDialTimeoutS     int          `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
+	GRPCMessageSizeBytes int          `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	BlobFs               BlobFsConfig `key:"blobfs" json:"blobfs"`
 }
 
 type BlobCacheMetadataMode string

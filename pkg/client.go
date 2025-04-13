@@ -42,7 +42,7 @@ func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 
 type BlobCacheClient struct {
 	ctx                     context.Context
-	cfg                     BlobCacheConfig
+	cfg                     BlobCacheClientConfig
 	hostname                string
 	discoveryClient         *DiscoveryClient
 	grpcClients             map[string]proto.BlobCacheClient
@@ -59,7 +59,7 @@ type localClientCache struct {
 	timestamp time.Time
 }
 
-func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
+func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
 	InitLogger(cfg.DebugMode, cfg.PrettyLogs)

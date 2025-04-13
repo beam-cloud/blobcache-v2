@@ -38,11 +38,11 @@ type CacheService struct {
 	hostname      string
 	privateIpAddr string
 	cas           *ContentAddressableStorage
-	cfg           BlobCacheConfig
+	cfg           BlobCacheServerConfig
 	metadata      *BlobCacheMetadata
 }
 
-func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
+func NewCacheService(ctx context.Context, cfg BlobCacheServerConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 
 	// If HostStorageCapacityThresholdPct is not set, make sure a sensible default is set
@@ -73,17 +73,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	}
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
-	if cfg.BlobFs.Enabled {
-		for _, sourceConfig := range cfg.BlobFs.Sources {
-			_, err := NewSource(sourceConfig)
-			if err != nil {
-				Logger.Errorf("Failed to configure content source: %+v", err)
-				continue
-			}
+	// for _, sourceConfig := range cfg.Sources {
+	// 	_, err := NewSource(sourceConfig)
+	// 	if err != nil {
+	// 		Logger.Errorf("Failed to configure content source: %+v", err)
+	// 		continue
+	// 	}
 
-			Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
-		}
-	}
+	// 	Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
+	// }
 
 	cs := &CacheService{
 		ctx:           ctx,
@@ -233,13 +231,13 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	if cs.cfg.BlobFs.Enabled && sourcePath != "" {
-		err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
-		if err != nil {
-			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
-			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
-		}
-	}
+	// if cs.cfg.BlobFs.Enabled && sourcePath != "" {
+	// 	err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
+	// 	if err != nil {
+	// 		Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
+	// 		return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
+	// 	}
+	// }
 
 	Logger.Infof("Store[OK] - [%s]", hash)
 	content = nil

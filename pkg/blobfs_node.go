@@ -152,37 +152,13 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	n.log("Open called with flags: %v", flags)
 
 	// Enable DirectIO if specified
-	if n.filesystem.Config.BlobFs.DirectIO {
-		fuseFlags |= fuse.FOPEN_DIRECT_IO
-		fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
-		return nil, fuseFlags, fs.OK
-	}
+	// if n.filesystem.Config.BlobFs.DirectIO {
+	// 	fuseFlags |= fuse.FOPEN_DIRECT_IO
+	// 	fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
+	// 	return nil, fuseFlags, fs.OK
+	// }
 
 	return nil, 0, fs.OK
-}
-
-func (n *FSNode) shouldPrefetch(node *BlobFsNode) bool {
-	if node.Prefetch != nil {
-		return *node.Prefetch
-	}
-
-	if !n.filesystem.Config.BlobFs.Prefetch.Enabled {
-		return false
-	}
-
-	if n.bfsNode.Attr.Size < n.filesystem.Config.BlobFs.Prefetch.MinFileSizeBytes {
-		return false
-	}
-
-	for _, ext := range n.filesystem.Config.BlobFs.Prefetch.IgnoreFileExt {
-		if strings.HasSuffix(node.Name, ext) {
-			return false
-		}
-	}
-
-	prefetch := true
-	node.Prefetch = &prefetch
-	return true
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
@@ -191,17 +167,6 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {
 		return fuse.ReadResultData(dest[:0]), fs.OK
-	}
-
-	// Attempt to prefetch the file
-	if n.shouldPrefetch(n.bfsNode) {
-		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
-		if buffer != nil {
-			err := buffer.GetRange(uint64(off), dest)
-			if err == nil {
-				return fuse.ReadResultData(dest), fs.OK
-			}
-		}
 	}
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))

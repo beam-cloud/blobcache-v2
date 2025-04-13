@@ -1,30 +1,25 @@
-port: 2049
-token:
-tlsEnabled: false
-rttThresholdMilliseconds: 100
-hostStorageCapacityThresholdPct: 0.95
-pageSizeBytes: 4000000 # 4MB
-maxCachePct: 60
-grpcMessageSizeBytes: 1000000000
-grpcDialTimeoutS: 1
-discoveryIntervalS: 5
-discoveryMode: metadata
-options: []
-blobfs:
-  directIO: false
-  prefetch:
-    enabled: false
-    idleTtlS: 5
-    evictionIntervalS: 5
-    minFileSizeBytes: 1048576 # 1MB
-    windowSizeBytes: 134217728 # 128MB
-    dataTimeoutS: 30
-    ignoreFileExt:
-      - .clip
-  mountPoint: /tmp/test
-  maxBackgroundTasks: 512
-  maxReadAheadKB: 128
-metadata:
-  redisAddr:
-  redisPasswd:
-  redisTLSEnabled: false
+server:
+  port: 2049
+  token:
+  tlsEnabled: false
+  rttThresholdMilliseconds: 100
+  hostStorageCapacityThresholdPct: 0.95
+  pageSizeBytes: 4000000 # 4MB
+  maxCachePct: 60
+  grpcMessageSizeBytes: 1000000000
+  grpcDialTimeoutS: 1
+  discoveryIntervalS: 5
+  discoveryMode: metadata
+  options: []
+  metadata:
+    redisAddr:
+    redisPasswd:
+    redisTLSEnabled: false
+client:
+  coordinatorHost:
+  token:
+  blobfs:
+    directIO: false
+    mountPoint: /tmp/test
+    maxBackgroundTasks: 512
+    maxReadAheadKB: 128

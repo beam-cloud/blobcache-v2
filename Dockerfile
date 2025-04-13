@@ -19,11 +19,11 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux \
     go build -o /usr/local/bin/blobcache /workspace/cmd/main.go
 
+
 RUN curl -L https://beam-runner-python-deps.s3.amazonaws.com/juicefs -o /usr/local/bin/juicefs && chmod +x /usr/local/bin/juicefs
 RUN curl -L https://beam-runner-python-deps.s3.amazonaws.com/mount-s3 -o /usr/local/bin/mount-s3 && chmod +x /usr/local/bin/mount-s3
 
 CMD ["/usr/local/bin/blobcache"]
-
 
 FROM ubuntu:22.04 AS release
 
