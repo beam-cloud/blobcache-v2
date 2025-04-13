@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	"tailscale.com/client/tailscale"
 )
 
 const (
@@ -44,10 +43,8 @@ func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 type BlobCacheClient struct {
 	ctx                     context.Context
 	cfg                     BlobCacheConfig
-	tailscale               *Tailscale
 	hostname                string
 	discoveryClient         *DiscoveryClient
-	tailscaleClient         *tailscale.LocalClient
 	grpcClients             map[string]proto.BlobCacheClient
 	hostMap                 *HostMap
 	mu                      sync.RWMutex
@@ -64,27 +61,8 @@ type localClientCache struct {
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
-	tailscale := NewTailscale(ctx, hostname, cfg)
 
 	InitLogger(cfg.DebugMode, cfg.PrettyLogs)
-
-	server, err := tailscale.GetOrCreateServer()
-	if err != nil {
-		return nil, err
-	}
-
-	tailscaleClient, err := server.LocalClient()
-	if err != nil {
-		return nil, err
-	}
-
-	// Block until tailscale is authenticated (or the timeout is reached)
-	if cfg.Tailscale.WaitForAuth {
-		err = tailscale.WaitForAuth(ctx, time.Second*30)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
 	if err != nil {
@@ -95,8 +73,6 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		ctx:                     ctx,
 		cfg:                     cfg,
 		hostname:                hostname,
-		tailscale:               tailscale,
-		tailscaleClient:         tailscaleClient,
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
 		mu:                      sync.RWMutex{},
@@ -105,7 +81,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	}
 
 	bc.hostMap = NewHostMap(cfg, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg, tailscale, bc.hostMap, metadata)
+	bc.discoveryClient = NewDiscoveryClient(cfg, bc.hostMap, metadata)
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
@@ -159,9 +135,9 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 
 	var dialFunc func(context.Context, string) (net.Conn, error) = nil
 	addr := host.Addr
-	dialFunc = c.tailscale.DialWithTimeout
+
+	dialFunc = DialWithTimeout
 	if host.PrivateAddr != "" {
-		dialFunc = DialWithTimeout
 		addr = host.PrivateAddr
 	}
 

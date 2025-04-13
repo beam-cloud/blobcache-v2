@@ -4,32 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"tailscale.com/client/tailscale"
 )
 
 type DiscoveryClient struct {
-	tailscale *Tailscale
-	cfg       BlobCacheConfig
-	hostMap   *HostMap
-	metadata  *BlobCacheMetadata
-	mu        sync.Mutex
-	tsClient  *tailscale.LocalClient
+	cfg      BlobCacheConfig
+	hostMap  *HostMap
+	metadata *BlobCacheMetadata
+	mu       sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, tailscale *Tailscale, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheConfig, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
 	return &DiscoveryClient{
-		cfg:       cfg,
-		tailscale: tailscale,
-		hostMap:   hostMap,
-		metadata:  metadata,
-		tsClient:  nil,
+		cfg:      cfg,
+		hostMap:  hostMap,
+		metadata: metadata,
 	}
 }
 
@@ -44,20 +38,6 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	// Default to metadata discovery if no mode is specified
 	if d.cfg.DiscoveryMode == "" {
 		d.cfg.DiscoveryMode = string(DiscoveryModeMetadata)
-	}
-
-	if d.cfg.DiscoveryMode == string(DiscoveryModeTailscale) {
-		server, err := d.tailscale.GetOrCreateServer()
-		if err != nil {
-			return err
-		}
-
-		client, err := server.LocalClient()
-		if err != nil {
-			return err
-		}
-
-		d.tsClient = client
 	}
 
 	hosts, err := d.FindNearbyHosts(ctx)
@@ -79,53 +59,6 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 			return nil
 		}
 	}
-}
-
-func (d *DiscoveryClient) discoverHostsViaTailscale(ctx context.Context) ([]*BlobCacheHost, error) {
-	status, err := d.tsClient.Status(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	wg := sync.WaitGroup{}
-	hosts := []*BlobCacheHost{}
-
-	// Iterate through the peers to find any matching blobcache services
-	for _, peer := range status.Peer {
-		if !peer.Online {
-			continue
-		}
-
-		if strings.Contains(peer.HostName, BlobCacheHostPrefix) {
-			wg.Add(1)
-
-			go func(hostname string) {
-				Logger.Debugf("Discovered host: %s", hostname)
-
-				defer wg.Done()
-
-				hostname = hostname[:len(hostname)-1] // Strip the last period
-				addr := fmt.Sprintf("%s:%d", hostname, d.cfg.Port)
-
-				// Don't try to get the state on peers we're already aware of
-				if d.hostMap.Get(addr) != nil {
-					return
-				}
-
-				host, err := d.GetHostState(ctx, addr)
-				if err != nil {
-					return
-				}
-
-				d.mu.Lock()
-				defer d.mu.Unlock()
-				hosts = append(hosts, host)
-			}(peer.DNSName)
-		}
-	}
-
-	wg.Wait()
-	return hosts, nil
 }
 
 func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
@@ -172,11 +105,6 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 	var err error
 
 	switch d.cfg.DiscoveryMode {
-	case string(DiscoveryModeTailscale):
-		hosts, err = d.discoverHostsViaTailscale(ctx)
-		if err != nil {
-			return nil, err
-		}
 	case string(DiscoveryModeMetadata):
 		hosts, err = d.discoverHostsViaMetadata(ctx)
 		if err != nil {
@@ -200,7 +128,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(d.tailscale.DialWithTimeout),
+		grpc.WithContextDialer(DialWithTimeout),
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)

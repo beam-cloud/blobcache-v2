@@ -11,6 +11,5 @@ var (
 	ErrCacheLockHeld           = errors.New("cache lock held")
 	ErrUnableToPopulateContent = errors.New("unable to populate content from original source")
 	ErrBlobFsMountFailure      = errors.New("failed to mount blobfs")
-	ErrTailscaleAuthentication = errors.New("tailscale authentication failed")
 	ErrUnableToAcquireLock     = errors.New("unable to acquire lock")
 )
