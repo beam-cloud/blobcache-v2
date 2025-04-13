@@ -12,10 +12,10 @@ build:
 	docker push localhost:5001/blobcache:$(imageVersion)
 
 start:
-	cd hack; okteto up --file okteto.yaml
+	cd hack && okteto up --file okteto.yaml
 
 stop:
-	cd hack; okteto down --file okteto.yaml
+	cd hack && okteto down --file okteto.yaml
 
 build-chart:
 	helm package --dependency-update deploy/charts/blobcache --version $(chartVersion)
@@ -27,7 +27,6 @@ publish-chart:
 testclients:
 	GOOS=linux GOARCH=amd64 go build -o bin/throughput e2e/throughput/main.go
 	GOOS=linux GOARCH=amd64 go build -o bin/fs e2e/fs/main.go
-
 
 setup: build
 	@if [ "$(shell kubectl config current-context)" != "k3d-beta9" ]; then \
