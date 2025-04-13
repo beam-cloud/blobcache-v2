@@ -24,16 +24,6 @@ blobfs:
   mountPoint: /tmp/test
   maxBackgroundTasks: 512
   maxReadAheadKB: 128
-tailscale:
-  waitForAuth: false
-  controlUrl:
-  user:
-  authKey:
-  debug: true
-  hostName:
-  ephemeral: true
-  stateDir: /tmp
-  dialTimeoutS: 1
 metadata:
   redisAddr:
   redisPasswd:

@@ -20,28 +20,26 @@ const (
 type DiscoveryMode string
 
 const (
-	DiscoveryModeTailscale DiscoveryMode = "tailscale"
-	DiscoveryModeMetadata  DiscoveryMode = "metadata"
+	DiscoveryModeMetadata DiscoveryMode = "metadata"
 )
 
 type BlobCacheConfig struct {
-	Token                           string          `key:"token" json:"token"`
-	DebugMode                       bool            `key:"debugMode" json:"debug_mode"`
-	PrettyLogs                      bool            `key:"prettyLogs" json:"pretty_logs"`
-	TLSEnabled                      bool            `key:"tlsEnabled" json:"tls_enabled"`
-	Port                            uint            `key:"port" json:"port"`
-	HostStorageCapacityThresholdPct float64         `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
-	ObjectTtlS                      int             `key:"objectTtlS" json:"object_ttl_s"`
-	RoundTripThresholdMilliseconds  uint            `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
-	MaxCachePct                     int64           `key:"maxCachePct" json:"max_cache_pct"`
-	PageSizeBytes                   int64           `key:"pageSizeBytes" json:"page_size_bytes"`
-	GRPCDialTimeoutS                int             `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
-	GRPCMessageSizeBytes            int             `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
-	Tailscale                       TailscaleConfig `key:"tailscale" json:"tailscale"`
-	Metadata                        MetadataConfig  `key:"metadata" json:"metadata"`
-	DiscoveryIntervalS              int             `key:"discoveryIntervalS" json:"discovery_interval_s"`
-	DiscoveryMode                   string          `key:"discoveryMode" json:"discovery_mode"`
-	BlobFs                          BlobFsConfig    `key:"blobfs" json:"blobfs"`
+	Token                           string         `key:"token" json:"token"`
+	DebugMode                       bool           `key:"debugMode" json:"debug_mode"`
+	PrettyLogs                      bool           `key:"prettyLogs" json:"pretty_logs"`
+	TLSEnabled                      bool           `key:"tlsEnabled" json:"tls_enabled"`
+	Port                            uint           `key:"port" json:"port"`
+	HostStorageCapacityThresholdPct float64        `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
+	ObjectTtlS                      int            `key:"objectTtlS" json:"object_ttl_s"`
+	RoundTripThresholdMilliseconds  uint           `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
+	MaxCachePct                     int64          `key:"maxCachePct" json:"max_cache_pct"`
+	PageSizeBytes                   int64          `key:"pageSizeBytes" json:"page_size_bytes"`
+	GRPCDialTimeoutS                int            `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
+	GRPCMessageSizeBytes            int            `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	Metadata                        MetadataConfig `key:"metadata" json:"metadata"`
+	DiscoveryIntervalS              int            `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	DiscoveryMode                   string         `key:"discoveryMode" json:"discovery_mode"`
+	BlobFs                          BlobFsConfig   `key:"blobfs" json:"blobfs"`
 }
 
 type BlobCacheMetadataMode string
@@ -63,18 +61,6 @@ type ValkeyConfig struct {
 type ValkeyExistingPrimary struct {
 	Host string `key:"host" json:"host"`
 	Port int    `key:"port" json:"port"`
-}
-
-type TailscaleConfig struct {
-	WaitForAuth  bool   `key:"waitForAuth" json:"wait_for_auth"`
-	ControlURL   string `key:"controlUrl" json:"control_url"`
-	User         string `key:"user" json:"user"`
-	AuthKey      string `key:"authKey" json:"auth_key"`
-	HostName     string `key:"hostName" json:"host_name"`
-	Debug        bool   `key:"debug" json:"debug"`
-	Ephemeral    bool   `key:"ephemeral" json:"ephemeral"`
-	StateDir     string `key:"stateDir" json:"state_dir"`
-	DialTimeoutS int    `key:"dialTimeout" json:"dial_timeout"`
 }
 
 type MetadataConfig struct {

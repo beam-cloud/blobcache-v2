@@ -39,7 +39,6 @@ type CacheService struct {
 	privateIpAddr string
 	cas           *ContentAddressableStorage
 	cfg           BlobCacheConfig
-	tailscale     *Tailscale
 	metadata      *BlobCacheMetadata
 }
 
@@ -52,7 +51,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	}
 
 	currentHost := &BlobCacheHost{
-		Addr: fmt.Sprintf("%s.%s:%d", hostname, cfg.Tailscale.HostName, cfg.Port),
+		Addr: fmt.Sprintf("%s:%d", hostname, cfg.Port),
 		RTT:  0,
 	}
 
@@ -86,14 +85,11 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		}
 	}
 
-	tailscale := NewTailscale(ctx, hostname, cfg)
-
 	cs := &CacheService{
 		ctx:           ctx,
 		hostname:      hostname,
 		cas:           cas,
 		cfg:           cfg,
-		tailscale:     tailscale,
 		metadata:      metadata,
 		privateIpAddr: privateIpAddr,
 	}
@@ -134,17 +130,6 @@ func (cs *CacheService) HostKeepAlive() {
 func (cs *CacheService) StartServer(port uint) error {
 	addr := fmt.Sprintf(":%d", port)
 
-	server, err := cs.tailscale.GetOrCreateServer()
-	if err != nil {
-		return err
-	}
-
-	// Bind both to tailnet and locally
-	tailscaleListener, err := server.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-
 	localListener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -162,7 +147,6 @@ func (cs *CacheService) StartServer(port uint) error {
 	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.cfg)
 
 	go s.Serve(localListener)
-	go s.Serve(tailscaleListener)
 
 	// Block until a termination signal is received
 	terminationChan := make(chan os.Signal, 1)
