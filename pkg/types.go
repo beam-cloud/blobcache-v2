@@ -31,7 +31,7 @@ type BlobCacheConfig struct {
 
 type BlobCacheGlobalConfig struct {
 	CoordinatorHost                 string  `key:"coordinatorHost" json:"coordinator_host"`
-	ServerPort                      uint    `key:"port" json:"port"`
+	ServerPort                      uint    `key:"serverPort" json:"server_port"`
 	DiscoveryIntervalS              int     `key:"discoveryIntervalS" json:"discovery_interval_s"`
 	DiscoveryMode                   string  `key:"discoveryMode" json:"discovery_mode"`
 	RoundTripThresholdMilliseconds  uint    `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
