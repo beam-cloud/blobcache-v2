@@ -38,24 +38,20 @@ type CacheService struct {
 	hostname      string
 	privateIpAddr string
 	cas           *ContentAddressableStorage
-	cfg           BlobCacheServerConfig
+	serverConfig  BlobCacheServerConfig
+	globalConfig  BlobCacheGlobalConfig
 	metadata      *BlobCacheMetadata
 }
 
-func NewCacheService(ctx context.Context, cfg BlobCacheServerConfig) (*CacheService, error) {
+func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 
-	// If HostStorageCapacityThresholdPct is not set, make sure a sensible default is set
-	if cfg.HostStorageCapacityThresholdPct <= 0 {
-		cfg.HostStorageCapacityThresholdPct = defaultHostStorageCapacityThresholdPct
-	}
-
 	currentHost := &BlobCacheHost{
-		Addr: fmt.Sprintf("%s:%d", hostname, cfg.Port),
+		Addr: fmt.Sprintf("%s:%d", hostname, cfg.Global.ServerPort),
 		RTT:  0,
 	}
 
-	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
+	metadata, err := NewBlobCacheMetadata(cfg.Server.Metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +60,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheServerConfig) (*CacheServ
 	if privateIpAddr != "" {
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
-	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Port)
+	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
 	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
@@ -87,7 +83,8 @@ func NewCacheService(ctx context.Context, cfg BlobCacheServerConfig) (*CacheServ
 		ctx:           ctx,
 		hostname:      hostname,
 		cas:           cas,
-		cfg:           cfg,
+		serverConfig:  cfg.Server,
+		globalConfig:  cfg.Global,
 		metadata:      metadata,
 		privateIpAddr: privateIpAddr,
 	}
@@ -116,7 +113,7 @@ func (cs *CacheService) HostKeepAlive() {
 		case <-cs.ctx.Done():
 			return
 		case <-ticker.C:
-			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.cfg.Port)
+			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.globalConfig.ServerPort)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
 
 			cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
@@ -133,7 +130,7 @@ func (cs *CacheService) StartServer(port uint) error {
 		return err
 	}
 
-	maxMessageSize := cs.cfg.GRPCMessageSizeBytes
+	maxMessageSize := cs.globalConfig.GRPCMessageSizeBytes
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
@@ -142,7 +139,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.cfg)
+	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.serverConfig)
 
 	go s.Serve(localListener)
 

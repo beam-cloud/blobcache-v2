@@ -8,7 +8,7 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
-func NewHostMap(cfg BlobCacheConfig, onHostAdded func(*BlobCacheHost) error) *HostMap {
+func NewHostMap(cfg BlobCacheGlobalConfig, onHostAdded func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
 		hosts:       make(map[string]*BlobCacheHost),
 		mu:          sync.Mutex{},
@@ -21,7 +21,7 @@ type HostMap struct {
 	hosts       map[string]*BlobCacheHost
 	mu          sync.Mutex
 	onHostAdded func(*BlobCacheHost) error
-	cfg         BlobCacheConfig
+	cfg         BlobCacheGlobalConfig
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {

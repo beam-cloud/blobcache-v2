@@ -67,17 +67,16 @@ type BlobFsSystemOpts struct {
 }
 
 type BlobFs struct {
-	ctx             context.Context
-	root            *FSNode
-	verbose         bool
-	Metadata        *BlobCacheMetadata
-	Client          *BlobCacheClient
-	Config          BlobCacheConfig
-	PrefetchManager *PrefetchManager
+	ctx      context.Context
+	root     *FSNode
+	verbose  bool
+	Metadata *BlobCacheMetadata
+	Client   *BlobCacheClient
+	Config   BlobCacheConfig
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
-	mountPoint := opts.Config.BlobFs.MountPoint
+	mountPoint := opts.Config.Client.BlobFs.MountPoint
 	Logger.Infof("Mounting to %s", mountPoint)
 
 	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
@@ -106,23 +105,23 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		EntryTimeout: &entryTimeout,
 	}
 
-	maxWriteKB := opts.Config.BlobFs.MaxWriteKB
+	maxWriteKB := opts.Config.Client.BlobFs.MaxWriteKB
 	if maxWriteKB <= 0 {
 		maxWriteKB = 1024
 	}
 
-	maxReadAheadKB := opts.Config.BlobFs.MaxReadAheadKB
+	maxReadAheadKB := opts.Config.Client.BlobFs.MaxReadAheadKB
 	if maxReadAheadKB <= 0 {
 		maxReadAheadKB = 128
 	}
 
-	maxBackgroundTasks := opts.Config.BlobFs.MaxBackgroundTasks
+	maxBackgroundTasks := opts.Config.Client.BlobFs.MaxBackgroundTasks
 	if maxBackgroundTasks <= 0 {
 		maxBackgroundTasks = 512
 	}
 
 	options := []string{}
-	options = append(options, opts.Config.BlobFs.Options...)
+	options = append(options, opts.Config.Client.BlobFs.Options...)
 
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
 		MaxBackground:        maxBackgroundTasks,
@@ -133,7 +132,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		MaxReadAhead:         maxReadAheadKB * 1024,
 		MaxWrite:             maxWriteKB * 1024,
 		Options:              options,
-		DirectMount:          opts.Config.BlobFs.DirectMount,
+		DirectMount:          opts.Config.Client.BlobFs.DirectMount,
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("could not create server: %v", err)
@@ -199,11 +198,6 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 		Config:   opts.Config,
 		Client:   opts.Client,
 		Metadata: metadata,
-	}
-
-	if opts.Config.BlobFs.Prefetch.Enabled {
-		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config, opts.Client)
-		bfs.PrefetchManager.Start()
 	}
 
 	rootID := GenerateFsID("/")

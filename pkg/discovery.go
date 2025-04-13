@@ -13,13 +13,13 @@ import (
 )
 
 type DiscoveryClient struct {
-	cfg      BlobCacheConfig
+	cfg      BlobCacheGlobalConfig
 	hostMap  *HostMap
 	metadata *BlobCacheMetadata
 	mu       sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:      cfg,
 		hostMap:  hostMap,
@@ -149,7 +149,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobC
 	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
 
 	if resp.PrivateIpAddr != "" {
-		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.Port)
+		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.ServerPort)
 		privateConn, privateErr := DialWithTimeout(ctx, privateAddr)
 		if privateErr == nil {
 			privateConn.Close()

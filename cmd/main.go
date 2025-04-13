@@ -16,12 +16,12 @@ func main() {
 	ctx := context.Background()
 	cfg := configManager.GetConfig()
 
-	blobcache.InitLogger(cfg.Server.DebugMode, cfg.Server.PrettyLogs)
+	blobcache.InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
 
-	s, err := blobcache.NewCacheService(ctx, cfg.Server)
+	s, err := blobcache.NewCacheService(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	s.StartServer(cfg.Server.Port)
+	s.StartServer(cfg.Global.ServerPort)
 }

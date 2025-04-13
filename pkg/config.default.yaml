@@ -1,25 +1,30 @@
 server:
-  port: 2049
   token:
-  tlsEnabled: false
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
   pageSizeBytes: 4000000 # 4MB
   maxCachePct: 60
-  grpcMessageSizeBytes: 1000000000
-  grpcDialTimeoutS: 1
-  discoveryIntervalS: 5
-  discoveryMode: metadata
   options: []
   metadata:
     redisAddr:
     redisPasswd:
     redisTLSEnabled: false
 client:
-  coordinatorHost:
   token:
   blobfs:
     directIO: false
     mountPoint: /tmp/test
     maxBackgroundTasks: 512
     maxReadAheadKB: 128
+global:
+  coordinatorHost:
+  serverPort: 2049
+  discoveryIntervalS: 5
+  discoveryMode: metadata
+  rttThresholdMilliseconds: 100
+  hostStorageCapacityThresholdPct: 0.95
+  grpcDialTimeoutS: 1
+  grpcMessageSizeBytes: 1000000000
+  debugMode: false
+  prettyLogs: false
+  tlsEnabled: false

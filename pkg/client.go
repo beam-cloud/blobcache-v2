@@ -42,7 +42,8 @@ func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
 
 type BlobCacheClient struct {
 	ctx                     context.Context
-	cfg                     BlobCacheClientConfig
+	clientConfig            BlobCacheClientConfig
+	globalConfig            BlobCacheGlobalConfig
 	hostname                string
 	discoveryClient         *DiscoveryClient
 	grpcClients             map[string]proto.BlobCacheClient
@@ -59,19 +60,20 @@ type localClientCache struct {
 	timestamp time.Time
 }
 
-func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCacheClient, error) {
+func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
-	InitLogger(cfg.DebugMode, cfg.PrettyLogs)
+	InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
 
-	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
+	metadata, err := NewBlobCacheMetadata(cfg.Server.Metadata)
 	if err != nil {
 		return nil, err
 	}
 
 	bc := &BlobCacheClient{
 		ctx:                     ctx,
-		cfg:                     cfg,
+		clientConfig:            cfg.Client,
+		globalConfig:            cfg.Global,
 		hostname:                hostname,
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
@@ -80,8 +82,8 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCa
 		closestHostWithCapacity: nil,
 	}
 
-	bc.hostMap = NewHostMap(cfg, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg, bc.hostMap, metadata)
+	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, metadata)
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
@@ -90,12 +92,12 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCa
 	go bc.manageLocalClientCache(localClientCacheCleanupInterval, localClientCacheTTL)
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
-	if cfg.BlobFs.Enabled {
+	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
 			Config:   cfg,
 			Metadata: metadata,
 			Client:   bc,
-			Verbose:  cfg.DebugMode,
+			Verbose:  bc.globalConfig.DebugMode,
 		})
 		if err != nil {
 			return nil, err
@@ -106,7 +108,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCa
 			return nil, err
 		}
 
-		err = updateReadAheadKB(cfg.BlobFs.MountPoint, readAheadKB)
+		err = updateReadAheadKB(bc.clientConfig.BlobFs.MountPoint, readAheadKB)
 		if err != nil {
 			Logger.Errorf("Failed to update read_ahead_kb: %v", err)
 		}
@@ -118,7 +120,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheClientConfig) (*BlobCa
 }
 
 func (c *BlobCacheClient) Cleanup() error {
-	if c.cfg.BlobFs.Enabled && c.blobfsServer != nil {
+	if c.clientConfig.BlobFs.Enabled && c.blobfsServer != nil {
 		c.blobfsServer.Unmount()
 	}
 	return nil
@@ -127,7 +129,7 @@ func (c *BlobCacheClient) Cleanup() error {
 func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
-	isTLS := c.cfg.TLSEnabled
+	isTLS := c.globalConfig.TLSEnabled
 	if isTLS {
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
@@ -141,7 +143,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		addr = host.PrivateAddr
 	}
 
-	maxMessageSize := c.cfg.GRPCMessageSizeBytes
+	maxMessageSize := c.globalConfig.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
 		grpc.WithContextDialer(dialFunc),
@@ -151,8 +153,8 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		),
 	}
 
-	if c.cfg.Token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.cfg.Token)))
+	if c.clientConfig.Token != "" {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.clientConfig.Token)))
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)
