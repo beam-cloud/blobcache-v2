@@ -327,6 +327,26 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
 
+func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAvailableHostsRequest) (*proto.GetAvailableHostsResponse, error) {
+	Logger.Infof("GetAvailableHosts[ACK] - [%s]", req.Locality)
+
+	hosts, err := cs.metadata.GetAvailableHosts(ctx, func(host *BlobCacheHost) {
+		Logger.Infof("GetAvailableHosts[REM] - [%s]", host.Addr)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	protoHosts := make([]*proto.BlobCacheHost, 0)
+	for _, host := range hosts {
+		protoHosts = append(protoHosts, &proto.BlobCacheHost{Host: host.Host, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr})
+	}
+
+	Logger.Infof("GetAvailableHosts[OK] - [%s]", protoHosts)
+
+	return &proto.GetAvailableHostsResponse{Hosts: protoHosts}, nil
+}
+
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
 	if err := cs.metadata.SetStoreFromContentLock(ctx, sourcePath); err != nil {

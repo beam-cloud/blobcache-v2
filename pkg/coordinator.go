@@ -54,6 +54,26 @@ func NewCoordinatorClient(cfg BlobCacheGlobalConfig, token string) (*Coordinator
 	return &CoordinatorClient{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
 }
 
+func (c *CoordinatorClient) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
+	response, err := c.client.GetAvailableHosts(ctx, &proto.GetAvailableHostsRequest{Locality: locality})
+	if err != nil {
+		return nil, err
+	}
+
+	Logger.Infof("Hosts: %v", response.Hosts)
+
+	hosts := make([]*BlobCacheHost, 0)
+	for _, host := range response.Hosts {
+		hosts = append(hosts, &BlobCacheHost{
+			Host:        host.Host,
+			Addr:        host.Addr,
+			PrivateAddr: host.PrivateIpAddr,
+		})
+	}
+
+	return hosts, nil
+}
+
 func (c *CoordinatorClient) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
 	hostAddrs := []string{}
 
@@ -63,10 +83,6 @@ func (c *CoordinatorClient) GetEntryLocations(ctx context.Context, hash string) 
 	}
 
 	return hostSet, nil
-}
-
-func (c *CoordinatorClient) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
-	return nil, nil
 }
 
 func (c *CoordinatorClient) SetClientLock(ctx context.Context, hash string, host string) error {

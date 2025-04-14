@@ -126,6 +126,15 @@ func (c *BlobCacheClient) Cleanup() error {
 	return nil
 }
 
+func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "mylocality")
+	if err != nil {
+		return nil, err
+	}
+
+	return hosts, nil
+}
+
 func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 

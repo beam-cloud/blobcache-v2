@@ -74,7 +74,8 @@ message GetAvailableHostsResponse { repeated BlobCacheHost hosts = 1; }
 
 message BlobCacheHost {
   string host = 1;
-  string private_ip_addr = 2;
+  string addr = 2;
+  string private_ip_addr = 3;
 }
 
 message SetClientLockRequest {

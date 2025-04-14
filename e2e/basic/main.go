@@ -28,9 +28,15 @@ func main() {
 		log.Fatalf("Unable to create client: %v", err)
 	}
 
-	err = client.GetState()
+	hosts, err := client.GetNearbyHosts()
 	if err != nil {
-		log.Fatalf("Unable to get state: %v", err)
+		log.Fatalf("Unable to get nearby hosts: %v", err)
+	}
+
+	log.Printf("Hosts: %v", hosts)
+
+	for _, host := range hosts {
+		log.Printf("Host: %v", host)
 	}
 
 }

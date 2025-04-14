@@ -170,6 +170,7 @@ type MountPointConfig struct {
 
 type BlobCacheHost struct {
 	RTT              time.Duration `redis:"rtt" json:"rtt"`
+	Host             string        `redis:"host" json:"host"`
 	Addr             string        `redis:"addr" json:"addr"`
 	PrivateAddr      string        `redis:"private_addr" json:"private_addr"`
 	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`

@@ -8,6 +8,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/djherbis/atime v1.1.0
 	github.com/go-faker/faker/v4 v4.6.0
+	github.com/golang/protobuf v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.5.1
 	github.com/knadh/koanf/parsers/json v0.1.0
@@ -37,7 +38,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/knadh/koanf/maps v0.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect

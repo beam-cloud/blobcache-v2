@@ -178,8 +178,13 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 		CapacityUsagePct: 0.0,
 	}
 
+	maxMessageSize := d.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxMessageSize),
+			grpc.MaxCallSendMsgSize(maxMessageSize),
+		),
 	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
