@@ -49,7 +49,7 @@ type BlobCacheClient struct {
 	hostMap                 *HostMap
 	mu                      sync.RWMutex
 	discoveryClient         *DiscoveryClient
-	metadata                MetadataClient
+	coordinator             CoordinatorClient
 	closestHostWithCapacity *BlobCacheHost
 	localHostCache          map[string]*localClientCache
 	blobfsServer            *fuse.Server
@@ -63,7 +63,7 @@ type localClientCache struct {
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
-	metadata, err := NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
+	coordinator, err := NewCoordinatorClientLocal(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
 	}
@@ -75,12 +75,12 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
 		mu:                      sync.RWMutex{},
-		metadata:                metadata,
+		coordinator:             coordinator,
 		closestHostWithCapacity: nil,
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, metadata)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
@@ -91,10 +91,10 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
-			Config:         cfg,
-			MetadataClient: metadata,
-			Client:         bc,
-			Verbose:        bc.globalConfig.DebugMode,
+			Config:            cfg,
+			CoordinatorClient: coordinator,
+			Client:            bc,
+			Verbose:           bc.globalConfig.DebugMode,
 		})
 		if err != nil {
 			return nil, err
@@ -124,7 +124,7 @@ func (c *BlobCacheClient) Cleanup() error {
 }
 
 func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
-	hosts, err := c.metadata.GetAvailableHosts(c.ctx, "mylocality")
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "mylocality")
 	if err != nil {
 		return nil, err
 	}
@@ -337,12 +337,13 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 }
 
 func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
-	hostAddrs, err := c.metadata.GetEntryLocations(ctx, hash)
-	if err != nil {
-		return false
-	}
-	intersection := hostAddrs.Intersect(c.hostMap.Members())
-	return intersection.Cardinality() > 0
+	// hostAddrs, err := c.coordinator.GetEntryLocations(ctx, hash)
+	// if err != nil {
+	// 	return false
+	// }
+	// intersection := hostAddrs.Intersect(c.hostMap.Members())
+	// return intersection.Cardinality() > 0
+	return false
 }
 
 func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
@@ -369,61 +370,62 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		if hostFound {
 			host = cachedHost.host
 		} else {
-			hostAddrs, err := c.metadata.GetEntryLocations(ctx, request.hash)
-			if err != nil {
-				return nil, nil, err
-			}
+			// hostAddrs, err := c.metadata.GetEntryLocations(ctx, request.hash)
+			// if err != nil {
+			// 	return nil, nil, err
+			// }
 
+			hostAddrs := mapset.NewSet[string]()
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
-			if intersection.Cardinality() == 0 {
-				entry, err := c.metadata.RetrieveEntry(ctx, request.hash)
-				if err != nil {
-					return nil, nil, err
-				}
+			// if intersection.Cardinality() == 0 {
+			// 	entry, err := c.metadata.RetrieveEntry(ctx, request.hash)
+			// 	if err != nil {
+			// 		return nil, nil, err
+			// 	}
 
-				// Attempt to populate this server with the content from the original source
-				if entry.SourcePath != "" {
-					err := c.metadata.SetClientLock(ctx, c.hostname, request.hash)
-					if err != nil {
-						return nil, nil, ErrCacheLockHeld
-					}
-					defer c.metadata.RemoveClientLock(ctx, c.hostname, request.hash)
+			// 	// Attempt to populate this server with the content from the original source
+			// 	if entry.SourcePath != "" {
+			// 		err := c.coordinator.SetClientLock(ctx, c.hostname, request.hash)
+			// 		if err != nil {
+			// 			return nil, nil, ErrCacheLockHeld
+			// 		}
+			// 		defer c.coordinator.RemoveClientLock(ctx, c.hostname, request.hash)
 
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
-					host, err = c.hostMap.Closest(closestHostTimeout)
-					if err != nil {
-						return nil, nil, err
-					}
+			// 		Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
+			// 		host, err = c.hostMap.Closest(closestHostTimeout)
+			// 		if err != nil {
+			// 			return nil, nil, err
+			// 		}
 
-					closestClient, exists := c.grpcClients[host.Addr]
-					if !exists {
-						return nil, nil, ErrClientNotFound
-					}
+			// 		closestClient, exists := c.grpcClients[host.Addr]
+			// 		if !exists {
+			// 			return nil, nil, ErrClientNotFound
+			// 		}
 
-					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
-						SourcePath:   entry.SourcePath,
-						SourceOffset: entry.SourceOffset,
-					})
-					if err != nil {
-						return nil, nil, err
-					}
+			// 		resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
+			// 			SourcePath:   entry.SourcePath,
+			// 			SourceOffset: entry.SourceOffset,
+			// 		})
+			// 		if err != nil {
+			// 			return nil, nil, err
+			// 		}
 
-					if resp.Ok {
-						Logger.Infof("Content repopulated from source: %s", entry.SourcePath)
-						c.mu.Lock()
-						c.localHostCache[request.hash] = &localClientCache{
-							host:      host,
-							timestamp: time.Now(),
-						}
-						c.mu.Unlock()
-						return closestClient, host, nil
-					}
+			// 		if resp.Ok {
+			// 			Logger.Infof("Content repopulated from source: %s", entry.SourcePath)
+			// 			c.mu.Lock()
+			// 			c.localHostCache[request.hash] = &localClientCache{
+			// 				host:      host,
+			// 				timestamp: time.Now(),
+			// 			}
+			// 			c.mu.Unlock()
+			// 			return closestClient, host, nil
+			// 		}
 
-					return nil, nil, ErrUnableToPopulateContent
-				} else {
-					return nil, nil, ErrHostNotFound
-				}
-			}
+			// 		return nil, nil, ErrUnableToPopulateContent
+			// 	} else {
+			// 		return nil, nil, ErrHostNotFound
+			// 	}
+			// }
 
 			host = c.findClosestHost(intersection)
 			if host == nil {
@@ -595,7 +597,7 @@ func (c *BlobCacheClient) GetState() error {
 }
 
 func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
 		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
 		return false
@@ -605,7 +607,7 @@ func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) b
 }
 
 func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
 		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
 		return false
@@ -615,7 +617,7 @@ func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bo
 }
 
 func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) bool {
-	children, err := c.metadata.GetFsNodeChildren(ctx, id)
+	children, err := c.coordinator.GetFsNodeChildren(ctx, id)
 	if err != nil {
 		Logger.Errorf("error getting fs node children: %v, id: %s", err, id)
 		return false

@@ -19,7 +19,7 @@ const (
 type DiscoveryMode string
 
 const (
-	DiscoveryModeMetadata DiscoveryMode = "metadata"
+	DiscoveryModeCoordinator DiscoveryMode = "coordinator"
 )
 
 type BlobCacheConfig struct {

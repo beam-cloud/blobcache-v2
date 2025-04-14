@@ -60,19 +60,19 @@ func SHA1StringToUint64(hash string) (uint64, error) {
 }
 
 type BlobFsSystemOpts struct {
-	Verbose        bool
-	MetadataClient MetadataClient
-	Config         BlobCacheConfig
-	Client         *BlobCacheClient
+	Verbose           bool
+	CoordinatorClient CoordinatorClient
+	Config            BlobCacheConfig
+	Client            *BlobCacheClient
 }
 
 type BlobFs struct {
-	ctx            context.Context
-	root           *FSNode
-	verbose        bool
-	MetadataClient MetadataClient
-	Client         *BlobCacheClient
-	Config         BlobCacheConfig
+	ctx               context.Context
+	root              *FSNode
+	verbose           bool
+	CoordinatorClient CoordinatorClient
+	Client            *BlobCacheClient
+	Config            BlobCacheConfig
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
@@ -190,27 +190,27 @@ func updateReadAheadKB(mountPoint string, valueKB int) error {
 
 // NewFileSystem initializes a new BlobFs with root metadata.
 func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) {
-	metadataClient := opts.MetadataClient
+	coordinatorClient := opts.CoordinatorClient
 
 	bfs := &BlobFs{
-		ctx:            ctx,
-		verbose:        opts.Verbose,
-		Config:         opts.Config,
-		Client:         opts.Client,
-		MetadataClient: opts.MetadataClient,
+		ctx:               ctx,
+		verbose:           opts.Verbose,
+		Config:            opts.Config,
+		Client:            opts.Client,
+		CoordinatorClient: opts.CoordinatorClient,
 	}
 
 	rootID := GenerateFsID("/")
 	rootPID := "" // Root node has no parent
 	rootPath := "/"
 
-	dirMeta, err := metadataClient.GetFsNode(bfs.ctx, rootID)
+	dirMeta, err := coordinatorClient.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
 		Logger.Infof("Root node metadata not found, creating it now...")
 
 		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Path: rootPath, Ino: 1, Mode: fuse.S_IFDIR | 0755}
 
-		err := metadataClient.SetFsNode(bfs.ctx, rootID, dirMeta)
+		err := coordinatorClient.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
 			Logger.Fatalf("Unable to create blobfs root node dir metdata: %+v", err)
 		}

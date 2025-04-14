@@ -13,17 +13,17 @@ import (
 )
 
 type DiscoveryClient struct {
-	cfg      BlobCacheGlobalConfig
-	hostMap  *HostMap
-	metadata MetadataClient
-	mu       sync.Mutex
+	cfg         BlobCacheGlobalConfig
+	hostMap     *HostMap
+	coordinator CoordinatorClient
+	mu          sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, metadata MetadataClient) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, coordinator CoordinatorClient) *DiscoveryClient {
 	return &DiscoveryClient{
-		cfg:      cfg,
-		hostMap:  hostMap,
-		metadata: metadata,
+		cfg:         cfg,
+		hostMap:     hostMap,
+		coordinator: coordinator,
 	}
 }
 
@@ -35,9 +35,9 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
-	// Default to metadata discovery if no mode is specified
+	// Default to coordinator discovery if no mode is specified
 	if d.cfg.DiscoveryMode == "" {
-		d.cfg.DiscoveryMode = string(DiscoveryModeMetadata)
+		d.cfg.DiscoveryMode = string(DiscoveryModeCoordinator)
 	}
 
 	hosts, err := d.FindNearbyHosts(ctx)
@@ -61,8 +61,8 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.metadata.GetAvailableHosts(ctx, "testmeout")
+func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*BlobCacheHost, error) {
+	hosts, err := d.coordinator.GetAvailableHosts(ctx, "testmeout")
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +105,8 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 	var err error
 
 	switch d.cfg.DiscoveryMode {
-	case string(DiscoveryModeMetadata):
-		hosts, err = d.discoverHostsViaMetadata(ctx)
+	case string(DiscoveryModeCoordinator):
+		hosts, err = d.discoverHostsViaCoordinator(ctx)
 		if err != nil {
 			return nil, err
 		}

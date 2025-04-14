@@ -18,11 +18,11 @@ type ContentAddressableStorage struct {
 	cache          *ristretto.Cache[string, interface{}]
 	serverConfig   BlobCacheServerConfig
 	globalConfig   BlobCacheGlobalConfig
-	metadata       MetadataClient
+	coordinator    CoordinatorClient
 	maxCacheSizeMb int64
 }
 
-func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, metadata MetadataClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
+func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
@@ -31,7 +31,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		ctx:          ctx,
 		serverConfig: config.Server,
 		globalConfig: config.Global,
-		metadata:     metadata,
+		coordinator:  coordinator,
 		currentHost:  currentHost,
 	}
 
@@ -122,17 +122,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		return errors.New("unable to cache: set dropped")
 	}
 
-	// Store entry
-	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
-		Hash:         hash,
-		Size:         size,
-		SourcePath:   sourcePath,
-		SourceOffset: sourceOffset,
-	}, cas.currentHost)
-	if err != nil {
-		return err
-	}
-
 	Logger.Debugf("Added object: %s, size: %d bytes", hash, size)
 	return nil
 }
@@ -210,9 +199,6 @@ func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}])
 	for _, k := range chunkKeys {
 		cas.cache.Del(k)
 	}
-
-	// Remove location of this cached content
-	cas.metadata.RemoveEntryLocation(cas.ctx, hash, cas.currentHost)
 }
 
 func (cas *ContentAddressableStorage) Cleanup() {

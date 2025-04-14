@@ -41,7 +41,7 @@ type CacheService struct {
 	cas           *ContentAddressableStorage
 	serverConfig  BlobCacheServerConfig
 	globalConfig  BlobCacheGlobalConfig
-	metadata      MetadataClient
+	coordinator   CoordinatorClient
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
@@ -52,13 +52,13 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		RTT:  0,
 	}
 
-	var metadata MetadataClient
+	var coordinator CoordinatorClient
 	var err error = nil
 	switch cfg.Server.Mode {
 	case BlobCacheServerModeCoordinator:
-		metadata, err = NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
+		coordinator, err = NewCoordinatorClientLocal(cfg.Global, cfg.Client.Token)
 	default:
-		metadata, err = NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
+		coordinator, err = NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	}
 
 	if err != nil {
@@ -72,7 +72,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
-	cas, err := NewContentAddressableStorage(ctx, currentHost, metadata, cfg)
+	cas, err := NewContentAddressableStorage(ctx, currentHost, coordinator, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		cas:           cas,
 		serverConfig:  cfg.Server,
 		globalConfig:  cfg.Global,
-		metadata:      metadata,
+		coordinator:   coordinator,
 		privateIpAddr: privateIpAddr,
 	}
 
@@ -104,12 +104,12 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 }
 
 func (cs *CacheService) HostKeepAlive() {
-	err := cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
+	err := cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to set host keepalive: %v", err)
 	}
 
-	err = cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+	err = cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to add host to index: %v", err)
 	}
@@ -125,8 +125,8 @@ func (cs *CacheService) HostKeepAlive() {
 			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.globalConfig.ServerPort)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
 
-			cs.metadata.AddHostToIndex(cs.ctx, cs.cas.currentHost)
-			cs.metadata.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
+			cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+			cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
 		}
 	}
 }
@@ -340,7 +340,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAvailableHostsRequest) (*proto.GetAvailableHostsResponse, error) {
 	Logger.Infof("GetAvailableHosts[ACK] - [%s]", req.Locality)
 
-	hosts, err := cs.metadata.GetAvailableHosts(ctx, req.Locality)
+	hosts, err := cs.coordinator.GetAvailableHosts(ctx, req.Locality)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
-	if err := cs.metadata.SetStoreFromContentLock(ctx, sourcePath); err != nil {
+	if err := cs.coordinator.SetStoreFromContentLock(ctx, sourcePath); err != nil {
 		return &proto.StoreContentFromSourceWithLockResponse{FailedToAcquireLock: true}, nil
 	}
 
@@ -373,7 +373,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 				return
 			case <-ticker.C:
 				Logger.Infof("StoreContentFromSourceWithLock[REFRESH] - [%s]", sourcePath)
-				cs.metadata.RefreshStoreFromContentLock(ctx, sourcePath)
+				cs.coordinator.RefreshStoreFromContentLock(ctx, sourcePath)
 			}
 		}
 	}()
@@ -383,7 +383,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 		return nil, err
 	}
 
-	if err := cs.metadata.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
+	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
 		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
 	}
 
