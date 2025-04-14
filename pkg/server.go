@@ -76,6 +76,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
 
+	currentHost.Host = hostname
 	currentHost.Addr = fmt.Sprintf("%s:%d", publicIpAddr, cfg.Global.ServerPort)
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
@@ -262,6 +263,8 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
 	ctx := stream.Context()
 	var buffer bytes.Buffer
+
+	Logger.Infof("StoreContent[ACK]")
 
 	for {
 		req, err := stream.Recv()

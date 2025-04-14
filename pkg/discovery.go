@@ -73,7 +73,7 @@ func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*B
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
 			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(host.Addr) != nil {
+			if d.hostMap.Get(host.Host) != nil {
 				continue
 			}
 
@@ -81,7 +81,7 @@ func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*B
 			go func(addr string) {
 				defer wg.Done()
 
-				hostState, err := d.GetHostState(ctx, addr, host.PrivateAddr)
+				hostState, err := d.GetHostState(ctx, host)
 				if err != nil {
 					return
 				}
@@ -117,14 +117,7 @@ func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost
 }
 
 // GetHostState attempts to connect to the gRPC service and verifies its availability
-func (d *DiscoveryClient) GetHostState(ctx context.Context, addr, privateAddr string) (*BlobCacheHost, error) {
-	host := BlobCacheHost{
-		Addr:             addr,
-		RTT:              0,
-		PrivateAddr:      privateAddr,
-		CapacityUsagePct: 0.0,
-	}
-
+func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost) (*BlobCacheHost, error) {
 	maxMessageSize := d.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -137,7 +130,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr, privateAddr st
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(dialCtx, privateAddr, dialOpts...)
+	conn, err := grpc.DialContext(dialCtx, host.PrivateAddr, dialOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -157,5 +150,5 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, addr, privateAddr st
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
 	}
 
-	return &host, nil
+	return host, nil
 }

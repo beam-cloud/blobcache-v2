@@ -5,13 +5,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math"
+	"log"
 	"net"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
-	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
@@ -174,7 +173,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+	c.grpcClients[host.Host] = proto.NewBlobCacheClient(conn)
 	c.hasher.Add(host)
 
 	go c.monitorHost(host)
@@ -189,7 +188,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 		select {
 		case <-ticker.C:
 			err := func() error {
-				client, exists := c.grpcClients[host.Addr]
+				client, exists := c.grpcClients[host.Host]
 				if !exists {
 					return ErrHostNotFound
 				}
@@ -346,10 +345,9 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		host = c.hasher.Get(request.hash)
-		if host == nil {
-			return nil, nil, ErrHostNotFound
-		}
+		hosts := c.hasher.GetN(3, request.hash)
+		host = hosts[0]
+		Logger.Infof("Host: %v, addr: %v", host.Host, host.Addr)
 
 	case ClientRequestTypeRetrieval:
 		c.mu.RLock()
@@ -359,68 +357,16 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		if hostFound {
 			host = cachedHost.host
 		} else {
-			hostAddrs := mapset.NewSet[string]()
-			intersection := hostAddrs.Intersect(c.hostMap.Members())
-			// if intersection.Cardinality() == 0 {
-			// 	entry, err := c.metadata.RetrieveEntry(ctx, request.hash)
-			// 	if err != nil {
-			// 		return nil, nil, err
-			// 	}
-
-			// 	// Attempt to populate this server with the content from the original source
-			// 	if entry.SourcePath != "" {
-			// 		err := c.coordinator.SetClientLock(ctx, c.hostname, request.hash)
-			// 		if err != nil {
-			// 			return nil, nil, ErrCacheLockHeld
-			// 		}
-			// 		defer c.coordinator.RemoveClientLock(ctx, c.hostname, request.hash)
-
-			// 		Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
-			// 		host, err = c.hostMap.Closest(closestHostTimeout)
-			// 		if err != nil {
-			// 			return nil, nil, err
-			// 		}
-
-			// 		closestClient, exists := c.grpcClients[host.Addr]
-			// 		if !exists {
-			// 			return nil, nil, ErrClientNotFound
-			// 		}
-
-			// 		resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
-			// 			SourcePath:   entry.SourcePath,
-			// 			SourceOffset: entry.SourceOffset,
-			// 		})
-			// 		if err != nil {
-			// 			return nil, nil, err
-			// 		}
-
-			// 		if resp.Ok {
-			// 			Logger.Infof("Content repopulated from source: %s", entry.SourcePath)
-			// 			c.mu.Lock()
-			// 			c.localHostCache[request.hash] = &localClientCache{
-			// 				host:      host,
-			// 				timestamp: time.Now(),
-			// 			}
-			// 			c.mu.Unlock()
-			// 			return closestClient, host, nil
-			// 		}
-
-			// 		return nil, nil, ErrUnableToPopulateContent
-			// 	} else {
-			// 		return nil, nil, ErrHostNotFound
-			// 	}
-			// }
-
-			host = c.findClosestHost(intersection)
-			if host == nil {
-				return nil, nil, ErrHostNotFound
-			}
-
 			c.mu.Lock()
+			hosts := c.hasher.GetN(3, request.hash)
+			log.Println("hosts: ", hosts)
+			host = hosts[0]
+
 			c.localHostCache[request.hash] = &localClientCache{
 				host:      host,
 				timestamp: time.Now(),
 			}
+
 			c.mu.Unlock()
 
 		}
@@ -431,7 +377,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		return nil, nil, ErrHostNotFound
 	}
 
-	client, exists := c.grpcClients[host.Addr]
+	client, exists := c.grpcClients[host.Host]
 	if !exists {
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)
@@ -442,28 +388,13 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 	return client, host, nil
 }
 
-func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *BlobCacheHost {
-	var closestHost *BlobCacheHost
-	closestRTT := time.Duration(math.MaxInt64)
-
-	for addr := range intersection.Iter() {
-		host := c.hostMap.Get(addr)
-
-		if host != nil && host.RTT < closestRTT {
-			closestHost = host
-			closestRTT = host.RTT
-		}
-	}
-
-	return closestHost
-}
-
-func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
 	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+		rt:   ClientRequestTypeStorage,
+		hash: hash,
 	})
 	if err != nil {
 		return "", err
@@ -476,7 +407,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk}
+		req := &proto.StoreContentRequest{Content: chunk, Hash: hash}
 		if err := stream.Send(req); err != nil {
 			return "", err
 		}
@@ -491,7 +422,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64, hash string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 

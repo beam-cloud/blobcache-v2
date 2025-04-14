@@ -120,7 +120,8 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
 		n.log("Storing content from source with path: %s", sourcePath)
-		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+
+		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0, n.bfsNode.Hash)
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
