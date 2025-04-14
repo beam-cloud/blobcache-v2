@@ -63,10 +63,11 @@ type localClientCache struct {
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
-	coordinator, err := NewCoordinatorClientLocal(cfg.Global, cfg.Client.Token)
+	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
 	}
+
 	bc := &BlobCacheClient{
 		ctx:                     ctx,
 		clientConfig:            cfg.Client,

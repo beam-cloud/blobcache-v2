@@ -56,7 +56,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	var err error = nil
 	switch cfg.Server.Mode {
 	case BlobCacheServerModeCoordinator:
-		coordinator, err = NewCoordinatorClientLocal(cfg.Global, cfg.Client.Token)
+		coordinator, err = NewCoordinatorClientLocal(cfg.Global, cfg.Server)
 	default:
 		coordinator, err = NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	}

@@ -2,14 +2,6 @@ package blobcache
 
 import (
 	"context"
-	"crypto/tls"
-	"net"
-
-	proto "github.com/beam-cloud/blobcache-v2/proto"
-	mapset "github.com/deckarep/golang-set/v2"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type CoordinatorClient interface {
@@ -27,126 +19,63 @@ type CoordinatorClient interface {
 }
 
 type CoordinatorClientLocal struct {
-	cfg    BlobCacheGlobalConfig
-	client proto.BlobCacheClient
-	host   string
+	host         string
+	globalConfig BlobCacheGlobalConfig
+	serverConfig BlobCacheServerConfig
+	metadata     *BlobCacheMetadata
 }
 
-func NewCoordinatorClientLocal(cfg BlobCacheGlobalConfig, token string) (CoordinatorClient, error) {
-	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-
-	isTLS := cfg.TLSEnabled
-	if isTLS {
-		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
-		transportCredentials = grpc.WithTransportCredentials(h2creds)
-	}
-
-	var dialFunc func(context.Context, string) (net.Conn, error) = nil
-	addr := cfg.CoordinatorHost
-
-	dialFunc = DialWithTimeout
-
-	maxMessageSize := cfg.GRPCMessageSizeBytes
-	var dialOpts = []grpc.DialOption{
-		transportCredentials,
-		grpc.WithContextDialer(dialFunc),
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxMessageSize),
-			grpc.MaxCallSendMsgSize(maxMessageSize),
-		),
-	}
-
-	if token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(GrpcAuthInterceptor(token)))
-	}
-
-	conn, err := grpc.Dial(addr, dialOpts...)
+func NewCoordinatorClientLocal(globalConfig BlobCacheGlobalConfig, serverConfig BlobCacheServerConfig) (CoordinatorClient, error) {
+	metadata, err := NewBlobCacheMetadata(serverConfig.Metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	return &CoordinatorClientLocal{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
+	return &CoordinatorClientLocal{globalConfig: globalConfig, serverConfig: serverConfig, metadata: metadata}, nil
 }
 
 func (c *CoordinatorClientLocal) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
-	return nil
+	return c.metadata.AddHostToIndex(ctx, host)
 }
 
 func (c *CoordinatorClientLocal) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
-	return nil
+	return c.metadata.SetHostKeepAlive(ctx, host)
 }
 
 func (c *CoordinatorClientLocal) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return nil
+	return c.metadata.SetStoreFromContentLock(ctx, sourcePath)
 }
 
 func (c *CoordinatorClientLocal) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return nil
+	return c.metadata.RemoveStoreFromContentLock(ctx, sourcePath)
 }
 
 func (c *CoordinatorClientLocal) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return nil
+	return c.metadata.RefreshStoreFromContentLock(ctx, sourcePath)
 }
 
 func (c *CoordinatorClientLocal) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
-	response, err := c.client.GetAvailableHosts(ctx, &proto.GetAvailableHostsRequest{Locality: locality})
-	if err != nil {
-		return nil, err
-	}
-
-	Logger.Infof("Hosts: %v", response.Hosts)
-
 	hosts := make([]*BlobCacheHost, 0)
-	for _, host := range response.Hosts {
-		hosts = append(hosts, &BlobCacheHost{
-			Host:        host.Host,
-			Addr:        host.Addr,
-			PrivateAddr: host.PrivateIpAddr,
-		})
-	}
 
 	return hosts, nil
 }
 
-func (c *CoordinatorClientLocal) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
-	hostAddrs := []string{}
-
-	hostSet := mapset.NewSet[string]()
-	for _, addr := range hostAddrs {
-		hostSet.Add(addr)
-	}
-
-	return hostSet, nil
-}
-
 func (c *CoordinatorClientLocal) SetClientLock(ctx context.Context, hash string, host string) error {
-	_, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, Host: host})
-	return err
+	return c.metadata.SetClientLock(ctx, hash, host)
 }
 
 func (c *CoordinatorClientLocal) RemoveClientLock(ctx context.Context, hash string, host string) error {
-	_, err := c.client.RemoveClientLock(ctx, &proto.RemoveClientLockRequest{Hash: hash, Host: host})
-	return err
+	return c.metadata.RemoveClientLock(ctx, hash, host)
 }
 
 func (c *CoordinatorClientLocal) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
-	// _, err := c.client.SetFsNode(ctx, &proto.SetFsNodeRequest{Id: id, Path: metadata.Path, Hash: metadata.Hash, Size: metadata.Size})
-	return nil
+	return c.metadata.SetFsNode(ctx, id, metadata)
 }
 
 func (c *CoordinatorClientLocal) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
-	response, err := c.client.GetFsNode(ctx, &proto.GetFsNodeRequest{Id: id})
-	if err != nil {
-		return nil, err
-	}
-
-	return &BlobFsMetadata{
-		Path: response.Path,
-		Hash: response.Hash,
-		Size: response.Size,
-	}, nil
+	return c.metadata.GetFsNode(ctx, id)
 }
 
 func (c *CoordinatorClientLocal) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
-	return nil, nil
+	return c.metadata.GetFsNodeChildren(ctx, id)
 }
