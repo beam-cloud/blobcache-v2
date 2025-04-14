@@ -62,7 +62,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 }
 
 func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.coordinator.GetAvailableHosts(ctx, "testmeout")
+	hosts, err := d.coordinator.GetAvailableHosts(ctx, "myregion")
 	if err != nil {
 		return nil, err
 	}

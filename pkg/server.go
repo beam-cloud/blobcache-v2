@@ -72,7 +72,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
-	cas, err := NewContentAddressableStorage(ctx, currentHost, coordinator, cfg)
+	cas, err := NewContentAddressableStorage(ctx, currentHost, "myregion", coordinator, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +104,12 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 }
 
 func (cs *CacheService) HostKeepAlive() {
-	err := cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
+	err := cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.locality, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to set host keepalive: %v", err)
 	}
 
-	err = cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.currentHost)
+	err = cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.locality, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to add host to index: %v", err)
 	}
@@ -125,8 +125,8 @@ func (cs *CacheService) HostKeepAlive() {
 			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.globalConfig.ServerPort)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
 
-			cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.currentHost)
-			cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.currentHost)
+			cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.locality, cs.cas.currentHost)
+			cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.locality, cs.cas.currentHost)
 		}
 	}
 }

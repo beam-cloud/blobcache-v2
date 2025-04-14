@@ -15,6 +15,7 @@ import (
 type ContentAddressableStorage struct {
 	ctx            context.Context
 	currentHost    *BlobCacheHost
+	locality       string
 	cache          *ristretto.Cache[string, interface{}]
 	serverConfig   BlobCacheServerConfig
 	globalConfig   BlobCacheGlobalConfig
@@ -22,7 +23,7 @@ type ContentAddressableStorage struct {
 	maxCacheSizeMb int64
 }
 
-func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
+func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
@@ -33,6 +34,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		globalConfig: config.Global,
 		coordinator:  coordinator,
 		currentHost:  currentHost,
+		locality:     locality,
 	}
 
 	availableMemoryMb := getAvailableMemoryMb()
