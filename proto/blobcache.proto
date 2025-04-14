@@ -39,10 +39,7 @@ message GetContentResponse {
   bytes content = 2; // Content data
 }
 
-message StoreContentRequest {
-  bytes content = 1;
-  string hash = 2;
-}
+message StoreContentRequest { bytes content = 1; }
 
 message StoreContentResponse {
   string hash = 1; // Hash of the stored content

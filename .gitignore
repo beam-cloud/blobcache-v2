@@ -9,6 +9,7 @@ build.sh
 tmp/
 config.yaml
 config2.yaml
+config3.yaml
 e2e/throughput/testdata/*.bin
 e2e/fs/testdata/*.bin
 daemonset.yaml

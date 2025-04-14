@@ -414,7 +414,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 
 	start := time.Now()
 	for chunk := range chunks {
-		req := &proto.StoreContentRequest{Content: chunk, Hash: hash}
+		req := &proto.StoreContentRequest{Content: chunk}
 		if err := stream.Send(req); err != nil {
 			return "", err
 		}
