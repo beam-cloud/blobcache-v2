@@ -53,11 +53,11 @@ func NewCoordinatorClientRemote(cfg BlobCacheGlobalConfig, token string) (Coordi
 	return &CoordinatorClientRemote{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
 }
 
-func (c *CoordinatorClientRemote) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
+func (c *CoordinatorClientRemote) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
 	return nil
 }
 
-func (c *CoordinatorClientRemote) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
+func (c *CoordinatorClientRemote) SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error {
 	return nil
 }
 

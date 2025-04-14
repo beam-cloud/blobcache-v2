@@ -5,8 +5,8 @@ import (
 )
 
 type CoordinatorClient interface {
-	AddHostToIndex(ctx context.Context, host *BlobCacheHost) error
-	SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error
+	AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error
+	SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error
 	GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error)
 	SetClientLock(ctx context.Context, hash string, host string) error
 	RemoveClientLock(ctx context.Context, hash string, host string) error
@@ -34,12 +34,12 @@ func NewCoordinatorClientLocal(globalConfig BlobCacheGlobalConfig, serverConfig 
 	return &CoordinatorClientLocal{globalConfig: globalConfig, serverConfig: serverConfig, metadata: metadata}, nil
 }
 
-func (c *CoordinatorClientLocal) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
-	return c.metadata.AddHostToIndex(ctx, host)
+func (c *CoordinatorClientLocal) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
+	return c.metadata.AddHostToIndex(ctx, locality, host)
 }
 
-func (c *CoordinatorClientLocal) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
-	return c.metadata.SetHostKeepAlive(ctx, host)
+func (c *CoordinatorClientLocal) SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error {
+	return c.metadata.SetHostKeepAlive(ctx, locality, host)
 }
 
 func (c *CoordinatorClientLocal) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
@@ -55,9 +55,9 @@ func (c *CoordinatorClientLocal) RefreshStoreFromContentLock(ctx context.Context
 }
 
 func (c *CoordinatorClientLocal) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
-	hosts := make([]*BlobCacheHost, 0)
-
-	return hosts, nil
+	return c.metadata.GetAvailableHosts(ctx, locality, func(host *BlobCacheHost) {
+		c.metadata.RemoveHostFromIndex(ctx, locality, host)
+	})
 }
 
 func (c *CoordinatorClientLocal) SetClientLock(ctx context.Context, hash string, host string) error {
