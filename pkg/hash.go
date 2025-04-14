@@ -23,7 +23,6 @@ type hostScore struct {
 	score    uint32
 }
 
-// New returns a new Hash ready for use with the given hosts.
 func NewRendezvousHasher() *RendezvousHasher {
 	hasher := &RendezvousHasher{
 		hasher: crc32.New(crc32Table),
@@ -31,14 +30,14 @@ func NewRendezvousHasher() *RendezvousHasher {
 	return hasher
 }
 
-// Add adds additional hosts to the Hash.
+// Add adds additional hosts
 func (h *RendezvousHasher) Add(hosts ...*BlobCacheHost) {
 	for _, host := range hosts {
 		h.hosts = append(h.hosts, hostScore{host: host, hostName: []byte(host.Host)})
 	}
 }
 
-// Remove removes a host from the Hash, if it exists
+// Remove removes a host
 func (h *RendezvousHasher) Remove(host *BlobCacheHost) {
 	for i, ns := range h.hosts {
 		if ns.host.Host == host.Host {
@@ -48,7 +47,7 @@ func (h *RendezvousHasher) Remove(host *BlobCacheHost) {
 	}
 }
 
-// Get returns the host with the highest score for the given key. If this Hash
+// Get returns the host with the highest score for the given key. If this RendezvousHasher
 // has no hosts, an empty string is returned.
 func (h *RendezvousHasher) Get(key string) *BlobCacheHost {
 	var maxScore uint32
