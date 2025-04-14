@@ -13,3 +13,4 @@ e2e/throughput/testdata/*.bin
 e2e/fs/testdata/*.bin
 daemonset.yaml
 output.bin
+.go-version
