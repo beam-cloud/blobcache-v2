@@ -49,7 +49,7 @@ type BlobCacheClient struct {
 	hostMap                 *HostMap
 	mu                      sync.RWMutex
 	discoveryClient         *DiscoveryClient
-	coordinator             *CoordinatorClient
+	metadata                MetadataClient
 	closestHostWithCapacity *BlobCacheHost
 	localHostCache          map[string]*localClientCache
 	blobfsServer            *fuse.Server
@@ -63,13 +63,10 @@ type localClientCache struct {
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
-	InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
-
-	coordinator, err := NewCoordinatorClient(cfg.Global, cfg.Client.Token)
+	metadata, err := NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
 	}
-
 	bc := &BlobCacheClient{
 		ctx:                     ctx,
 		clientConfig:            cfg.Client,
@@ -78,12 +75,12 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
 		mu:                      sync.RWMutex{},
-		coordinator:             coordinator,
+		metadata:                metadata,
 		closestHostWithCapacity: nil,
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, metadata)
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.StartInBackground(bc.ctx)
@@ -94,10 +91,10 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
-			Config:      cfg,
-			Coordinator: coordinator,
-			Client:      bc,
-			Verbose:     bc.globalConfig.DebugMode,
+			Config:         cfg,
+			MetadataClient: metadata,
+			Client:         bc,
+			Verbose:        bc.globalConfig.DebugMode,
 		})
 		if err != nil {
 			return nil, err
@@ -127,7 +124,7 @@ func (c *BlobCacheClient) Cleanup() error {
 }
 
 func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
-	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "mylocality")
+	hosts, err := c.metadata.GetAvailableHosts(c.ctx, "mylocality")
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +337,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 }
 
 func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
-	hostAddrs, err := c.coordinator.GetEntryLocations(ctx, hash)
+	hostAddrs, err := c.metadata.GetEntryLocations(ctx, hash)
 	if err != nil {
 		return false
 	}
@@ -372,25 +369,25 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		if hostFound {
 			host = cachedHost.host
 		} else {
-			hostAddrs, err := c.coordinator.GetEntryLocations(ctx, request.hash)
+			hostAddrs, err := c.metadata.GetEntryLocations(ctx, request.hash)
 			if err != nil {
 				return nil, nil, err
 			}
 
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
 			if intersection.Cardinality() == 0 {
-				entry, err := c.coordinator.RetrieveEntry(ctx, request.hash)
+				entry, err := c.metadata.RetrieveEntry(ctx, request.hash)
 				if err != nil {
 					return nil, nil, err
 				}
 
 				// Attempt to populate this server with the content from the original source
 				if entry.SourcePath != "" {
-					err := c.coordinator.SetClientLock(ctx, c.hostname, request.hash)
+					err := c.metadata.SetClientLock(ctx, c.hostname, request.hash)
 					if err != nil {
 						return nil, nil, ErrCacheLockHeld
 					}
-					defer c.coordinator.RemoveClientLock(ctx, c.hostname, request.hash)
+					defer c.metadata.RemoveClientLock(ctx, c.hostname, request.hash)
 
 					Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
 					host, err = c.hostMap.Closest(closestHostTimeout)
@@ -598,7 +595,7 @@ func (c *BlobCacheClient) GetState() error {
 }
 
 func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
 		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
 		return false
@@ -608,7 +605,7 @@ func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) b
 }
 
 func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
 	if err != nil {
 		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
 		return false
@@ -618,7 +615,7 @@ func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bo
 }
 
 func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) bool {
-	children, err := c.coordinator.GetFsNodeChildren(ctx, id)
+	children, err := c.metadata.GetFsNodeChildren(ctx, id)
 	if err != nil {
 		Logger.Errorf("error getting fs node children: %v, id: %s", err, id)
 		return false

@@ -13,17 +13,17 @@ import (
 )
 
 type DiscoveryClient struct {
-	cfg         BlobCacheGlobalConfig
-	hostMap     *HostMap
-	coordinator *CoordinatorClient
-	mu          sync.Mutex
+	cfg      BlobCacheGlobalConfig
+	hostMap  *HostMap
+	metadata MetadataClient
+	mu       sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, coordinator *CoordinatorClient) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, metadata MetadataClient) *DiscoveryClient {
 	return &DiscoveryClient{
-		cfg:         cfg,
-		hostMap:     hostMap,
-		coordinator: coordinator,
+		cfg:      cfg,
+		hostMap:  hostMap,
+		metadata: metadata,
 	}
 }
 
@@ -62,7 +62,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 }
 
 func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.coordinator.GetAvailableHosts(ctx, "testmeout")
+	hosts, err := d.metadata.GetAvailableHosts(ctx, "testmeout")
 	if err != nil {
 		return nil, err
 	}

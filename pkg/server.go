@@ -33,14 +33,15 @@ type CacheServiceOpts struct {
 }
 
 type CacheService struct {
-	ctx context.Context
+	ctx  context.Context
+	mode BlobCacheServerMode
 	proto.UnimplementedBlobCacheServer
 	hostname      string
 	privateIpAddr string
 	cas           *ContentAddressableStorage
 	serverConfig  BlobCacheServerConfig
 	globalConfig  BlobCacheGlobalConfig
-	metadata      *BlobCacheMetadata
+	metadata      MetadataClient
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
@@ -51,7 +52,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		RTT:  0,
 	}
 
-	metadata, err := NewBlobCacheMetadata(cfg.Server.Metadata)
+	var metadata MetadataClient
+	var err error = nil
+	switch cfg.Server.Mode {
+	case BlobCacheServerModeCoordinator:
+		metadata, err = NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
+	default:
+		metadata, err = NewMetadataClientLocal(cfg.Global, cfg.Client.Token)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +89,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 
 	cs := &CacheService{
 		ctx:           ctx,
+		mode:          cfg.Server.Mode,
 		hostname:      hostname,
 		cas:           cas,
 		serverConfig:  cfg.Server,
@@ -227,7 +237,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	// if cs.cfg.BlobFs.Enabled && sourcePath != "" {
+	// if sourcePath != "" && cs.metadata != nil {
 	// 	err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
 	// 	if err != nil {
 	// 		Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
@@ -330,9 +340,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAvailableHostsRequest) (*proto.GetAvailableHostsResponse, error) {
 	Logger.Infof("GetAvailableHosts[ACK] - [%s]", req.Locality)
 
-	hosts, err := cs.metadata.GetAvailableHosts(ctx, func(host *BlobCacheHost) {
-		Logger.Infof("GetAvailableHosts[REM] - [%s]", host.Addr)
-	})
+	hosts, err := cs.metadata.GetAvailableHosts(ctx, req.Locality)
 	if err != nil {
 		return nil, err
 	}

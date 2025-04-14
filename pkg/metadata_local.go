@@ -12,13 +12,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type CoordinatorClient struct {
+type MetadataClientLocal struct {
 	cfg    BlobCacheGlobalConfig
 	client proto.BlobCacheClient
 	host   string
 }
 
-func NewCoordinatorClient(cfg BlobCacheGlobalConfig, token string) (*CoordinatorClient, error) {
+func NewMetadataClientLocal(cfg BlobCacheGlobalConfig, token string) (MetadataClient, error) {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
 	isTLS := cfg.TLSEnabled
@@ -51,10 +51,42 @@ func NewCoordinatorClient(cfg BlobCacheGlobalConfig, token string) (*Coordinator
 		return nil, err
 	}
 
-	return &CoordinatorClient{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
+	return &MetadataClientLocal{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
 }
 
-func (c *CoordinatorClient) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
+func (c *MetadataClientLocal) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) AddEntry(ctx context.Context, entry *BlobCacheEntry, host *BlobCacheHost) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) RemoveEntry(ctx context.Context, hash string) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) RemoveEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
+	return nil
+}
+
+func (c *MetadataClientLocal) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
 	response, err := c.client.GetAvailableHosts(ctx, &proto.GetAvailableHostsRequest{Locality: locality})
 	if err != nil {
 		return nil, err
@@ -74,7 +106,7 @@ func (c *CoordinatorClient) GetAvailableHosts(ctx context.Context, locality stri
 	return hosts, nil
 }
 
-func (c *CoordinatorClient) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
+func (c *MetadataClientLocal) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
 	hostAddrs := []string{}
 
 	hostSet := mapset.NewSet[string]()
@@ -85,26 +117,26 @@ func (c *CoordinatorClient) GetEntryLocations(ctx context.Context, hash string) 
 	return hostSet, nil
 }
 
-func (c *CoordinatorClient) SetClientLock(ctx context.Context, hash string, host string) error {
+func (c *MetadataClientLocal) SetClientLock(ctx context.Context, hash string, host string) error {
 	_, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, Host: host})
 	return err
 }
 
-func (c *CoordinatorClient) RemoveClientLock(ctx context.Context, hash string, host string) error {
+func (c *MetadataClientLocal) RemoveClientLock(ctx context.Context, hash string, host string) error {
 	_, err := c.client.RemoveClientLock(ctx, &proto.RemoveClientLockRequest{Hash: hash, Host: host})
 	return err
 }
 
-func (c *CoordinatorClient) RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error) {
+func (c *MetadataClientLocal) RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error) {
 	return nil, &ErrEntryNotFound{Hash: hash}
 }
 
-func (c *CoordinatorClient) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
+func (c *MetadataClientLocal) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
 	// _, err := c.client.SetFsNode(ctx, &proto.SetFsNodeRequest{Id: id, Path: metadata.Path, Hash: metadata.Hash, Size: metadata.Size})
 	return nil
 }
 
-func (c *CoordinatorClient) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
+func (c *MetadataClientLocal) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	response, err := c.client.GetFsNode(ctx, &proto.GetFsNodeRequest{Id: id})
 	if err != nil {
 		return nil, err
@@ -117,6 +149,6 @@ func (c *CoordinatorClient) GetFsNode(ctx context.Context, id string) (*BlobFsMe
 	}, nil
 }
 
-func (c *CoordinatorClient) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
+func (c *MetadataClientLocal) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
 	return nil, nil
 }

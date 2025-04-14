@@ -16,6 +16,25 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
+type MetadataClient interface {
+	AddEntry(ctx context.Context, entry *BlobCacheEntry, host *BlobCacheHost) error
+	AddHostToIndex(ctx context.Context, host *BlobCacheHost) error
+	SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error
+	RemoveEntry(ctx context.Context, hash string) error
+	GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error)
+	GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error)
+	RemoveEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error
+	SetClientLock(ctx context.Context, hash string, host string) error
+	RemoveClientLock(ctx context.Context, hash string, host string) error
+	SetStoreFromContentLock(ctx context.Context, sourcePath string) error
+	RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error
+	RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error
+	RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error)
+	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
+	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
+	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
+}
+
 const (
 	storeFromContentLockTtlS = 5
 )

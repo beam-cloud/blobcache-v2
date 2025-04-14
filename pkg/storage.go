@@ -18,11 +18,11 @@ type ContentAddressableStorage struct {
 	cache          *ristretto.Cache[string, interface{}]
 	serverConfig   BlobCacheServerConfig
 	globalConfig   BlobCacheGlobalConfig
-	metadata       *BlobCacheMetadata
+	metadata       MetadataClient
 	maxCacheSizeMb int64
 }
 
-func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
+func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, metadata MetadataClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
 	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
