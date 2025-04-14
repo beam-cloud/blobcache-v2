@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
@@ -341,13 +340,16 @@ func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool 
 
 func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
-	// var err error = nil
 
+	hostIndex := 0
 	switch request.rt {
 	case ClientRequestTypeStorage:
+		// TODO: Make N configurable and cycle through hosts based on attempt number
 		hosts := c.hasher.GetN(3, request.hash)
-		host = hosts[0]
-		Logger.Infof("Host: %v, addr: %v", host.Host, host.Addr)
+
+		if len(hosts) > 0 {
+			host = hosts[hostIndex]
+		}
 
 	case ClientRequestTypeRetrieval:
 		c.mu.RLock()
@@ -358,13 +360,18 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 			host = cachedHost.host
 		} else {
 			c.mu.Lock()
-			hosts := c.hasher.GetN(3, request.hash)
-			log.Println("hosts: ", hosts)
-			host = hosts[0]
 
-			c.localHostCache[request.hash] = &localClientCache{
-				host:      host,
-				timestamp: time.Now(),
+			// TODO: Make N configurable and cycle through hosts based on attempt number
+			hosts := c.hasher.GetN(3, request.hash)
+
+			if len(hosts) == 0 {
+				host = nil
+			} else {
+				host = hosts[hostIndex]
+				c.localHostCache[request.hash] = &localClientCache{
+					host:      host,
+					timestamp: time.Now(),
+				}
 			}
 
 			c.mu.Unlock()

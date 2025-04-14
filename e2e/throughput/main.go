@@ -53,7 +53,7 @@ func main() {
 	hashBytes := sha256.Sum256(b)
 	fileHash := hex.EncodeToString(hashBytes[:])
 
-	hash, err := storeFile(client, filePath)
+	hash, err := storeFile(client, filePath, fileHash)
 	if err != nil {
 		log.Fatalf("Failed to store file: %v\n", err)
 	}
@@ -86,7 +86,7 @@ func main() {
 	GenerateReport(totalStreamResult, totalGetContentResult, len(b), totalIterations)
 }
 
-func storeFile(client *blobcache.BlobCacheClient, filePath string) (string, error) {
+func storeFile(client *blobcache.BlobCacheClient, filePath string, fileHash string) (string, error) {
 	chunks := make(chan []byte)
 	go func() {
 		file, err := os.Open(filePath)
@@ -114,7 +114,7 @@ func storeFile(client *blobcache.BlobCacheClient, filePath string) (string, erro
 		close(chunks)
 	}()
 
-	hash, err := client.StoreContent(chunks)
+	hash, err := client.StoreContent(chunks, fileHash)
 	if err != nil {
 		return "", err
 	}

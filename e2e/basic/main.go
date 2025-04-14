@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"log"
+	"os"
+	"time"
 
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
@@ -28,15 +32,41 @@ func main() {
 		log.Fatalf("Unable to create client: %v", err)
 	}
 
-	hosts, err := client.GetNearbyHosts()
+	err = client.WaitForHosts(time.Second * 10)
 	if err != nil {
-		log.Fatalf("Unable to get nearby hosts: %v", err)
+		log.Fatalf("Unable to wait for hosts: %v", err)
 	}
 
-	log.Printf("Hosts: %v", hosts)
+	content := "Hello, World!"
+	hashBytes := sha256.Sum256([]byte(content))
+	hash := hex.EncodeToString(hashBytes[:])
 
-	for _, host := range hosts {
-		log.Printf("Host: %v", host)
+	gotContent, err := client.GetContent(hash, 0, int64(len(content)))
+	if err != nil {
+		log.Printf("Unable to get content: %v", err)
 	}
 
+	os.WriteFile("testdata/test.txt", []byte(content), 0644)
+
+	contentChan := make(chan []byte)
+
+	go func() {
+		defer close(contentChan)
+		contentChan <- []byte(content)
+	}()
+
+	computedHash, err := client.StoreContent(contentChan, hash)
+	if err != nil {
+		log.Fatalf("Unable to store content: %v", err)
+	}
+
+	log.Printf("Stored content with hash: %v", hash)
+	log.Printf("Computed hash: %v", computedHash)
+
+	gotContent, err = client.GetContent(hash, 0, int64(len(content)))
+	if err != nil {
+		log.Fatalf("Unable to get content: %v", err)
+	}
+
+	log.Printf("Got content: %v", string(gotContent))
 }
