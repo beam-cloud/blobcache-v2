@@ -83,7 +83,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
-	bc.hasher = NewRendezvousHasher(bc.hostMap)
+	bc.hasher = NewRendezvousHasher()
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.Start(bc.ctx)
@@ -175,7 +175,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	defer c.mu.Unlock()
 
 	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
-	c.hasher.Add(host.Host)
+	c.hasher.Add(host)
 
 	go c.monitorHost(host)
 	return nil
@@ -212,6 +212,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 				defer c.mu.Unlock()
 
 				c.hostMap.Remove(host)
+				c.hasher.Remove(host)
 
 				if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
 					c.closestHostWithCapacity = nil
@@ -341,20 +342,15 @@ func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool 
 
 func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
-	var err error = nil
+	// var err error = nil
 
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		if c.closestHostWithCapacity != nil {
-			host = c.closestHostWithCapacity
-		} else {
-			host, err = c.hostMap.ClosestWithCapacity(closestHostTimeout)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			c.closestHostWithCapacity = host
+		host = c.hasher.Get(request.hash)
+		if host == nil {
+			return nil, nil, ErrHostNotFound
 		}
+
 	case ClientRequestTypeRetrieval:
 		c.mu.RLock()
 		cachedHost, hostFound := c.localHostCache[request.hash]
@@ -363,11 +359,6 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		if hostFound {
 			host = cachedHost.host
 		} else {
-			// hostAddrs, err := c.metadata.GetEntryLocations(ctx, request.hash)
-			// if err != nil {
-			// 	return nil, nil, err
-			// }
-
 			hostAddrs := mapset.NewSet[string]()
 			intersection := hostAddrs.Intersect(c.hostMap.Members())
 			// if intersection.Cardinality() == 0 {
@@ -587,47 +578,4 @@ func (c *BlobCacheClient) GetState() error {
 	}
 
 	return nil
-}
-
-func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
-	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
-		return false
-	}
-
-	return c.IsCachedNearby(ctx, metadata.Hash)
-}
-
-func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
-	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
-		return false
-	}
-
-	return c.childrenCachedNearby(ctx, metadata.ID)
-}
-
-func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) bool {
-	children, err := c.coordinator.GetFsNodeChildren(ctx, id)
-	if err != nil {
-		Logger.Errorf("error getting fs node children: %v, id: %s", err, id)
-		return false
-	}
-
-	for _, child := range children {
-		if (child.Mode & fuse.S_IFDIR) != 0 {
-			if !c.childrenCachedNearby(ctx, child.ID) {
-				return false
-			}
-			continue
-		}
-
-		if !c.IsCachedNearby(ctx, child.Hash) {
-			return false
-		}
-	}
-
-	return true
 }
