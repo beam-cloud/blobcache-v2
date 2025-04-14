@@ -6,6 +6,7 @@ import (
 	"net"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
+	mapset "github.com/deckarep/golang-set/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -53,14 +54,53 @@ func NewCoordinatorClient(cfg BlobCacheGlobalConfig, token string) (*Coordinator
 	return &CoordinatorClient{cfg: cfg, host: cfg.CoordinatorHost, client: proto.NewBlobCacheClient(conn)}, nil
 }
 
-func (c *CoordinatorClient) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
-	return nil
+func (c *CoordinatorClient) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
+	hostAddrs := []string{}
+
+	hostSet := mapset.NewSet[string]()
+	for _, addr := range hostAddrs {
+		hostSet.Add(addr)
+	}
+
+	return hostSet, nil
 }
 
-func (c *CoordinatorClient) GetContentFromBlobFs(ctx context.Context, path string) ([]byte, error) {
+func (c *CoordinatorClient) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
 	return nil, nil
 }
 
-func (c *CoordinatorClient) ListDirectory(ctx context.Context, path string) ([]string, error) {
+func (c *CoordinatorClient) SetClientLock(ctx context.Context, hash string, host string) error {
+	_, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, Host: host})
+	return err
+}
+
+func (c *CoordinatorClient) RemoveClientLock(ctx context.Context, hash string, host string) error {
+	_, err := c.client.RemoveClientLock(ctx, &proto.RemoveClientLockRequest{Hash: hash, Host: host})
+	return err
+}
+
+func (c *CoordinatorClient) RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error) {
+	return nil, &ErrEntryNotFound{Hash: hash}
+}
+
+func (c *CoordinatorClient) SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error {
+	// _, err := c.client.SetFsNode(ctx, &proto.SetFsNodeRequest{Id: id, Path: metadata.Path, Hash: metadata.Hash, Size: metadata.Size})
+	return nil
+}
+
+func (c *CoordinatorClient) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
+	response, err := c.client.GetFsNode(ctx, &proto.GetFsNodeRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+
+	return &BlobFsMetadata{
+		Path: response.Path,
+		Hash: response.Hash,
+		Size: response.Size,
+	}, nil
+}
+
+func (c *CoordinatorClient) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
 	return nil, nil
 }

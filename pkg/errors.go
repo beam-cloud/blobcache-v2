@@ -1,6 +1,9 @@
 package blobcache
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrHostNotFound            = errors.New("host not found")
@@ -13,3 +16,19 @@ var (
 	ErrBlobFsMountFailure      = errors.New("failed to mount blobfs")
 	ErrUnableToAcquireLock     = errors.New("unable to acquire lock")
 )
+
+type ErrEntryNotFound struct {
+	Hash string
+}
+
+func (e *ErrEntryNotFound) Error() string {
+	return fmt.Sprintf("entry not found: %s", e.Hash)
+}
+
+type ErrNodeNotFound struct {
+	Id string
+}
+
+func (e *ErrNodeNotFound) Error() string {
+	return fmt.Sprintf("blobfs node not found: %s", e.Id)
+}

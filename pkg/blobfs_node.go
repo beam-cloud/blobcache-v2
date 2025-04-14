@@ -84,7 +84,7 @@ func metaToAttr(metadata *BlobFsMetadata) fuse.Attr {
 }
 
 func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fuse.Attr, error) {
-	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, fsId)
+	metadata, err := n.filesystem.Coordinator.GetFsNode(ctx, fsId)
 	if err != nil {
 		return nil, nil, syscall.ENOENT
 	}
@@ -191,7 +191,7 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
 
-	children, err := n.filesystem.Metadata.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
+	children, err := n.filesystem.Coordinator.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
 	if err != nil {
 		return nil, fs.ENOATTR
 	}

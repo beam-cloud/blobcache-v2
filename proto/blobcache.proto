@@ -5,12 +5,27 @@ option go_package = "github.com/beam-cloud/blobcache/proto";
 package blobcache;
 
 service BlobCache {
+  // Cache RPCs
   rpc GetContent(GetContentRequest) returns (GetContentResponse) {}
   rpc GetContentStream(GetContentRequest) returns (stream GetContentResponse) {}
   rpc StoreContent(stream StoreContentRequest) returns (StoreContentResponse) {}
-  rpc StoreContentFromSource(StoreContentFromSourceRequest) returns (StoreContentFromSourceResponse) {}
-  rpc StoreContentFromSourceWithLock(StoreContentFromSourceRequest) returns (StoreContentFromSourceWithLockResponse) {}
-  rpc GetState(GetStateRequest)  returns (GetStateResponse) {}
+  rpc StoreContentFromSource(StoreContentFromSourceRequest)
+      returns (StoreContentFromSourceResponse) {}
+  rpc StoreContentFromSourceWithLock(StoreContentFromSourceRequest)
+      returns (StoreContentFromSourceWithLockResponse) {}
+  rpc GetState(GetStateRequest) returns (GetStateResponse) {}
+
+  // Coordinator RPCs
+  rpc GetAvailableHosts(GetAvailableHostsRequest)
+      returns (GetAvailableHostsResponse) {}
+  rpc SetClientLock(SetClientLockRequest) returns (SetClientLockResponse) {}
+  rpc RemoveClientLock(RemoveClientLockRequest)
+      returns (RemoveClientLockResponse) {}
+  rpc RetrieveEntry(RetrieveEntryRequest) returns (RetrieveEntryResponse) {}
+  rpc SetFsNode(SetFsNodeRequest) returns (SetFsNodeResponse) {}
+  rpc GetFsNode(GetFsNodeRequest) returns (GetFsNodeResponse) {}
+  rpc GetFsNodeChildren(GetFsNodeChildrenRequest)
+      returns (GetFsNodeChildrenResponse) {}
 }
 
 message GetContentRequest {
@@ -24,9 +39,7 @@ message GetContentResponse {
   bytes content = 2; // Content data
 }
 
-message StoreContentRequest {
-  bytes content = 1;
-}
+message StoreContentRequest { bytes content = 1; }
 
 message StoreContentResponse {
   string hash = 1; // Hash of the stored content
@@ -37,8 +50,7 @@ message StoreContentFromSourceWithLockResponse {
   bool failed_to_acquire_lock = 2;
 }
 
-message GetStateRequest {
-}
+message GetStateRequest {}
 
 message GetStateResponse {
   string version = 1;
@@ -54,4 +66,92 @@ message StoreContentFromSourceRequest {
 message StoreContentFromSourceResponse {
   bool ok = 1;
   string hash = 2;
+}
+
+message GetAvailableHostsRequest { string locality = 1; }
+
+message GetAvailableHostsResponse { repeated BlobCacheHost hosts = 1; }
+
+message BlobCacheHost {
+  string host = 1;
+  string private_ip_addr = 2;
+}
+
+message SetClientLockRequest {
+  string hash = 1;
+  string host = 2;
+}
+
+message SetClientLockResponse {}
+
+message RemoveClientLockRequest {
+  string hash = 1;
+  string host = 2;
+}
+
+message RemoveClientLockResponse {}
+
+message RetrieveEntryRequest { string hash = 1; }
+
+message RetrieveEntryResponse {
+  string hash = 1;
+  string host = 2;
+}
+
+message SetFsNodeRequest {
+  string path = 1;
+  string hash = 2;
+  uint64 size = 3;
+  uint64 blocks = 4;
+  uint64 atime = 5;
+  uint64 mtime = 6;
+  uint64 ctime = 7;
+  uint64 atimensec = 8;
+  uint64 mtimensec = 9;
+  uint64 ctimensec = 10;
+  uint64 mode = 11;
+  uint64 nlink = 12;
+  uint64 rdev = 13;
+  uint64 blksize = 14;
+  uint64 padding = 15;
+  uint64 uid = 16;
+  uint64 gid = 17;
+  uint64 gen = 18;
+}
+
+message SetFsNodeResponse {}
+
+message GetFsNodeRequest { string id = 1; }
+
+message GetFsNodeResponse {
+  string id = 1;
+  string path = 2;
+  string hash = 3;
+  uint64 size = 4;
+  uint64 blocks = 5;
+  uint64 atime = 6;
+  uint64 mtime = 7;
+  uint64 ctime = 8;
+  uint64 atimensec = 9;
+  uint64 mtimensec = 10;
+  uint64 ctimensec = 11;
+  uint64 mode = 12;
+  uint64 nlink = 13;
+  uint64 rdev = 14;
+  uint64 blksize = 15;
+  uint64 padding = 16;
+  uint64 uid = 17;
+  uint64 gid = 18;
+  uint64 gen = 19;
+}
+
+message GetFsNodeChildrenRequest { string id = 1; }
+
+message GetFsNodeChildrenResponse { repeated FsNode children = 1; }
+
+message FsNode {
+  string id = 1;
+  string path = 2;
+  string hash = 3;
+  uint64 size = 4;
 }

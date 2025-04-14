@@ -4,6 +4,7 @@ bin/blobcache
 bin/throughput
 bin/fs
 bin/testclient
+bin/basic
 build.sh
 tmp/
 config.yaml

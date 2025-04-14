@@ -1,7 +1,6 @@
 package blobcache
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -193,22 +192,6 @@ type BlobCacheEntry struct {
 	Size         int64  `redis:"size" json:"size"`
 	SourcePath   string `redis:"source_path" json:"source_path"`
 	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
-}
-
-type ErrEntryNotFound struct {
-	Hash string
-}
-
-func (e *ErrEntryNotFound) Error() string {
-	return fmt.Sprintf("entry not found: %s", e.Hash)
-}
-
-type ErrNodeNotFound struct {
-	Id string
-}
-
-func (e *ErrNodeNotFound) Error() string {
-	return fmt.Sprintf("blobfs node not found: %s", e.Id)
 }
 
 // BlobFS types

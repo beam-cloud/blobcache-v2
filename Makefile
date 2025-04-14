@@ -25,8 +25,9 @@ publish-chart:
 	rm beam-blobcache-v2-chart-$(chartVersion).tgz
 
 testclients:
-	GOOS=linux GOARCH=amd64 go build -o bin/throughput e2e/throughput/main.go
-	GOOS=linux GOARCH=amd64 go build -o bin/fs e2e/fs/main.go
+	GOOS=darwin GOARCH=arm64 go build -o bin/throughput e2e/throughput/main.go
+	GOOS=darwin GOARCH=arm64 go build -o bin/fs e2e/fs/main.go
+	GOOS=darwin GOARCH=arm64 go build -o bin/basic e2e/basic/main.go
 
 setup: build
 	@if [ "$(shell kubectl config current-context)" != "k3d-beta9" ]; then \
