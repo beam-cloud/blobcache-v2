@@ -53,6 +53,7 @@ type BlobCacheClient struct {
 	closestHostWithCapacity *BlobCacheHost
 	localHostCache          map[string]*localClientCache
 	blobfsServer            *fuse.Server
+	hasher                  *RendezvousHasher
 }
 
 type localClientCache struct {
@@ -82,9 +83,10 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
+	bc.hasher = NewRendezvousHasher(bc.hostMap)
 
 	// Start searching for nearby blobcache hosts
-	go bc.discoveryClient.StartInBackground(bc.ctx)
+	go bc.discoveryClient.Start(bc.ctx)
 
 	// Monitor and cleanup local client cache
 	go bc.manageLocalClientCache(localClientCacheCleanupInterval, localClientCacheTTL)
@@ -125,7 +127,7 @@ func (c *BlobCacheClient) Cleanup() error {
 }
 
 func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
-	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "mylocality")
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "myregion")
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,9 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+	c.hasher.Add(host.Host)
 
 	go c.monitorHost(host)
 	return nil
@@ -240,10 +244,6 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
-
-			// If we had an issue getting the content, remove this location from metadata
-			// c.metadata.RemoveEntryLocation(ctx, hash, host)
-
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
 			c.mu.Unlock()
@@ -277,7 +277,6 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 
 			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 			if err != nil {
-				// c.metadata.RemoveEntryLocation(ctx, hash, host)
 				c.mu.Lock()
 				delete(c.localHostCache, hash)
 				c.mu.Unlock()
@@ -291,7 +290,6 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 				}
 
 				if err != nil || !resp.Ok {
-					// c.metadata.RemoveEntryLocation(ctx, hash, host)
 					c.mu.Lock()
 					delete(c.localHostCache, hash)
 					c.mu.Unlock()
@@ -338,12 +336,6 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 }
 
 func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
-	// hostAddrs, err := c.coordinator.GetEntryLocations(ctx, hash)
-	// if err != nil {
-	// 	return false
-	// }
-	// intersection := hostAddrs.Intersect(c.hostMap.Members())
-	// return intersection.Cardinality() > 0
 	return false
 }
 

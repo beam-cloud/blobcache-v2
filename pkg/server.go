@@ -38,6 +38,7 @@ type CacheService struct {
 	proto.UnimplementedBlobCacheServer
 	hostname      string
 	privateIpAddr string
+	publicIpAddr  string
 	cas           *ContentAddressableStorage
 	serverConfig  BlobCacheServerConfig
 	globalConfig  BlobCacheGlobalConfig
@@ -65,10 +66,17 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
+	publicIpAddr, _ := GetPublicIpAddr()
+	if publicIpAddr != "" {
+		Logger.Infof("Discovered public ip address: %s", publicIpAddr)
+	}
+
 	privateIpAddr, _ := GetPrivateIpAddr()
 	if privateIpAddr != "" {
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
+
+	currentHost.Addr = fmt.Sprintf("%s:%d", publicIpAddr, cfg.Global.ServerPort)
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
@@ -96,6 +104,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		globalConfig:  cfg.Global,
 		coordinator:   coordinator,
 		privateIpAddr: privateIpAddr,
+		publicIpAddr:  publicIpAddr,
 	}
 
 	go cs.HostKeepAlive()
@@ -351,7 +360,6 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 	}
 
 	Logger.Infof("GetAvailableHosts[OK] - [%s]", protoHosts)
-
 	return &proto.GetAvailableHostsResponse{Hosts: protoHosts}, nil
 }
 

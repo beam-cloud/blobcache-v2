@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/djherbis/atime"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
@@ -51,55 +50,6 @@ func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
 	}, nil
 }
 
-func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry, host *BlobCacheHost) error {
-	entryKey := MetadataKeys.MetadataEntry(entry.Hash)
-
-	exists, err := m.rdb.Exists(ctx, entryKey).Result()
-	if err != nil {
-		return err
-	}
-
-	// Entry not found, add it
-	if exists == 0 {
-		err := m.rdb.HSet(ctx, entryKey, ToSlice(entry)).Err()
-		if err != nil {
-			return fmt.Errorf("failed to set entry <%v>: %w", entryKey, err)
-		}
-	}
-
-	// Add ref to entry
-	return m.addEntryLocation(ctx, entry.Hash, host)
-}
-
-func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error) {
-	entryKey := MetadataKeys.MetadataEntry(hash)
-
-	res, err := m.rdb.HGetAll(context.TODO(), entryKey).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	if len(res) == 0 {
-		return nil, &ErrEntryNotFound{Hash: hash}
-	}
-
-	entry := &BlobCacheEntry{}
-	if err = ToStruct(res, entry); err != nil {
-		return nil, fmt.Errorf("failed to deserialize entry <%v>: %v", entryKey, err)
-	}
-
-	return entry, nil
-}
-
-func (m *BlobCacheMetadata) RemoveEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
-	err := m.rdb.SRem(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
-	if err != nil {
-		return err
-	}
-
-	return m.rdb.Decr(ctx, MetadataKeys.MetadataRef(hash)).Err()
-}
-
 func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash string) error {
 	err := m.lock.Acquire(ctx, MetadataKeys.MetadataClientLock(clientId, hash), RedisLockOptions{TtlS: 300, Retries: 0})
 	if err != nil {
@@ -111,29 +61,6 @@ func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash st
 
 func (m *BlobCacheMetadata) RemoveClientLock(ctx context.Context, clientId, hash string) error {
 	return m.lock.Release(MetadataKeys.MetadataClientLock(clientId, hash))
-}
-
-func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataLocation(hash)).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	hostSet := mapset.NewSet[string]()
-	for _, addr := range hostAddrs {
-		hostSet.Add(addr)
-	}
-
-	return hostSet, nil
-}
-
-func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
-	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
-	if err != nil {
-		return err
-	}
-
-	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
 }
 
 func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
@@ -388,10 +315,8 @@ func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, sour
 var (
 	metadataPrefix               string = "blobcache"
 	metadataHostIndex            string = "blobcache:host_index:%s"
-	metadataEntry                string = "blobcache:entry:%s"
 	metadataClientLock           string = "blobcache:client_lock:%s:%s"
 	metadataLocation             string = "blobcache:location:%s"
-	metadataRef                  string = "blobcache:ref:%s"
 	metadataFsNode               string = "blobcache:fs:node:%s"
 	metadataFsNodeChildren       string = "blobcache:fs:node:%s:children"
 	metadataHostKeepAlive        string = "blobcache:host:keepalive:%s"
@@ -401,10 +326,6 @@ var (
 // Metadata keys
 func (k *metadataKeys) MetadataPrefix() string {
 	return metadataPrefix
-}
-
-func (k *metadataKeys) MetadataEntry(hash string) string {
-	return fmt.Sprintf(metadataEntry, hash)
 }
 
 func (k *metadataKeys) MetadataHostIndex(locality string) string {
@@ -417,10 +338,6 @@ func (k *metadataKeys) MetadataHostKeepAlive(locality, addr string) string {
 
 func (k *metadataKeys) MetadataLocation(hash string) string {
 	return fmt.Sprintf(metadataLocation, hash)
-}
-
-func (k *metadataKeys) MetadataRef(hash string) string {
-	return fmt.Sprintf(metadataRef, hash)
 }
 
 func (k *metadataKeys) MetadataFsNode(id string) string {
