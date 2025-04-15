@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"net"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"google.golang.org/grpc"
@@ -27,18 +26,14 @@ func NewCoordinatorClientRemote(cfg BlobCacheGlobalConfig, token string) (Coordi
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
-	var dialFunc func(context.Context, string) (net.Conn, error) = nil
 	addr := cfg.CoordinatorHost
 
-	dialFunc = DialWithTimeout
-
-	maxMessageSize := cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
-		grpc.WithContextDialer(dialFunc),
+		grpc.WithContextDialer(DialWithTimeout),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxMessageSize),
-			grpc.MaxCallSendMsgSize(maxMessageSize),
+			grpc.MaxCallRecvMsgSize(cfg.GRPCMessageSizeBytes),
+			grpc.MaxCallSendMsgSize(cfg.GRPCMessageSizeBytes),
 		),
 	}
 
