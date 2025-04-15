@@ -232,6 +232,33 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 	}
 }
 
+func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
+	hostsToCheck := c.clientConfig.NTopHosts
+
+	for hostIndex := 0; hostIndex < hostsToCheck; hostIndex++ {
+		client, _, err := c.getGRPCClient(&ClientRequest{
+			rt:        ClientRequestTypeRetrieval,
+			hash:      hash,
+			key:       hash,
+			hostIndex: hostIndex,
+		})
+		if err != nil {
+			return false, err
+		}
+
+		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: hash})
+		if err != nil {
+			return false, err
+		}
+
+		if resp.Exists {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()

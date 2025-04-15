@@ -63,6 +63,13 @@ func main() {
 	log.Printf("Stored content with hash: %v", hash)
 	log.Printf("Computed hash: %v", computedHash)
 
+	exists, err := client.IsCachedNearby(hash)
+	if err != nil {
+		log.Fatalf("Unable to check if content is cached nearby: %v", err)
+	}
+
+	log.Printf("Content is cached nearby: %v", exists)
+
 	gotContent, err = client.GetContent(hash, 0, int64(len(content)))
 	if err != nil {
 		log.Fatalf("Unable to get content: %v", err)

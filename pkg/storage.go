@@ -128,6 +128,11 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	return nil
 }
 
+func (cas *ContentAddressableStorage) Exists(hash string) bool {
+	_, exists := cas.cache.GetTTL(hash)
+	return exists
+}
+
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) (int64, error) {
 	remainingLength := length
 	o := offset

@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	BlobCache_GetContent_FullMethodName                     = "/blobcache.BlobCache/GetContent"
+	BlobCache_HasContent_FullMethodName                     = "/blobcache.BlobCache/HasContent"
 	BlobCache_GetContentStream_FullMethodName               = "/blobcache.BlobCache/GetContentStream"
 	BlobCache_StoreContent_FullMethodName                   = "/blobcache.BlobCache/StoreContent"
 	BlobCache_StoreContentFromSource_FullMethodName         = "/blobcache.BlobCache/StoreContentFromSource"
@@ -45,6 +46,7 @@ const (
 type BlobCacheClient interface {
 	// Cache RPCs
 	GetContent(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (*GetContentResponse, error)
+	HasContent(ctx context.Context, in *HasContentRequest, opts ...grpc.CallOption) (*HasContentResponse, error)
 	GetContentStream(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetContentResponse], error)
 	StoreContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[StoreContentRequest, StoreContentResponse], error)
 	StoreContentFromSource(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
@@ -77,6 +79,16 @@ func (c *blobCacheClient) GetContent(ctx context.Context, in *GetContentRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetContentResponse)
 	err := c.cc.Invoke(ctx, BlobCache_GetContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) HasContent(ctx context.Context, in *HasContentRequest, opts ...grpc.CallOption) (*HasContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HasContentResponse)
+	err := c.cc.Invoke(ctx, BlobCache_HasContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -271,6 +283,7 @@ func (c *blobCacheClient) SetHostKeepAlive(ctx context.Context, in *SetHostKeepA
 type BlobCacheServer interface {
 	// Cache RPCs
 	GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error)
+	HasContent(context.Context, *HasContentRequest) (*HasContentResponse, error)
 	GetContentStream(*GetContentRequest, grpc.ServerStreamingServer[GetContentResponse]) error
 	StoreContent(grpc.ClientStreamingServer[StoreContentRequest, StoreContentResponse]) error
 	StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
@@ -301,6 +314,9 @@ type UnimplementedBlobCacheServer struct{}
 
 func (UnimplementedBlobCacheServer) GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetContent not implemented")
+}
+func (UnimplementedBlobCacheServer) HasContent(context.Context, *HasContentRequest) (*HasContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HasContent not implemented")
 }
 func (UnimplementedBlobCacheServer) GetContentStream(*GetContentRequest, grpc.ServerStreamingServer[GetContentResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method GetContentStream not implemented")
@@ -388,6 +404,24 @@ func _BlobCache_GetContent_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BlobCacheServer).GetContent(ctx, req.(*GetContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_HasContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HasContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).HasContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_HasContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).HasContent(ctx, req.(*HasContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -690,6 +724,10 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetContent",
 			Handler:    _BlobCache_GetContent_Handler,
+		},
+		{
+			MethodName: "HasContent",
+			Handler:    _BlobCache_HasContent_Handler,
 		},
 		{
 			MethodName: "StoreContentFromSource",

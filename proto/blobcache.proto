@@ -7,6 +7,7 @@ package blobcache;
 service BlobCache {
   // Cache RPCs
   rpc GetContent(GetContentRequest) returns (GetContentResponse) {}
+  rpc HasContent(HasContentRequest) returns (HasContentResponse) {}
   rpc GetContentStream(GetContentRequest) returns (stream GetContentResponse) {}
   rpc StoreContent(stream StoreContentRequest) returns (StoreContentResponse) {}
   rpc StoreContentFromSource(StoreContentFromSourceRequest)
@@ -46,6 +47,15 @@ message GetContentRequest {
 message GetContentResponse {
   bool ok = 1;
   bytes content = 2; // Content data
+}
+
+message HasContentRequest {
+  string hash = 1; // Hash of the content to check
+}
+
+message HasContentResponse {
+  bool ok = 1;
+  bool exists = 2;
 }
 
 message StoreContentRequest { bytes content = 1; }

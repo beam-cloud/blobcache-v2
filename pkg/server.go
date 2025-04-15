@@ -189,6 +189,11 @@ func (cs *CacheService) GetContent(ctx context.Context, req *proto.GetContentReq
 	return &proto.GetContentResponse{Content: dst[:n], Ok: true}, nil
 }
 
+func (cs *CacheService) HasContent(ctx context.Context, req *proto.HasContentRequest) (*proto.HasContentResponse, error) {
+	exists := cs.cas.Exists(req.Hash)
+	return &proto.HasContentResponse{Exists: exists, Ok: true}, nil
+}
+
 func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream proto.BlobCache_GetContentStreamServer) error {
 	const chunkSize = getContentStreamChunkSize
 	offset := req.Offset
