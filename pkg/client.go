@@ -40,20 +40,19 @@ func GrpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 }
 
 type BlobCacheClient struct {
-	ctx                     context.Context
-	locality                string
-	clientConfig            BlobCacheClientConfig
-	globalConfig            BlobCacheGlobalConfig
-	hostId                  string
-	grpcClients             map[string]proto.BlobCacheClient
-	hostMap                 *HostMap
-	mu                      sync.RWMutex
-	discoveryClient         *DiscoveryClient
-	coordinator             CoordinatorClient
-	closestHostWithCapacity *BlobCacheHost
-	localHostCache          map[string]*localClientCache
-	blobfsServer            *fuse.Server
-	hasher                  *RendezvousHasher
+	ctx             context.Context
+	locality        string
+	clientConfig    BlobCacheClientConfig
+	globalConfig    BlobCacheGlobalConfig
+	hostId          string
+	grpcClients     map[string]proto.BlobCacheClient
+	hostMap         *HostMap
+	mu              sync.RWMutex
+	discoveryClient *DiscoveryClient
+	coordinator     CoordinatorClient
+	localHostCache  map[string]*localClientCache
+	blobfsServer    *fuse.Server
+	hasher          *RendezvousHasher
 }
 
 type localClientCache struct {
@@ -76,16 +75,15 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	}
 
 	bc := &BlobCacheClient{
-		ctx:                     ctx,
-		locality:                locality,
-		clientConfig:            cfg.Client,
-		globalConfig:            cfg.Global,
-		hostId:                  hostId,
-		grpcClients:             make(map[string]proto.BlobCacheClient),
-		localHostCache:          make(map[string]*localClientCache),
-		mu:                      sync.RWMutex{},
-		coordinator:             coordinator,
-		closestHostWithCapacity: nil,
+		ctx:            ctx,
+		locality:       locality,
+		clientConfig:   cfg.Client,
+		globalConfig:   cfg.Global,
+		hostId:         hostId,
+		grpcClients:    make(map[string]proto.BlobCacheClient),
+		localHostCache: make(map[string]*localClientCache),
+		mu:             sync.RWMutex{},
+		coordinator:    coordinator,
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
@@ -220,10 +218,6 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 
 				c.hostMap.Remove(host)
 				c.hasher.Remove(host)
-
-				if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
-					c.closestHostWithCapacity = nil
-				}
 
 				delete(c.grpcClients, host.Addr)
 
@@ -487,8 +481,12 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 		return "", err
 	}
 
-	if !resp.Ok {
+	if resp.FailedToAcquireLock {
 		return "", ErrUnableToAcquireLock
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
 	}
 
 	return resp.Hash, nil

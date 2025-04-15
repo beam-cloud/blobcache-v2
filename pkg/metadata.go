@@ -202,16 +202,16 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 	return nil
 }
 
-func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
+func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
-func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
+func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
-func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Release(MetadataKeys.MetadataStoreFromContentLock(sourcePath))
+func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Release(MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath))
 }
 
 // Metadata key storage format
@@ -223,7 +223,7 @@ var (
 	metadataFsNode               string = "blobcache:fs:node:%s"
 	metadataFsNodeChildren       string = "blobcache:fs:node:%s:children"
 	metadataHostKeepAlive        string = "blobcache:host:keepalive:%s"
-	metadataStoreFromContentLock string = "blobcache:store_from_content_lock:%s"
+	metadataStoreFromContentLock string = "blobcache:store_from_content_lock:%s:%s"
 )
 
 // Metadata keys
@@ -255,9 +255,9 @@ func (k *metadataKeys) MetadataClientLock(hostId, hash string) string {
 	return fmt.Sprintf(metadataClientLock, hostId, hash)
 }
 
-func (k *metadataKeys) MetadataStoreFromContentLock(sourcePath string) string {
+func (k *metadataKeys) MetadataStoreFromContentLock(locality, sourcePath string) string {
 	sourcePath = strings.ReplaceAll(sourcePath, "/", "_")
-	return fmt.Sprintf(metadataStoreFromContentLock, sourcePath)
+	return fmt.Sprintf(metadataStoreFromContentLock, locality, sourcePath)
 }
 
 var MetadataKeys = &metadataKeys{}

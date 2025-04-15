@@ -58,6 +58,7 @@ message StoreContentResponse {
 message StoreContentFromSourceWithLockResponse {
   string hash = 1; // Hash of the stored content
   bool ok = 2;
+  bool failed_to_acquire_lock = 3;
 }
 
 message GetStateRequest {}
@@ -107,15 +108,24 @@ message RemoveClientLockRequest {
 
 message RemoveClientLockResponse { bool ok = 1; }
 
-message SetStoreFromContentLockRequest { string source_path = 1; }
+message SetStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
 
 message SetStoreFromContentLockResponse { bool ok = 1; }
 
-message RefreshStoreFromContentLockRequest { string source_path = 1; }
+message RefreshStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
 
 message RefreshStoreFromContentLockResponse { bool ok = 1; }
 
-message RemoveStoreFromContentLockRequest { string source_path = 1; }
+message RemoveStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
 
 message RemoveStoreFromContentLockResponse { bool ok = 1; }
 

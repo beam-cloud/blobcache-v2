@@ -170,6 +170,7 @@ func (m *BlobFsMetadata) ToProto() *proto.BlobFsMetadata {
 		Pid:       m.PID,
 		Name:      m.Name,
 		Path:      m.Path,
+		Hash:      m.Hash,
 		Size:      m.Size,
 		Blocks:    m.Blocks,
 		Atime:     m.Atime,

@@ -7,7 +7,7 @@ import (
 )
 
 func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAvailableHostsRequest) (*proto.GetAvailableHostsResponse, error) {
-	Logger.Infof("GetAvailableHosts[ACK] - [%s]", req.Locality)
+	Logger.Debugf("GetAvailableHosts[ACK] - [%s]", req.Locality)
 
 	hosts, err := cs.coordinator.GetAvailableHosts(ctx, req.Locality)
 	if err != nil {
@@ -19,12 +19,12 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 		protoHosts = append(protoHosts, &proto.BlobCacheHost{HostId: host.HostId, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr})
 	}
 
-	Logger.Infof("GetAvailableHosts[OK] - [%s]", protoHosts)
+	Logger.Debugf("GetAvailableHosts[OK] - [%s]", protoHosts)
 	return &proto.GetAvailableHostsResponse{Hosts: protoHosts, Ok: true}, nil
 }
 
 func (cs *CacheService) SetClientLock(ctx context.Context, req *proto.SetClientLockRequest) (*proto.SetClientLockResponse, error) {
-	Logger.Infof("SetClientLock[ACK] - [%s]", req.Hash)
+	Logger.Debugf("SetClientLock[ACK] - [%s]", req.Hash)
 
 	err := cs.coordinator.SetClientLock(ctx, req.Hash, req.HostId)
 	if err != nil {
@@ -35,7 +35,7 @@ func (cs *CacheService) SetClientLock(ctx context.Context, req *proto.SetClientL
 }
 
 func (cs *CacheService) RemoveClientLock(ctx context.Context, req *proto.RemoveClientLockRequest) (*proto.RemoveClientLockResponse, error) {
-	Logger.Infof("RemoveClientLock[ACK] - [%s]", req.Hash)
+	Logger.Debugf("RemoveClientLock[ACK] - [%s]", req.Hash)
 
 	err := cs.coordinator.RemoveClientLock(ctx, req.Hash, req.HostId)
 	if err != nil {
@@ -48,7 +48,7 @@ func (cs *CacheService) RemoveClientLock(ctx context.Context, req *proto.RemoveC
 func (cs *CacheService) SetStoreFromContentLock(ctx context.Context, req *proto.SetStoreFromContentLockRequest) (*proto.SetStoreFromContentLockResponse, error) {
 	Logger.Infof("SetStoreFromContentLock[ACK] - [%s]", req.SourcePath)
 
-	err := cs.coordinator.SetStoreFromContentLock(ctx, req.SourcePath)
+	err := cs.coordinator.SetStoreFromContentLock(ctx, req.Locality, req.SourcePath)
 	if err != nil {
 		return &proto.SetStoreFromContentLockResponse{Ok: false}, nil
 	}
@@ -59,7 +59,7 @@ func (cs *CacheService) SetStoreFromContentLock(ctx context.Context, req *proto.
 func (cs *CacheService) RemoveStoreFromContentLock(ctx context.Context, req *proto.RemoveStoreFromContentLockRequest) (*proto.RemoveStoreFromContentLockResponse, error) {
 	Logger.Infof("RemoveStoreFromContentLock[ACK] - [%s]", req.SourcePath)
 
-	err := cs.coordinator.RemoveStoreFromContentLock(ctx, req.SourcePath)
+	err := cs.coordinator.RemoveStoreFromContentLock(ctx, req.Locality, req.SourcePath)
 	if err != nil {
 		return &proto.RemoveStoreFromContentLockResponse{Ok: false}, nil
 	}
@@ -70,7 +70,7 @@ func (cs *CacheService) RemoveStoreFromContentLock(ctx context.Context, req *pro
 func (cs *CacheService) RefreshStoreFromContentLock(ctx context.Context, req *proto.RefreshStoreFromContentLockRequest) (*proto.RefreshStoreFromContentLockResponse, error) {
 	Logger.Infof("RefreshStoreFromContentLock[ACK] - [%s]", req.SourcePath)
 
-	err := cs.coordinator.RefreshStoreFromContentLock(ctx, req.SourcePath)
+	err := cs.coordinator.RefreshStoreFromContentLock(ctx, req.Locality, req.SourcePath)
 	if err != nil {
 		return &proto.RefreshStoreFromContentLockResponse{Ok: false}, nil
 	}
@@ -79,12 +79,13 @@ func (cs *CacheService) RefreshStoreFromContentLock(ctx context.Context, req *pr
 }
 
 func (cs *CacheService) SetFsNode(ctx context.Context, req *proto.SetFsNodeRequest) (*proto.SetFsNodeResponse, error) {
-	Logger.Infof("SetFsNode[ACK] - [%s]", req.Id)
+	Logger.Debugf("SetFsNode[ACK] - [%s]", req.Id)
 
 	metadata := &BlobFsMetadata{
 		ID:        req.Metadata.Id,
 		PID:       req.Metadata.Pid,
 		Name:      req.Metadata.Name,
+		Hash:      req.Metadata.Hash,
 		Path:      req.Metadata.Path,
 		Size:      req.Metadata.Size,
 		Blocks:    req.Metadata.Blocks,
@@ -113,7 +114,7 @@ func (cs *CacheService) SetFsNode(ctx context.Context, req *proto.SetFsNodeReque
 }
 
 func (cs *CacheService) GetFsNode(ctx context.Context, req *proto.GetFsNodeRequest) (*proto.GetFsNodeResponse, error) {
-	Logger.Infof("GetFsNode[ACK] - [%s]", req.Id)
+	Logger.Debugf("GetFsNode[ACK] - [%s]", req.Id)
 
 	metadata, err := cs.coordinator.GetFsNode(ctx, req.Id)
 	if err != nil {
@@ -124,7 +125,7 @@ func (cs *CacheService) GetFsNode(ctx context.Context, req *proto.GetFsNodeReque
 }
 
 func (cs *CacheService) GetFsNodeChildren(ctx context.Context, req *proto.GetFsNodeChildrenRequest) (*proto.GetFsNodeChildrenResponse, error) {
-	Logger.Infof("GetFsNodeChildren[ACK] - [%s]", req.Id)
+	Logger.Debugf("GetFsNodeChildren[ACK] - [%s]", req.Id)
 
 	children, err := cs.coordinator.GetFsNodeChildren(ctx, req.Id)
 	if err != nil {
@@ -140,7 +141,7 @@ func (cs *CacheService) GetFsNodeChildren(ctx context.Context, req *proto.GetFsN
 }
 
 func (cs *CacheService) AddFsNodeChild(ctx context.Context, req *proto.AddFsNodeChildRequest) (*proto.AddFsNodeChildResponse, error) {
-	Logger.Infof("AddFsNodeChild[ACK] - [%s]", req.Id)
+	Logger.Debugf("AddFsNodeChild[ACK] - [%s]", req.Id)
 
 	err := cs.coordinator.AddFsNodeChild(ctx, req.Pid, req.Id)
 	if err != nil {
@@ -151,7 +152,7 @@ func (cs *CacheService) AddFsNodeChild(ctx context.Context, req *proto.AddFsNode
 }
 
 func (cs *CacheService) AddHostToIndex(ctx context.Context, req *proto.AddHostToIndexRequest) (*proto.AddHostToIndexResponse, error) {
-	Logger.Infof("AddHostToIndex[ACK] - [%s]", req.Locality)
+	Logger.Debugf("AddHostToIndex[ACK] - [%s]", req.Locality)
 
 	host := &BlobCacheHost{
 		HostId:      req.Host.HostId,
@@ -168,7 +169,7 @@ func (cs *CacheService) AddHostToIndex(ctx context.Context, req *proto.AddHostTo
 }
 
 func (cs *CacheService) SetHostKeepAlive(ctx context.Context, req *proto.SetHostKeepAliveRequest) (*proto.SetHostKeepAliveResponse, error) {
-	Logger.Infof("SetHostKeepAlive[ACK] - [%s]", req.Locality)
+	Logger.Debugf("SetHostKeepAlive[ACK] - [%s]", req.Locality)
 
 	host := &BlobCacheHost{
 		HostId:      req.Host.HostId,

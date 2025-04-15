@@ -446,8 +446,8 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
-	if err := cs.coordinator.SetStoreFromContentLock(ctx, sourcePath); err != nil {
-		return &proto.StoreContentFromSourceWithLockResponse{Ok: false}, nil
+	if err := cs.coordinator.SetStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
+		return &proto.StoreContentFromSourceWithLockResponse{Ok: false, FailedToAcquireLock: true}, nil
 	}
 
 	storeContext, cancel := context.WithCancel(ctx)
@@ -462,7 +462,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 				return
 			case <-ticker.C:
 				Logger.Infof("StoreContentFromSourceWithLock[REFRESH] - [%s]", sourcePath)
-				cs.coordinator.RefreshStoreFromContentLock(ctx, sourcePath)
+				cs.coordinator.RefreshStoreFromContentLock(ctx, cs.locality, sourcePath)
 			}
 		}
 	}()
@@ -472,7 +472,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false}, nil
 	}
 
-	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
+	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
 		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
 	}
 

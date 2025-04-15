@@ -172,6 +172,23 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
 	if err != nil {
+		if err == ErrContentNotFound {
+
+			sourcePath := n.bfsNode.Path
+
+			_, err := n.filesystem.Client.StoreContentFromSourceWithLock(sourcePath, 0)
+			if err != nil && err == ErrUnableToAcquireLock {
+				return nil, syscall.EAGAIN
+			} else if err != nil {
+				return nil, syscall.EIO
+			}
+
+			buffer, err = n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+			if err != nil {
+				return nil, syscall.EIO
+			}
+		}
+
 		return nil, syscall.EIO
 	}
 

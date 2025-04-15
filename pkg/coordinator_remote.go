@@ -80,8 +80,8 @@ func (c *CoordinatorClientRemote) SetHostKeepAlive(ctx context.Context, locality
 	return nil
 }
 
-func (c *CoordinatorClientRemote) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	r, err := c.client.SetStoreFromContentLock(ctx, &proto.SetStoreFromContentLockRequest{SourcePath: sourcePath})
+func (c *CoordinatorClientRemote) SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	r, err := c.client.SetStoreFromContentLock(ctx, &proto.SetStoreFromContentLockRequest{Locality: locality, SourcePath: sourcePath})
 	if err != nil {
 		return err
 	}
@@ -93,8 +93,8 @@ func (c *CoordinatorClientRemote) SetStoreFromContentLock(ctx context.Context, s
 	return nil
 }
 
-func (c *CoordinatorClientRemote) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	r, err := c.client.RemoveStoreFromContentLock(ctx, &proto.RemoveStoreFromContentLockRequest{SourcePath: sourcePath})
+func (c *CoordinatorClientRemote) RemoveStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	r, err := c.client.RemoveStoreFromContentLock(ctx, &proto.RemoveStoreFromContentLockRequest{Locality: locality, SourcePath: sourcePath})
 	if err != nil {
 		return err
 	}
@@ -106,8 +106,8 @@ func (c *CoordinatorClientRemote) RemoveStoreFromContentLock(ctx context.Context
 	return nil
 }
 
-func (c *CoordinatorClientRemote) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	r, err := c.client.RefreshStoreFromContentLock(ctx, &proto.RefreshStoreFromContentLockRequest{SourcePath: sourcePath})
+func (c *CoordinatorClientRemote) RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	r, err := c.client.RefreshStoreFromContentLock(ctx, &proto.RefreshStoreFromContentLockRequest{Locality: locality, SourcePath: sourcePath})
 	if err != nil {
 		return err
 	}
