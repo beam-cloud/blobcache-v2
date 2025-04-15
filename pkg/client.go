@@ -11,6 +11,7 @@ import (
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
+	rendezvous "github.com/beam-cloud/rendezvous"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
@@ -39,6 +40,12 @@ func GrpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	}
 }
 
+type RendezvousHasher interface {
+	Add(hosts ...*BlobCacheHost)
+	Remove(host *BlobCacheHost)
+	GetN(n int, key string) []*BlobCacheHost
+}
+
 type BlobCacheClient struct {
 	ctx             context.Context
 	locality        string
@@ -52,7 +59,7 @@ type BlobCacheClient struct {
 	coordinator     CoordinatorClient
 	localHostCache  map[string]*localClientCache
 	blobfsServer    *fuse.Server
-	hasher          *RendezvousHasher
+	hasher          RendezvousHasher
 }
 
 type localClientCache struct {
@@ -90,7 +97,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator, locality)
-	bc.hasher = NewRendezvousHasher()
+	bc.hasher = rendezvous.New[*BlobCacheHost]()
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.Start(bc.ctx)

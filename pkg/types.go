@@ -226,6 +226,11 @@ type BlobCacheHost struct {
 	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`
 }
 
+// Bytes is needed for the rendezvous hasher
+func (h *BlobCacheHost) Bytes() []byte {
+	return []byte(h.HostId)
+}
+
 func (h *BlobCacheHost) ToProto() *proto.BlobCacheHost {
 	return &proto.BlobCacheHost{
 		HostId:           h.HostId,

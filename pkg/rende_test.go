@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	rendezvous "github.com/beam-cloud/rendezvous"
 )
 
 var sampleKeys = []string{
@@ -28,10 +30,10 @@ func TestHashGet(t *testing.T) {
 	hostMap.Set(&BlobCacheHost{HostId: "d"})
 	hostMap.Set(&BlobCacheHost{HostId: "e"})
 
-	hash := NewRendezvousHasher()
+	hash := rendezvous.New[*BlobCacheHost]()
 	hash.Add(hostMap.GetAll()...)
 
-	gotHost := hash.Get("foo")
+	gotHost, _ := hash.Get("foo")
 	if gotHost != nil && gotHost.HostId != "e" {
 		t.Errorf("got: %#v, expected: %#v", gotHost, &BlobCacheHost{HostId: "e"})
 	}
@@ -45,7 +47,7 @@ func TestHashGet(t *testing.T) {
 	}
 
 	for _, testcase := range testcases {
-		gotHost := hash.Get(testcase.key)
+		gotHost, _ := hash.Get(testcase.key)
 		if gotHost.HostId != testcase.expectedHost.HostId {
 			t.Errorf("got: %#v, expected: %#v", gotHost, testcase.expectedHost)
 		}
@@ -61,7 +63,7 @@ type getNTestcase struct {
 func Test_Hash_GetN(t *testing.T) {
 	hostMap := NewHostMap(BlobCacheGlobalConfig{}, nil)
 
-	hash := NewRendezvousHasher()
+	hash := rendezvous.New[*BlobCacheHost]()
 
 	hostMap.Set(&BlobCacheHost{HostId: "a"})
 	hostMap.Set(&BlobCacheHost{HostId: "b"})
@@ -97,13 +99,13 @@ func TestHashRemove(t *testing.T) {
 	hostMap.Set(&BlobCacheHost{HostId: "d"})
 	hostMap.Set(&BlobCacheHost{HostId: "e"})
 
-	hash := NewRendezvousHasher()
+	hash := rendezvous.New[*BlobCacheHost]()
 	hash.Add(hostMap.GetAll()...)
 
 	var keyForB string
 	for i := 0; i < 10000; i++ {
 		randomKey := fmt.Sprintf("key-%d", i)
-		if hash.Get(randomKey).HostId == "b" {
+		if gotHost, _ := hash.Get(randomKey); gotHost.HostId == "b" {
 			keyForB = randomKey
 			break
 		}
@@ -116,7 +118,7 @@ func TestHashRemove(t *testing.T) {
 	hash.Remove(hostMap.Get("b"))
 
 	// Check if the key now maps to a different node
-	newNode := hash.Get(keyForB)
+	newNode, _ := hash.Get(keyForB)
 	if newNode.HostId == "b" {
 		t.Errorf("Key %s still maps to removed node 'b'", keyForB)
 	}
