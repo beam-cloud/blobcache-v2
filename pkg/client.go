@@ -3,14 +3,12 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	rendezvous "github.com/beam-cloud/rendezvous"
-	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -42,7 +40,6 @@ type BlobCacheClient struct {
 	locality              string
 	clientConfig          BlobCacheClientConfig
 	globalConfig          BlobCacheGlobalConfig
-	hostId                string
 	grpcClients           map[string]proto.BlobCacheClient
 	hostMap               *HostMap
 	mu                    sync.RWMutex
@@ -63,8 +60,6 @@ type localClientCache struct {
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
 	InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
 
-	hostId := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
-
 	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
@@ -77,7 +72,6 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		locality:              locality,
 		clientConfig:          cfg.Client,
 		globalConfig:          cfg.Global,
-		hostId:                hostId,
 		grpcClients:           make(map[string]proto.BlobCacheClient),
 		localHostCache:        make(map[string]*localClientCache),
 		mu:                    sync.RWMutex{},
