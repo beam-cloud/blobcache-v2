@@ -369,7 +369,7 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
 	if err := cs.coordinator.SetStoreFromContentLock(ctx, sourcePath); err != nil {
-		return &proto.StoreContentFromSourceWithLockResponse{FailedToAcquireLock: true}, nil
+		return &proto.StoreContentFromSourceWithLockResponse{Ok: false}, nil
 	}
 
 	storeContext, cancel := context.WithCancel(ctx)

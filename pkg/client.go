@@ -244,6 +244,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
+
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
 			c.mu.Unlock()
@@ -323,6 +324,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 					}
 				}
 				c.mu.RUnlock()
+
 				c.mu.Lock()
 				for _, hash := range stale {
 					delete(c.localHostCache, hash)
@@ -465,7 +467,7 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 		return "", err
 	}
 
-	if resp.FailedToAcquireLock {
+	if !resp.Ok {
 		return "", ErrUnableToAcquireLock
 	}
 
