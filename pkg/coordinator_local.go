@@ -16,6 +16,7 @@ type CoordinatorClient interface {
 	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
 	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
 	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
+	AddFsNodeChild(ctx context.Context, pid, id string) error
 }
 
 type CoordinatorClientLocal struct {
@@ -74,6 +75,10 @@ func (c *CoordinatorClientLocal) SetFsNode(ctx context.Context, id string, metad
 
 func (c *CoordinatorClientLocal) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	return c.metadata.GetFsNode(ctx, id)
+}
+
+func (c *CoordinatorClientLocal) AddFsNodeChild(ctx context.Context, pid, id string) error {
+	return c.metadata.AddFsNodeChild(ctx, pid, id)
 }
 
 func (c *CoordinatorClientLocal) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {

@@ -31,6 +31,7 @@ service BlobCache {
   rpc GetFsNode(GetFsNodeRequest) returns (GetFsNodeResponse) {}
   rpc GetFsNodeChildren(GetFsNodeChildrenRequest)
       returns (GetFsNodeChildrenResponse) {}
+  rpc AddFsNodeChild(AddFsNodeChildRequest) returns (AddFsNodeChildResponse) {}
   rpc AddHostToIndex(AddHostToIndexRequest) returns (AddHostToIndexResponse) {}
   rpc SetHostKeepAlive(SetHostKeepAliveRequest)
       returns (SetHostKeepAliveResponse) {}
@@ -138,6 +139,13 @@ message GetFsNodeChildrenResponse {
   bool ok = 1;
   repeated BlobFsMetadata children = 2;
 }
+
+message AddFsNodeChildRequest {
+  string pid = 1;
+  string id = 2;
+}
+
+message AddFsNodeChildResponse { bool ok = 1; }
 
 message BlobFsMetadata {
   string pid = 1;

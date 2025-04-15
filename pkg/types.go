@@ -161,6 +161,31 @@ type BlobFsMetadata struct {
 	Gen       uint64 `redis:"gen" json:"gen"`
 }
 
+func (m *BlobFsMetadata) ToProto() *proto.BlobFsMetadata {
+	return &proto.BlobFsMetadata{
+		Id:        m.ID,
+		Pid:       m.PID,
+		Name:      m.Name,
+		Path:      m.Path,
+		Size:      m.Size,
+		Blocks:    m.Blocks,
+		Atime:     m.Atime,
+		Mtime:     m.Mtime,
+		Ctime:     m.Ctime,
+		Atimensec: m.Atimensec,
+		Mtimensec: m.Mtimensec,
+		Ctimensec: m.Ctimensec,
+		Mode:      m.Mode,
+		Nlink:     m.Nlink,
+		Rdev:      m.Rdev,
+		Blksize:   m.Blksize,
+		Padding:   m.Padding,
+		Uid:       m.Uid,
+		Gid:       m.Gid,
+		Gen:       m.Gen,
+	}
+}
+
 type SourceConfig struct {
 	Mode           string           `key:"mode" json:"mode"`
 	FilesystemName string           `key:"fsName" json:"filesystem_name"`

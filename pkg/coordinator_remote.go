@@ -237,6 +237,19 @@ func (c *CoordinatorClientRemote) GetFsNode(ctx context.Context, id string) (*Bl
 	}, nil
 }
 
+func (c *CoordinatorClientRemote) AddFsNodeChild(ctx context.Context, pid, id string) error {
+	r, err := c.client.AddFsNodeChild(ctx, &proto.AddFsNodeChildRequest{Pid: pid, Id: id})
+	if err != nil {
+		return err
+	}
+
+	if !r.Ok {
+		return errors.New("failed to add fs node child")
+	}
+
+	return nil
+}
+
 func (c *CoordinatorClientRemote) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
 	response, err := c.client.GetFsNodeChildren(ctx, &proto.GetFsNodeChildrenRequest{Id: id})
 	if err != nil {

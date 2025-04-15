@@ -5,13 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/djherbis/atime"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -61,99 +57,6 @@ func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash st
 
 func (m *BlobCacheMetadata) RemoveClientLock(ctx context.Context, clientId, hash string) error {
 	return m.lock.Release(MetadataKeys.MetadataClientLock(clientId, hash))
-}
-
-func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
-	path = filepath.Join("/", filepath.Clean(path))
-	parts := strings.Split(path, string(filepath.Separator))
-
-	rootParentId := GenerateFsID("/")
-
-	// Iterate over the components and construct the path hierarchy
-	currentPath := "/"
-	previousParentId := rootParentId // start with the root ID
-	for i, part := range parts {
-		if i == 0 && part == "" {
-			continue // Skip the empty part for root
-		}
-
-		if currentPath == "/" {
-			currentPath = filepath.Join("/", part)
-		} else {
-			currentPath = filepath.Join(currentPath, part)
-		}
-
-		currentNodeId := GenerateFsID(currentPath)
-		inode, err := SHA1StringToUint64(currentNodeId)
-		if err != nil {
-			return err
-		}
-
-		// Initialize default metadata
-		now := time.Now()
-		nowSec := uint64(now.Unix())
-		nowNsec := uint32(now.Nanosecond())
-		metadata := &BlobFsMetadata{
-			PID:       previousParentId,
-			ID:        currentNodeId,
-			Name:      part,
-			Path:      currentPath,
-			Ino:       inode,
-			Mode:      fuse.S_IFDIR | 0755,
-			Atime:     nowSec,
-			Mtime:     nowSec,
-			Ctime:     nowSec,
-			Atimensec: nowNsec,
-			Mtimensec: nowNsec,
-			Ctimensec: nowNsec,
-		}
-
-		// If currentPath matches the input path, use the actual file info
-		if currentPath == path {
-			fileInfo, err := os.Stat(currentPath)
-			if err != nil {
-				return err
-			}
-
-			// Update metadata fields with actual file info values
-			modTime := fileInfo.ModTime()
-			accessTime := atime.Get(fileInfo)
-			metadata.Mode = uint32(fileInfo.Mode())
-			metadata.Atime = uint64(accessTime.Unix())
-			metadata.Atimensec = uint32(accessTime.Nanosecond())
-			metadata.Mtime = uint64(modTime.Unix())
-			metadata.Mtimensec = uint32(modTime.Nanosecond())
-
-			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
-			metadata.Ctime = uint64(modTime.Unix())
-			metadata.Ctimensec = uint32(modTime.Nanosecond())
-
-			metadata.Size = uint64(fileInfo.Size())
-			if fileInfo.IsDir() {
-				metadata.Hash = GenerateFsID(currentPath)
-				metadata.Size = 0
-			} else {
-				metadata.Hash = hash
-				metadata.Size = size
-			}
-		}
-
-		// Set metadata
-		err = m.SetFsNode(ctx, currentNodeId, metadata)
-		if err != nil {
-			return err
-		}
-
-		// Add the current node as a child of the previous node
-		err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
-		if err != nil {
-			return err
-		}
-
-		previousParentId = currentNodeId
-	}
-
-	return nil
 }
 
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
