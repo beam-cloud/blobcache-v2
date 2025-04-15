@@ -52,7 +52,7 @@ type BlobCacheServerMode string
 
 const (
 	BlobCacheServerModeCoordinator BlobCacheServerMode = "coordinator"
-	BlobCacheServerModeCache       BlobCacheServerMode = "cache"
+	BlobCacheServerModeSlave       BlobCacheServerMode = "slave"
 )
 
 type BlobCacheServerConfig struct {

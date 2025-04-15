@@ -1,5 +1,5 @@
 server:
-  mode: cache
+  mode: slave
   token:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95

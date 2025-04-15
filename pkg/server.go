@@ -63,10 +63,11 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 	default:
 		coordinator, err = NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	}
-
 	if err != nil {
 		return nil, err
 	}
+
+	Logger.Infof("Server started in %s mode", cfg.Server.Mode)
 
 	publicIpAddr, _ := GetPublicIpAddr()
 	if publicIpAddr != "" {
