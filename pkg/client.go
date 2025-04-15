@@ -232,6 +232,22 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 	}
 }
 
+func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+	if err != nil {
+		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
+		return false
+	}
+
+	exists, err := c.IsCachedNearby(metadata.Hash)
+	if err != nil {
+		Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+		return false
+	}
+
+	return exists
+}
+
 func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
 	hostsToCheck := c.clientConfig.NTopHosts
 
