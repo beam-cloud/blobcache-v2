@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"sync"
 	"time"
@@ -32,13 +31,6 @@ const (
 	// weird stuff with the other read_ahead_kb value internally
 	readAheadKB = 32768
 )
-
-func GrpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
-		return invoker(newCtx, method, req, reply, cc, opts...)
-	}
-}
 
 type RendezvousHasher interface {
 	Add(hosts ...*BlobCacheHost)
@@ -93,11 +85,11 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		localHostCache: make(map[string]*localClientCache),
 		mu:             sync.RWMutex{},
 		coordinator:    coordinator,
+		hasher:         rendezvous.New[*BlobCacheHost](),
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
 	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator, locality)
-	bc.hasher = rendezvous.New[*BlobCacheHost]()
 
 	// Start searching for nearby blobcache hosts
 	go bc.discoveryClient.Start(bc.ctx)
@@ -158,26 +150,23 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
-	var dialFunc func(context.Context, string) (net.Conn, error) = nil
 	addr := host.Addr
 
-	dialFunc = DialWithTimeout
 	if host.PrivateAddr != "" {
 		addr = host.PrivateAddr
 	}
 
-	maxMessageSize := c.globalConfig.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
-		grpc.WithContextDialer(dialFunc),
+		grpc.WithContextDialer(DialWithTimeout),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxMessageSize),
-			grpc.MaxCallSendMsgSize(maxMessageSize),
+			grpc.MaxCallRecvMsgSize(c.globalConfig.GRPCMessageSizeBytes),
+			grpc.MaxCallSendMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 		),
 	}
 
 	if c.clientConfig.Token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(GrpcAuthInterceptor(c.clientConfig.Token)))
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(grpcAuthInterceptor(c.clientConfig.Token)))
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)
@@ -593,4 +582,11 @@ func (c *BlobCacheClient) GetState() error {
 	}
 
 	return nil
+}
+
+func grpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+		return invoker(newCtx, method, req, reply, cc, opts...)
+	}
 }

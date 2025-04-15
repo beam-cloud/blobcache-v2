@@ -43,7 +43,7 @@ func NewCoordinatorClientRemote(cfg BlobCacheGlobalConfig, token string) (Coordi
 	}
 
 	if token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(GrpcAuthInterceptor(token)))
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(grpcAuthInterceptor(token)))
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)

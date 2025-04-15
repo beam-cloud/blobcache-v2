@@ -1,21 +1,13 @@
 dev:
   blobcache:
-    # image: registry.localhost:5000/blobcache:latest
-    command:
-    - /workspace/bin/hotreload.sh
+    image: registry.localhost:5000/blobcache:latest
+    command: ["/workspace/bin/hotreload.sh"]
     sync:
-      folders:
-        - ../:/workspace
-      verbose: true
-      compression: true
-      rescanInterval: 100
+      - ../:/workspace
     environment:
-      # PATH: /usr/local/go/bin:/workspace/bin
+      PATH: ${PATH}:/usr/local/go/bin:/workspace/bin
       BUILD_COMMAND: "go build -o /workspace/bin/blobcache /workspace/cmd/main.go"
       BUILD_BINARY_PATH: "/workspace/bin/blobcache"
-      CONFIG_PATH: /workspace/config2.yaml
+      CONFIG_PATH: /workspace/config.yaml
     forward:
       - 6666:6666
-    persistentVolume:
-      enabled: false
-      # size: 10Gi
