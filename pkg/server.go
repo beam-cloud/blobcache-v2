@@ -410,14 +410,14 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
 		Logger.Infof("StoreFromContent[ERR] - source not found: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	// Open the file
 	file, err := os.Open(localPath)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error reading source: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 	defer file.Close()
 
@@ -432,7 +432,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	hash, err := cs.store(ctx, &buffer, localPath, req.SourceOffset)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error storing data in cache: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, err
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	buffer.Reset()
@@ -469,12 +469,12 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 
 	storeContentFromSourceResp, err := cs.StoreContentFromSource(storeContext, req)
 	if err != nil {
-		return nil, err
+		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false}, nil
 	}
 
 	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
 		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
 	}
 
-	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash}, nil
+	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash, Ok: true}, nil
 }

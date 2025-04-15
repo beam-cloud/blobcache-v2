@@ -12,6 +12,9 @@ server:
     redisTLSEnabled: false
 client:
   token:
+  nTopHosts: 3
+  minRetryLengthBytes: 10000000 # 10MB
+  maxGetContentAttempts: 3
   blobfs:
     directIO: false
     mountPoint: /tmp/test

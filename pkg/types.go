@@ -57,8 +57,11 @@ type BlobCacheServerConfig struct {
 }
 
 type BlobCacheClientConfig struct {
-	Token  string       `key:"token" json:"token"`
-	BlobFs BlobFsConfig `key:"blobfs" json:"blobfs"`
+	Token                 string       `key:"token" json:"token"`
+	MinRetryLengthBytes   int64        `key:"minRetryLengthBytes" json:"min_retry_length_bytes"`
+	MaxGetContentAttempts int          `key:"maxGetContentAttempts" json:"max_get_content_attempts"`
+	NTopHosts             int          `key:"nTopHosts" json:"n_top_hosts"`
+	BlobFs                BlobFsConfig `key:"blobfs" json:"blobfs"`
 }
 
 type BlobCacheMetadataMode string
@@ -232,9 +235,10 @@ func (h *BlobCacheHost) ToProto() *proto.BlobCacheHost {
 }
 
 type ClientRequest struct {
-	rt   ClientRequestType
-	hash string
-	key  string // This key is used for rendezvous hashing / deterministic routing (it's usually the same as the hash)
+	rt        ClientRequestType
+	hash      string
+	key       string // This key is used for rendezvous hashing / deterministic routing (it's usually the same as the hash)
+	hostIndex int
 }
 
 type ClientRequestType int
