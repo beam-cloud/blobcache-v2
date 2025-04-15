@@ -348,8 +348,8 @@ func (k *metadataKeys) MetadataFsNodeChildren(id string) string {
 	return fmt.Sprintf(metadataFsNodeChildren, id)
 }
 
-func (k *metadataKeys) MetadataClientLock(hostname, hash string) string {
-	return fmt.Sprintf(metadataClientLock, hostname, hash)
+func (k *metadataKeys) MetadataClientLock(hostId, hash string) string {
+	return fmt.Sprintf(metadataClientLock, hostId, hash)
 }
 
 func (k *metadataKeys) MetadataStoreFromContentLock(sourcePath string) string {

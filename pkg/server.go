@@ -157,7 +157,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostId, addr, cs.serverConfig)
+	Logger.Infof("Running %s@%s, cfg: %+v", cs.hostId, addr, cs.serverConfig)
 
 	go s.Serve(localListener)
 
