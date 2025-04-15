@@ -3,6 +3,7 @@ module github.com/beam-cloud/blobcache-v2
 go 1.22.10
 
 require (
+	github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8
 	github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2
 	github.com/bsm/redislock v0.9.4
 	github.com/deckarep/golang-set/v2 v2.6.0
