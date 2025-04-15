@@ -39,19 +39,21 @@ type RendezvousHasher interface {
 }
 
 type BlobCacheClient struct {
-	ctx             context.Context
-	locality        string
-	clientConfig    BlobCacheClientConfig
-	globalConfig    BlobCacheGlobalConfig
-	hostId          string
-	grpcClients     map[string]proto.BlobCacheClient
-	hostMap         *HostMap
-	mu              sync.RWMutex
-	discoveryClient *DiscoveryClient
-	coordinator     CoordinatorClient
-	localHostCache  map[string]*localClientCache
-	blobfsServer    *fuse.Server
-	hasher          RendezvousHasher
+	ctx                   context.Context
+	locality              string
+	clientConfig          BlobCacheClientConfig
+	globalConfig          BlobCacheGlobalConfig
+	hostId                string
+	grpcClients           map[string]proto.BlobCacheClient
+	hostMap               *HostMap
+	mu                    sync.RWMutex
+	discoveryClient       *DiscoveryClient
+	coordinator           CoordinatorClient
+	localHostCache        map[string]*localClientCache
+	blobfsServer          *fuse.Server
+	hasher                RendezvousHasher
+	minRetryLengthBytes   int64
+	maxGetContentAttempts int64
 }
 
 type localClientCache struct {
@@ -76,16 +78,18 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	}
 
 	bc := &BlobCacheClient{
-		ctx:            ctx,
-		locality:       locality,
-		clientConfig:   cfg.Client,
-		globalConfig:   cfg.Global,
-		hostId:         hostId,
-		grpcClients:    make(map[string]proto.BlobCacheClient),
-		localHostCache: make(map[string]*localClientCache),
-		mu:             sync.RWMutex{},
-		coordinator:    coordinator,
-		hasher:         rendezvous.New[*BlobCacheHost](),
+		ctx:                   ctx,
+		locality:              locality,
+		clientConfig:          cfg.Client,
+		globalConfig:          cfg.Global,
+		hostId:                hostId,
+		grpcClients:           make(map[string]proto.BlobCacheClient),
+		localHostCache:        make(map[string]*localClientCache),
+		mu:                    sync.RWMutex{},
+		coordinator:           coordinator,
+		hasher:                rendezvous.New[*BlobCacheHost](),
+		minRetryLengthBytes:   cfg.Client.MinRetryLengthBytes,
+		maxGetContentAttempts: max(int64(cfg.Client.MaxGetContentAttempts), 1),
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
@@ -276,8 +280,8 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	defer cancel()
 
 	maxAttempts := 1
-	if length > c.clientConfig.MinRetryLengthBytes {
-		maxAttempts = c.clientConfig.MaxGetContentAttempts
+	if length > c.minRetryLengthBytes {
+		maxAttempts = int(c.maxGetContentAttempts)
 	}
 
 	for attempt := 0; attempt < maxAttempts; attempt += 1 {
@@ -318,8 +322,8 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 		defer cancel()
 
 		maxAttempts := 1
-		if length > c.clientConfig.MinRetryLengthBytes {
-			maxAttempts = c.clientConfig.MaxGetContentAttempts
+		if length > c.minRetryLengthBytes {
+			maxAttempts = int(c.maxGetContentAttempts)
 		}
 
 		for attempt := 0; attempt < maxAttempts; attempt++ {
