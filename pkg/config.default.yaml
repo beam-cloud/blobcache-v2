@@ -18,6 +18,7 @@ client:
     maxBackgroundTasks: 512
     maxReadAheadKB: 128
 global:
+  defaultLocality: us-east-1
   coordinatorHost:
   serverPort: 2049
   discoveryIntervalS: 5

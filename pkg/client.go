@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ func GrpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 
 type BlobCacheClient struct {
 	ctx                     context.Context
+	locality                string
 	clientConfig            BlobCacheClientConfig
 	globalConfig            BlobCacheGlobalConfig
 	hostId                  string
@@ -67,8 +69,15 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
+	locality := os.Getenv("BLOBCACHE_LOCALITY")
+	if locality == "" {
+		Logger.Infof("BLOBCACHE_LOCALITY is not set, using default locality: %s", cfg.Global.DefaultLocality)
+		locality = cfg.Global.DefaultLocality
+	}
+
 	bc := &BlobCacheClient{
 		ctx:                     ctx,
+		locality:                locality,
 		clientConfig:            cfg.Client,
 		globalConfig:            cfg.Global,
 		hostId:                  hostId,
@@ -80,7 +89,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator, locality)
 	bc.hasher = NewRendezvousHasher()
 
 	// Start searching for nearby blobcache hosts
@@ -125,7 +134,7 @@ func (c *BlobCacheClient) Cleanup() error {
 }
 
 func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
-	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "myregion")
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, c.locality)
 	if err != nil {
 		return nil, err
 	}

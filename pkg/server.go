@@ -37,6 +37,7 @@ type CacheService struct {
 	mode BlobCacheServerMode
 	proto.UnimplementedBlobCacheServer
 	hostId        string
+	locality      string
 	privateIpAddr string
 	publicIpAddr  string
 	cas           *ContentAddressableStorage
@@ -45,9 +46,8 @@ type CacheService struct {
 	coordinator   CoordinatorClient
 }
 
-func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
+func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
 	hostId := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
-
 	currentHost := &BlobCacheHost{
 		RTT: 0,
 	}
@@ -80,7 +80,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
-	cas, err := NewContentAddressableStorage(ctx, currentHost, "myregion", coordinator, cfg)
+	cas, err := NewContentAddressableStorage(ctx, currentHost, locality, coordinator, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +99,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		ctx:           ctx,
 		mode:          cfg.Server.Mode,
 		hostId:        hostId,
+		locality:      locality,
 		cas:           cas,
 		serverConfig:  cfg.Server,
 		globalConfig:  cfg.Global,

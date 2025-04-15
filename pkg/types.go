@@ -2,6 +2,8 @@ package blobcache
 
 import (
 	"time"
+
+	proto "github.com/beam-cloud/blobcache-v2/proto"
 )
 
 const (
@@ -23,6 +25,7 @@ type BlobCacheConfig struct {
 }
 
 type BlobCacheGlobalConfig struct {
+	DefaultLocality                 string  `key:"defaultLocality" json:"default_locality"`
 	CoordinatorHost                 string  `key:"coordinatorHost" json:"coordinator_host"`
 	ServerPort                      uint    `key:"serverPort" json:"server_port"`
 	DiscoveryIntervalS              int     `key:"discoveryIntervalS" json:"discovery_interval_s"`
@@ -192,6 +195,15 @@ type BlobCacheHost struct {
 	Addr             string        `redis:"addr" json:"addr"`
 	PrivateAddr      string        `redis:"private_addr" json:"private_addr"`
 	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`
+}
+
+func (h *BlobCacheHost) ToProto() *proto.BlobCacheHost {
+	return &proto.BlobCacheHost{
+		HostId:           h.HostId,
+		Addr:             h.Addr,
+		PrivateIpAddr:    h.PrivateAddr,
+		CapacityUsagePct: float32(h.CapacityUsagePct),
+	}
 }
 
 type ClientRequest struct {

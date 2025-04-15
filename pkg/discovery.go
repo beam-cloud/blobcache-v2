@@ -15,14 +15,16 @@ type DiscoveryClient struct {
 	cfg         BlobCacheGlobalConfig
 	hostMap     *HostMap
 	coordinator CoordinatorClient
+	locality    string
 	mu          sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, coordinator CoordinatorClient) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, coordinator CoordinatorClient, locality string) *DiscoveryClient {
 	return &DiscoveryClient{
 		cfg:         cfg,
 		hostMap:     hostMap,
 		coordinator: coordinator,
+		locality:    locality,
 	}
 }
 
@@ -56,7 +58,7 @@ func (d *DiscoveryClient) Start(ctx context.Context) error {
 }
 
 func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.coordinator.GetAvailableHosts(ctx, "myregion")
+	hosts, err := d.coordinator.GetAvailableHosts(ctx, d.locality)
 	if err != nil {
 		return nil, err
 	}
