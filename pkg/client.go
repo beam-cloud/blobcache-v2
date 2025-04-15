@@ -99,7 +99,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
-			Config:            cfg,
+			Config:            cfg.Client,
 			CoordinatorClient: coordinator,
 			Client:            bc,
 			Verbose:           bc.globalConfig.DebugMode,
