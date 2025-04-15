@@ -3,16 +3,12 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
-	"math"
-	"net"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/google/uuid"
+	rendezvous "github.com/beam-cloud/rendezvous"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -33,25 +29,27 @@ const (
 	readAheadKB = 32768
 )
 
-func AuthInterceptor(token string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
-		return invoker(newCtx, method, req, reply, cc, opts...)
-	}
+type RendezvousHasher interface {
+	Add(hosts ...*BlobCacheHost)
+	Remove(host *BlobCacheHost)
+	GetN(n int, key string) []*BlobCacheHost
 }
 
 type BlobCacheClient struct {
-	ctx                     context.Context
-	cfg                     BlobCacheConfig
-	hostname                string
-	discoveryClient         *DiscoveryClient
-	grpcClients             map[string]proto.BlobCacheClient
-	hostMap                 *HostMap
-	mu                      sync.RWMutex
-	metadata                *BlobCacheMetadata
-	closestHostWithCapacity *BlobCacheHost
-	localHostCache          map[string]*localClientCache
-	blobfsServer            *fuse.Server
+	ctx                   context.Context
+	locality              string
+	clientConfig          BlobCacheClientConfig
+	globalConfig          BlobCacheGlobalConfig
+	grpcClients           map[string]proto.BlobCacheClient
+	hostMap               *HostMap
+	mu                    sync.RWMutex
+	discoveryClient       *DiscoveryClient
+	coordinator           CoordinatorClient
+	localHostCache        map[string]*localClientCache
+	blobfsServer          *fuse.Server
+	hasher                RendezvousHasher
+	minRetryLengthBytes   int64
+	maxGetContentAttempts int64
 }
 
 type localClientCache struct {
@@ -60,42 +58,45 @@ type localClientCache struct {
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
+	InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
 
-	InitLogger(cfg.DebugMode, cfg.PrettyLogs)
-
-	metadata, err := NewBlobCacheMetadata(cfg.Metadata)
+	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
 	}
 
+	locality := cfg.Global.GetLocality()
+
 	bc := &BlobCacheClient{
-		ctx:                     ctx,
-		cfg:                     cfg,
-		hostname:                hostname,
-		grpcClients:             make(map[string]proto.BlobCacheClient),
-		localHostCache:          make(map[string]*localClientCache),
-		mu:                      sync.RWMutex{},
-		metadata:                metadata,
-		closestHostWithCapacity: nil,
+		ctx:                   ctx,
+		locality:              locality,
+		clientConfig:          cfg.Client,
+		globalConfig:          cfg.Global,
+		grpcClients:           make(map[string]proto.BlobCacheClient),
+		localHostCache:        make(map[string]*localClientCache),
+		mu:                    sync.RWMutex{},
+		coordinator:           coordinator,
+		hasher:                rendezvous.New[*BlobCacheHost](),
+		minRetryLengthBytes:   cfg.Client.MinRetryLengthBytes,
+		maxGetContentAttempts: max(int64(cfg.Client.MaxGetContentAttempts), 1),
 	}
 
-	bc.hostMap = NewHostMap(cfg, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg, bc.hostMap, metadata)
+	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator, locality)
 
 	// Start searching for nearby blobcache hosts
-	go bc.discoveryClient.StartInBackground(bc.ctx)
+	go bc.discoveryClient.Start(bc.ctx)
 
 	// Monitor and cleanup local client cache
 	go bc.manageLocalClientCache(localClientCacheCleanupInterval, localClientCacheTTL)
 
 	// Mount cache as a FUSE filesystem if blobfs is enabled
-	if cfg.BlobFs.Enabled {
+	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
-			Config:   cfg,
-			Metadata: metadata,
-			Client:   bc,
-			Verbose:  cfg.DebugMode,
+			Config:            cfg.Client,
+			CoordinatorClient: coordinator,
+			Client:            bc,
+			Verbose:           bc.globalConfig.DebugMode,
 		})
 		if err != nil {
 			return nil, err
@@ -106,7 +107,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 			return nil, err
 		}
 
-		err = updateReadAheadKB(cfg.BlobFs.MountPoint, readAheadKB)
+		err = updateReadAheadKB(bc.clientConfig.BlobFs.MountPoint, readAheadKB)
 		if err != nil {
 			Logger.Errorf("Failed to update read_ahead_kb: %v", err)
 		}
@@ -118,41 +119,47 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 }
 
 func (c *BlobCacheClient) Cleanup() error {
-	if c.cfg.BlobFs.Enabled && c.blobfsServer != nil {
+	if c.clientConfig.BlobFs.Enabled && c.blobfsServer != nil {
 		c.blobfsServer.Unmount()
 	}
 	return nil
 }
 
+func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, c.locality)
+	if err != nil {
+		return nil, err
+	}
+
+	return hosts, nil
+}
+
 func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
-	isTLS := c.cfg.TLSEnabled
+	isTLS := c.globalConfig.TLSEnabled
 	if isTLS {
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
-	var dialFunc func(context.Context, string) (net.Conn, error) = nil
 	addr := host.Addr
 
-	dialFunc = DialWithTimeout
 	if host.PrivateAddr != "" {
 		addr = host.PrivateAddr
 	}
 
-	maxMessageSize := c.cfg.GRPCMessageSizeBytes
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
-		grpc.WithContextDialer(dialFunc),
+		grpc.WithContextDialer(DialWithTimeout),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxMessageSize),
-			grpc.MaxCallSendMsgSize(maxMessageSize),
+			grpc.MaxCallRecvMsgSize(c.globalConfig.GRPCMessageSizeBytes),
+			grpc.MaxCallSendMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 		),
 	}
 
-	if c.cfg.Token != "" {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(AuthInterceptor(c.cfg.Token)))
+	if c.clientConfig.Token != "" {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(grpcAuthInterceptor(c.clientConfig.Token)))
 	}
 
 	conn, err := grpc.Dial(addr, dialOpts...)
@@ -162,7 +169,9 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.grpcClients[host.Addr] = proto.NewBlobCacheClient(conn)
+
+	c.grpcClients[host.HostId] = proto.NewBlobCacheClient(conn)
+	c.hasher.Add(host)
 
 	go c.monitorHost(host)
 	return nil
@@ -176,7 +185,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 		select {
 		case <-ticker.C:
 			err := func() error {
-				client, exists := c.grpcClients[host.Addr]
+				client, exists := c.grpcClients[host.HostId]
 				if !exists {
 					return ErrHostNotFound
 				}
@@ -199,10 +208,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 				defer c.mu.Unlock()
 
 				c.hostMap.Remove(host)
-
-				if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
-					c.closestHostWithCapacity = nil
-				}
+				c.hasher.Remove(host)
 
 				delete(c.grpcClients, host.Addr)
 
@@ -215,14 +221,64 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 	}
 }
 
+func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+	if err != nil {
+		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
+		return false
+	}
+
+	exists, err := c.IsCachedNearby(metadata.Hash)
+	if err != nil {
+		Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+		return false
+	}
+
+	return exists
+}
+
+func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
+	hostsToCheck := c.clientConfig.NTopHosts
+
+	for hostIndex := 0; hostIndex < hostsToCheck; hostIndex++ {
+		client, _, err := c.getGRPCClient(&ClientRequest{
+			rt:        ClientRequestTypeRetrieval,
+			hash:      hash,
+			key:       hash,
+			hostIndex: hostIndex,
+		})
+		if err != nil {
+			return false, err
+		}
+
+		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: hash})
+		if err != nil {
+			return false, err
+		}
+
+		if resp.Exists {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	for attempt := 0; attempt < 3; attempt += 1 {
-		client, host, err := c.getGRPCClient(ctx, &ClientRequest{
-			rt:   ClientRequestTypeRetrieval,
-			hash: hash,
+	maxAttempts := 1
+	if length > c.minRetryLengthBytes {
+		maxAttempts = int(c.maxGetContentAttempts)
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt += 1 {
+		client, _, err := c.getGRPCClient(&ClientRequest{
+			rt:        ClientRequestTypeRetrieval,
+			hash:      hash,
+			key:       hash,
+			hostIndex: attempt,
 		})
 		if err != nil {
 			return nil, err
@@ -231,9 +287,6 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
-
-			// If we had an issue getting the content, remove this location from metadata
-			c.metadata.RemoveEntryLocation(ctx, hash, host)
 
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
@@ -257,10 +310,17 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 		defer close(contentChan)
 		defer cancel()
 
-		for attempt := 0; attempt < 3; attempt++ {
-			client, host, err := c.getGRPCClient(ctx, &ClientRequest{
-				rt:   ClientRequestTypeRetrieval,
-				hash: hash,
+		maxAttempts := 1
+		if length > c.minRetryLengthBytes {
+			maxAttempts = int(c.maxGetContentAttempts)
+		}
+
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			client, _, err := c.getGRPCClient(&ClientRequest{
+				rt:        ClientRequestTypeRetrieval,
+				hash:      hash,
+				key:       hash,
+				hostIndex: attempt,
 			})
 			if err != nil {
 				return
@@ -268,7 +328,6 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 
 			stream, err := client.GetContentStream(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 			if err != nil {
-				c.metadata.RemoveEntryLocation(ctx, hash, host)
 				c.mu.Lock()
 				delete(c.localHostCache, hash)
 				c.mu.Unlock()
@@ -282,7 +341,6 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 				}
 
 				if err != nil || !resp.Ok {
-					c.metadata.RemoveEntryLocation(ctx, hash, host)
 					c.mu.Lock()
 					delete(c.localHostCache, hash)
 					c.mu.Unlock()
@@ -315,6 +373,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 					}
 				}
 				c.mu.RUnlock()
+
 				c.mu.Lock()
 				for _, hash := range stale {
 					delete(c.localHostCache, hash)
@@ -328,31 +387,18 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 	}()
 }
 
-func (c *BlobCacheClient) IsCachedNearby(ctx context.Context, hash string) bool {
-	hostAddrs, err := c.metadata.GetEntryLocations(ctx, hash)
-	if err != nil {
-		return false
-	}
-	intersection := hostAddrs.Intersect(c.hostMap.Members())
-	return intersection.Cardinality() > 0
-}
-
-func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
+func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
-	var err error = nil
 
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		if c.closestHostWithCapacity != nil {
-			host = c.closestHostWithCapacity
-		} else {
-			host, err = c.hostMap.ClosestWithCapacity(closestHostTimeout)
-			if err != nil {
-				return nil, nil, err
-			}
+		hosts := c.hasher.GetN(c.clientConfig.NTopHosts, request.key)
+		hostIndex := min(int64(request.hostIndex), int64(len(hosts)-1))
 
-			c.closestHostWithCapacity = host
+		if len(hosts) > 0 {
+			host = hosts[hostIndex]
 		}
+
 	case ClientRequestTypeRetrieval:
 		c.mu.RLock()
 		cachedHost, hostFound := c.localHostCache[request.hash]
@@ -361,72 +407,21 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		if hostFound {
 			host = cachedHost.host
 		} else {
-			hostAddrs, err := c.metadata.GetEntryLocations(ctx, request.hash)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			intersection := hostAddrs.Intersect(c.hostMap.Members())
-			if intersection.Cardinality() == 0 {
-				entry, err := c.metadata.RetrieveEntry(ctx, request.hash)
-				if err != nil {
-					return nil, nil, err
-				}
-
-				// Attempt to populate this server with the content from the original source
-				if entry.SourcePath != "" {
-					err := c.metadata.SetClientLock(ctx, c.hostname, request.hash)
-					if err != nil {
-						return nil, nil, ErrCacheLockHeld
-					}
-					defer c.metadata.RemoveClientLock(ctx, c.hostname, request.hash)
-
-					Logger.Infof("Content not available in any nearby cache - repopulating from: %s", entry.SourcePath)
-					host, err = c.hostMap.Closest(closestHostTimeout)
-					if err != nil {
-						return nil, nil, err
-					}
-
-					closestClient, exists := c.grpcClients[host.Addr]
-					if !exists {
-						return nil, nil, ErrClientNotFound
-					}
-
-					resp, err := closestClient.StoreContentFromSource(c.ctx, &proto.StoreContentFromSourceRequest{
-						SourcePath:   entry.SourcePath,
-						SourceOffset: entry.SourceOffset,
-					})
-					if err != nil {
-						return nil, nil, err
-					}
-
-					if resp.Ok {
-						Logger.Infof("Content repopulated from source: %s", entry.SourcePath)
-						c.mu.Lock()
-						c.localHostCache[request.hash] = &localClientCache{
-							host:      host,
-							timestamp: time.Now(),
-						}
-						c.mu.Unlock()
-						return closestClient, host, nil
-					}
-
-					return nil, nil, ErrUnableToPopulateContent
-				} else {
-					return nil, nil, ErrHostNotFound
-				}
-			}
-
-			host = c.findClosestHost(intersection)
-			if host == nil {
-				return nil, nil, ErrHostNotFound
-			}
-
 			c.mu.Lock()
-			c.localHostCache[request.hash] = &localClientCache{
-				host:      host,
-				timestamp: time.Now(),
+
+			hosts := c.hasher.GetN(c.clientConfig.NTopHosts, request.key)
+			hostIndex := min(int64(request.hostIndex), int64(len(hosts)-1))
+
+			if len(hosts) == 0 {
+				host = nil
+			} else {
+				host = hosts[hostIndex]
+				c.localHostCache[request.hash] = &localClientCache{
+					host:      host,
+					timestamp: time.Now(),
+				}
 			}
+
 			c.mu.Unlock()
 
 		}
@@ -437,39 +432,27 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		return nil, nil, ErrHostNotFound
 	}
 
-	client, exists := c.grpcClients[host.Addr]
+	client, exists := c.grpcClients[host.HostId]
 	if !exists {
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)
 		c.mu.Unlock()
+
 		return nil, nil, ErrHostNotFound
 	}
 
 	return client, host, nil
 }
 
-func (c *BlobCacheClient) findClosestHost(intersection mapset.Set[string]) *BlobCacheHost {
-	var closestHost *BlobCacheHost
-	closestRTT := time.Duration(math.MaxInt64)
-
-	for addr := range intersection.Iter() {
-		host := c.hostMap.Get(addr)
-
-		if host != nil && host.RTT < closestRTT {
-			closestHost = host
-			closestRTT = host.RTT
-		}
-	}
-
-	return closestHost
-}
-
-func (c *BlobCacheClient) StoreContent(chunks chan []byte) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		hash:      hash,
+		key:       hash,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -501,8 +484,10 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       sourcePath,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -520,8 +505,10 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       sourcePath,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -534,6 +521,10 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 
 	if resp.FailedToAcquireLock {
 		return "", ErrUnableToAcquireLock
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
 	}
 
 	return resp.Hash, nil
@@ -573,7 +564,7 @@ func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{rt: ClientRequestTypeRetrieval})
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
 	if err != nil {
 		return err
 	}
@@ -586,45 +577,9 @@ func (c *BlobCacheClient) GetState() error {
 	return nil
 }
 
-func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
-	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
-		return false
+func grpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		newCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+		return invoker(newCtx, method, req, reply, cc, opts...)
 	}
-
-	return c.IsCachedNearby(ctx, metadata.Hash)
-}
-
-func (c *BlobCacheClient) IsDirCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.metadata.GetFsNode(ctx, GenerateFsID(path))
-	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
-		return false
-	}
-
-	return c.childrenCachedNearby(ctx, metadata.ID)
-}
-
-func (c *BlobCacheClient) childrenCachedNearby(ctx context.Context, id string) bool {
-	children, err := c.metadata.GetFsNodeChildren(ctx, id)
-	if err != nil {
-		Logger.Errorf("error getting fs node children: %v, id: %s", err, id)
-		return false
-	}
-
-	for _, child := range children {
-		if (child.Mode & fuse.S_IFDIR) != 0 {
-			if !c.childrenCachedNearby(ctx, child.ID) {
-				return false
-			}
-			continue
-		}
-
-		if !c.IsCachedNearby(ctx, child.Hash) {
-			return false
-		}
-	}
-
-	return true
 }

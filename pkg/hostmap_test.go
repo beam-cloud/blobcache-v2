@@ -13,7 +13,7 @@ func TestClosestWithCapacity(t *testing.T) {
 			"host3": {RTT: 10 * time.Millisecond, CapacityUsagePct: 0.2},
 			"host4": {RTT: 50 * time.Millisecond, CapacityUsagePct: 0.1},
 		},
-		cfg: BlobCacheConfig{
+		cfg: BlobCacheGlobalConfig{
 			HostStorageCapacityThresholdPct: 0.5,
 		},
 	}

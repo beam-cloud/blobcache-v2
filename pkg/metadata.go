@@ -5,14 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/djherbis/atime"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -51,55 +46,6 @@ func NewBlobCacheMetadata(cfg MetadataConfig) (*BlobCacheMetadata, error) {
 	}, nil
 }
 
-func (m *BlobCacheMetadata) AddEntry(ctx context.Context, entry *BlobCacheEntry, host *BlobCacheHost) error {
-	entryKey := MetadataKeys.MetadataEntry(entry.Hash)
-
-	exists, err := m.rdb.Exists(ctx, entryKey).Result()
-	if err != nil {
-		return err
-	}
-
-	// Entry not found, add it
-	if exists == 0 {
-		err := m.rdb.HSet(ctx, entryKey, ToSlice(entry)).Err()
-		if err != nil {
-			return fmt.Errorf("failed to set entry <%v>: %w", entryKey, err)
-		}
-	}
-
-	// Add ref to entry
-	return m.addEntryLocation(ctx, entry.Hash, host)
-}
-
-func (m *BlobCacheMetadata) RetrieveEntry(ctx context.Context, hash string) (*BlobCacheEntry, error) {
-	entryKey := MetadataKeys.MetadataEntry(hash)
-
-	res, err := m.rdb.HGetAll(context.TODO(), entryKey).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	if len(res) == 0 {
-		return nil, &ErrEntryNotFound{Hash: hash}
-	}
-
-	entry := &BlobCacheEntry{}
-	if err = ToStruct(res, entry); err != nil {
-		return nil, fmt.Errorf("failed to deserialize entry <%v>: %v", entryKey, err)
-	}
-
-	return entry, nil
-}
-
-func (m *BlobCacheMetadata) RemoveEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
-	err := m.rdb.SRem(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
-	if err != nil {
-		return err
-	}
-
-	return m.rdb.Decr(ctx, MetadataKeys.MetadataRef(hash)).Err()
-}
-
 func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash string) error {
 	err := m.lock.Acquire(ctx, MetadataKeys.MetadataClientLock(clientId, hash), RedisLockOptions{TtlS: 300, Retries: 0})
 	if err != nil {
@@ -111,122 +57,6 @@ func (m *BlobCacheMetadata) SetClientLock(ctx context.Context, clientId, hash st
 
 func (m *BlobCacheMetadata) RemoveClientLock(ctx context.Context, clientId, hash string) error {
 	return m.lock.Release(MetadataKeys.MetadataClientLock(clientId, hash))
-}
-
-func (m *BlobCacheMetadata) GetEntryLocations(ctx context.Context, hash string) (mapset.Set[string], error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataLocation(hash)).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	hostSet := mapset.NewSet[string]()
-	for _, addr := range hostAddrs {
-		hostSet.Add(addr)
-	}
-
-	return hostSet, nil
-}
-
-func (m *BlobCacheMetadata) addEntryLocation(ctx context.Context, hash string, host *BlobCacheHost) error {
-	err := m.rdb.SAdd(ctx, MetadataKeys.MetadataLocation(hash), host.Addr).Err()
-	if err != nil {
-		return err
-	}
-
-	return m.rdb.Incr(ctx, MetadataKeys.MetadataRef(hash)).Err()
-}
-
-func (m *BlobCacheMetadata) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
-	path = filepath.Join("/", filepath.Clean(path))
-	parts := strings.Split(path, string(filepath.Separator))
-
-	rootParentId := GenerateFsID("/")
-
-	// Iterate over the components and construct the path hierarchy
-	currentPath := "/"
-	previousParentId := rootParentId // start with the root ID
-	for i, part := range parts {
-		if i == 0 && part == "" {
-			continue // Skip the empty part for root
-		}
-
-		if currentPath == "/" {
-			currentPath = filepath.Join("/", part)
-		} else {
-			currentPath = filepath.Join(currentPath, part)
-		}
-
-		currentNodeId := GenerateFsID(currentPath)
-		inode, err := SHA1StringToUint64(currentNodeId)
-		if err != nil {
-			return err
-		}
-
-		// Initialize default metadata
-		now := time.Now()
-		nowSec := uint64(now.Unix())
-		nowNsec := uint32(now.Nanosecond())
-		metadata := &BlobFsMetadata{
-			PID:       previousParentId,
-			ID:        currentNodeId,
-			Name:      part,
-			Path:      currentPath,
-			Ino:       inode,
-			Mode:      fuse.S_IFDIR | 0755,
-			Atime:     nowSec,
-			Mtime:     nowSec,
-			Ctime:     nowSec,
-			Atimensec: nowNsec,
-			Mtimensec: nowNsec,
-			Ctimensec: nowNsec,
-		}
-
-		// If currentPath matches the input path, use the actual file info
-		if currentPath == path {
-			fileInfo, err := os.Stat(currentPath)
-			if err != nil {
-				return err
-			}
-
-			// Update metadata fields with actual file info values
-			modTime := fileInfo.ModTime()
-			accessTime := atime.Get(fileInfo)
-			metadata.Mode = uint32(fileInfo.Mode())
-			metadata.Atime = uint64(accessTime.Unix())
-			metadata.Atimensec = uint32(accessTime.Nanosecond())
-			metadata.Mtime = uint64(modTime.Unix())
-			metadata.Mtimensec = uint32(modTime.Nanosecond())
-
-			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
-			metadata.Ctime = uint64(modTime.Unix())
-			metadata.Ctimensec = uint32(modTime.Nanosecond())
-
-			metadata.Size = uint64(fileInfo.Size())
-			if fileInfo.IsDir() {
-				metadata.Hash = GenerateFsID(currentPath)
-				metadata.Size = 0
-			} else {
-				metadata.Hash = hash
-				metadata.Size = size
-			}
-		}
-
-		// Set metadata
-		err = m.SetFsNode(ctx, currentNodeId, metadata)
-		if err != nil {
-			return err
-		}
-
-		// Add the current node as a child of the previous node
-		err = m.AddFsNodeChild(ctx, previousParentId, currentNodeId)
-		if err != nil {
-			return err
-		}
-
-		previousParentId = currentNodeId
-	}
-
-	return nil
 }
 
 func (m *BlobCacheMetadata) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
@@ -294,20 +124,20 @@ func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([
 	return entries, nil
 }
 
-func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCallback func(host *BlobCacheHost)) ([]*BlobCacheHost, error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex()).Result()
+func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, locality string, removeHostCallback func(host *BlobCacheHost)) ([]*BlobCacheHost, error) {
+	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
 	if err != nil {
 		return nil, err
 	}
 
 	hosts := []*BlobCacheHost{}
 	for _, addr := range hostAddrs {
-		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(addr)).Bytes()
+		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(locality, addr)).Bytes()
 		if err != nil {
 
 			// If the keepalive key doesn't exist, remove the host index key
 			if err == redis.Nil {
-				m.RemoveHostFromIndex(ctx, &BlobCacheHost{Addr: addr})
+				m.RemoveHostFromIndex(ctx, locality, &BlobCacheHost{Addr: addr})
 				removeHostCallback(&BlobCacheHost{Addr: addr})
 			}
 
@@ -329,25 +159,25 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, removeHostCal
 	return hosts, nil
 }
 
-func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, host *BlobCacheHost) error {
-	return m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
+func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
+	return m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(locality), host.Addr).Err()
 }
 
-func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, host *BlobCacheHost) error {
-	return m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(), host.Addr).Err()
+func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
+	return m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(locality), host.Addr).Err()
 }
 
-func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, host *BlobCacheHost) error {
+func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error {
 	hostBytes, err := json.Marshal(host)
 	if err != nil {
 		return err
 	}
 
-	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(host.Addr), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
+	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(locality, host.Addr), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
 }
 
-func (m *BlobCacheMetadata) GetHostIndex(ctx context.Context) ([]*BlobCacheHost, error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex()).Result()
+func (m *BlobCacheMetadata) GetHostIndex(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
+	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -372,30 +202,28 @@ func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) er
 	return nil
 }
 
-func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
+func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Acquire(ctx, MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
-func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
+func (m *BlobCacheMetadata) RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Refresh(MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath), RedisLockOptions{TtlS: storeFromContentLockTtlS, Retries: 0})
 }
 
-func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return m.lock.Release(MetadataKeys.MetadataStoreFromContentLock(sourcePath))
+func (m *BlobCacheMetadata) RemoveStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return m.lock.Release(MetadataKeys.MetadataStoreFromContentLock(locality, sourcePath))
 }
 
 // Metadata key storage format
 var (
 	metadataPrefix               string = "blobcache"
-	metadataHostIndex            string = "blobcache:host_index"
-	metadataEntry                string = "blobcache:entry:%s"
+	metadataHostIndex            string = "blobcache:host_index:%s"
 	metadataClientLock           string = "blobcache:client_lock:%s:%s"
 	metadataLocation             string = "blobcache:location:%s"
-	metadataRef                  string = "blobcache:ref:%s"
 	metadataFsNode               string = "blobcache:fs:node:%s"
 	metadataFsNodeChildren       string = "blobcache:fs:node:%s:children"
 	metadataHostKeepAlive        string = "blobcache:host:keepalive:%s"
-	metadataStoreFromContentLock string = "blobcache:store_from_content_lock:%s"
+	metadataStoreFromContentLock string = "blobcache:store_from_content_lock:%s:%s"
 )
 
 // Metadata keys
@@ -403,24 +231,16 @@ func (k *metadataKeys) MetadataPrefix() string {
 	return metadataPrefix
 }
 
-func (k *metadataKeys) MetadataEntry(hash string) string {
-	return fmt.Sprintf(metadataEntry, hash)
+func (k *metadataKeys) MetadataHostIndex(locality string) string {
+	return fmt.Sprintf(metadataHostIndex, locality)
 }
 
-func (k *metadataKeys) MetadataHostIndex() string {
-	return metadataHostIndex
-}
-
-func (k *metadataKeys) MetadataHostKeepAlive(addr string) string {
-	return fmt.Sprintf(metadataHostKeepAlive, addr)
+func (k *metadataKeys) MetadataHostKeepAlive(locality, addr string) string {
+	return fmt.Sprintf(metadataHostKeepAlive, locality, addr)
 }
 
 func (k *metadataKeys) MetadataLocation(hash string) string {
 	return fmt.Sprintf(metadataLocation, hash)
-}
-
-func (k *metadataKeys) MetadataRef(hash string) string {
-	return fmt.Sprintf(metadataRef, hash)
 }
 
 func (k *metadataKeys) MetadataFsNode(id string) string {
@@ -431,13 +251,13 @@ func (k *metadataKeys) MetadataFsNodeChildren(id string) string {
 	return fmt.Sprintf(metadataFsNodeChildren, id)
 }
 
-func (k *metadataKeys) MetadataClientLock(hostname, hash string) string {
-	return fmt.Sprintf(metadataClientLock, hostname, hash)
+func (k *metadataKeys) MetadataClientLock(hostId, hash string) string {
+	return fmt.Sprintf(metadataClientLock, hostId, hash)
 }
 
-func (k *metadataKeys) MetadataStoreFromContentLock(sourcePath string) string {
+func (k *metadataKeys) MetadataStoreFromContentLock(locality, sourcePath string) string {
 	sourcePath = strings.ReplaceAll(sourcePath, "/", "_")
-	return fmt.Sprintf(metadataStoreFromContentLock, sourcePath)
+	return fmt.Sprintf(metadataStoreFromContentLock, locality, sourcePath)
 }
 
 var MetadataKeys = &metadataKeys{}

@@ -15,26 +15,30 @@ import (
 type ContentAddressableStorage struct {
 	ctx            context.Context
 	currentHost    *BlobCacheHost
+	locality       string
 	cache          *ristretto.Cache[string, interface{}]
-	config         BlobCacheConfig
-	metadata       *BlobCacheMetadata
+	serverConfig   BlobCacheServerConfig
+	globalConfig   BlobCacheGlobalConfig
+	coordinator    CoordinatorClient
 	maxCacheSizeMb int64
 }
 
-func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, metadata *BlobCacheMetadata, config BlobCacheConfig) (*ContentAddressableStorage, error) {
-	if config.MaxCachePct <= 0 || config.PageSizeBytes <= 0 {
+func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
+	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
 
 	cas := &ContentAddressableStorage{
-		ctx:         ctx,
-		config:      config,
-		metadata:    metadata,
-		currentHost: currentHost,
+		ctx:          ctx,
+		serverConfig: config.Server,
+		globalConfig: config.Global,
+		coordinator:  coordinator,
+		currentHost:  currentHost,
+		locality:     locality,
 	}
 
 	availableMemoryMb := getAvailableMemoryMb()
-	maxCacheSizeMb := (availableMemoryMb * config.MaxCachePct) / 100
+	maxCacheSizeMb := (availableMemoryMb * cas.serverConfig.MaxCachePct) / 100
 	maxCost := maxCacheSizeMb * 1e6
 
 	Logger.Infof("Total available memory: %dMB", availableMemoryMb)
@@ -50,7 +54,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		MaxCost:     maxCost,
 		BufferItems: 64,
 		OnEvict:     cas.onEvict,
-		Metrics:     config.DebugMode,
+		Metrics:     cas.globalConfig.DebugMode,
 	})
 	if err != nil {
 		return nil, err
@@ -78,14 +82,14 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	size := int64(len(content))
 	chunkKeys := []string{}
 
-	if cas.config.DebugMode {
+	if cas.globalConfig.DebugMode {
 		Logger.Debugf("Cost added before Add: %+v", cas.cache.Metrics.CostAdded())
 	}
 
 	// Break content into chunks and store
-	for offset := int64(0); offset < size; offset += cas.config.PageSizeBytes {
-		chunkIdx := offset / cas.config.PageSizeBytes
-		end := offset + cas.config.PageSizeBytes
+	for offset := int64(0); offset < size; offset += cas.serverConfig.PageSizeBytes {
+		chunkIdx := offset / cas.serverConfig.PageSizeBytes
+		end := offset + cas.serverConfig.PageSizeBytes
 		if end > size {
 			end = size
 		}
@@ -115,24 +119,18 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 
 	// Store chunk keys in cache
 	chunks := strings.Join(chunkKeys, ",")
-	added := cas.cache.SetWithTTL(hash, chunks, int64(len(chunks)), time.Duration(cas.config.ObjectTtlS)*time.Second)
+	added := cas.cache.SetWithTTL(hash, chunks, int64(len(chunks)), time.Duration(cas.serverConfig.ObjectTtlS)*time.Second)
 	if !added {
 		return errors.New("unable to cache: set dropped")
 	}
 
-	// Store entry
-	err := cas.metadata.AddEntry(ctx, &BlobCacheEntry{
-		Hash:         hash,
-		Size:         size,
-		SourcePath:   sourcePath,
-		SourceOffset: sourceOffset,
-	}, cas.currentHost)
-	if err != nil {
-		return err
-	}
-
 	Logger.Debugf("Added object: %s, size: %d bytes", hash, size)
 	return nil
+}
+
+func (cas *ContentAddressableStorage) Exists(hash string) bool {
+	_, exists := cas.cache.GetTTL(hash)
+	return exists
 }
 
 func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst []byte) (int64, error) {
@@ -140,10 +138,10 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 	o := offset
 	dstOffset := int64(0)
 
-	cas.cache.ResetTTL(hash, time.Duration(cas.config.ObjectTtlS)*time.Second)
+	cas.cache.ResetTTL(hash, time.Duration(cas.serverConfig.ObjectTtlS)*time.Second)
 
 	for remainingLength > 0 {
-		chunkIdx := o / cas.config.PageSizeBytes
+		chunkIdx := o / cas.serverConfig.PageSizeBytes
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
 		// Check cache for chunk
@@ -158,7 +156,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		}
 
 		chunkBytes := v.Content
-		start := o % cas.config.PageSizeBytes
+		start := o % cas.serverConfig.PageSizeBytes
 		chunkRemaining := int64(len(chunkBytes)) - start
 		if chunkRemaining <= 0 {
 			break
@@ -208,9 +206,6 @@ func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}])
 	for _, k := range chunkKeys {
 		cas.cache.Del(k)
 	}
-
-	// Remove location of this cached content
-	cas.metadata.RemoveEntryLocation(cas.ctx, hash, cas.currentHost)
 }
 
 func (cas *ContentAddressableStorage) Cleanup() {

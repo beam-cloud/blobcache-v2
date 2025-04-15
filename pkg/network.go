@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +28,21 @@ func getDefaultInterface() (string, error) {
 	}
 
 	return "", fmt.Errorf("default route not found")
+}
+
+func GetPublicIpAddr() (string, error) {
+	resp, err := http.Get("https://api.ipify.org?format=text")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(ip)), nil
 }
 
 func GetPrivateIpAddr() (string, error) {

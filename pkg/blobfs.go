@@ -16,31 +16,6 @@ import (
 	"github.com/moby/sys/mountinfo"
 )
 
-type BlobFsMetadata struct {
-	PID       string `redis:"pid" json:"pid"`
-	ID        string `redis:"id" json:"id"`
-	Name      string `redis:"name" json:"name"`
-	Path      string `redis:"path" json:"path"`
-	Hash      string `redis:"hash" json:"hash"`
-	Ino       uint64 `redis:"ino" json:"ino"`
-	Size      uint64 `redis:"size" json:"size"`
-	Blocks    uint64 `redis:"blocks" json:"blocks"`
-	Atime     uint64 `redis:"atime" json:"atime"`
-	Mtime     uint64 `redis:"mtime" json:"mtime"`
-	Ctime     uint64 `redis:"ctime" json:"ctime"`
-	Atimensec uint32 `redis:"atimensec" json:"atimensec"`
-	Mtimensec uint32 `redis:"mtimensec" json:"mtimensec"`
-	Ctimensec uint32 `redis:"ctimensec" json:"ctimensec"`
-	Mode      uint32 `redis:"mode" json:"mode"`
-	Nlink     uint32 `redis:"nlink" json:"nlink"`
-	Rdev      uint32 `redis:"rdev" json:"rdev"`
-	Blksize   uint32 `redis:"blksize" json:"blksize"`
-	Padding   uint32 `redis:"padding" json:"padding"`
-	Uid       uint32 `redis:"uid" json:"uid"`
-	Gid       uint32 `redis:"gid" json:"gid"`
-	Gen       uint64 `redis:"gen" json:"gen"`
-}
-
 type StorageLayer interface {
 }
 
@@ -60,20 +35,19 @@ func SHA1StringToUint64(hash string) (uint64, error) {
 }
 
 type BlobFsSystemOpts struct {
-	Verbose  bool
-	Metadata *BlobCacheMetadata
-	Config   BlobCacheConfig
-	Client   *BlobCacheClient
+	Verbose           bool
+	CoordinatorClient CoordinatorClient
+	Config            BlobCacheClientConfig
+	Client            *BlobCacheClient
 }
 
 type BlobFs struct {
-	ctx             context.Context
-	root            *FSNode
-	verbose         bool
-	Metadata        *BlobCacheMetadata
-	Client          *BlobCacheClient
-	Config          BlobCacheConfig
-	PrefetchManager *PrefetchManager
+	ctx               context.Context
+	root              *FSNode
+	verbose           bool
+	CoordinatorClient CoordinatorClient
+	Client            *BlobCacheClient
+	Config            BlobCacheClientConfig
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
@@ -191,32 +165,27 @@ func updateReadAheadKB(mountPoint string, valueKB int) error {
 
 // NewFileSystem initializes a new BlobFs with root metadata.
 func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) {
-	metadata := opts.Metadata
+	coordinatorClient := opts.CoordinatorClient
 
 	bfs := &BlobFs{
-		ctx:      ctx,
-		verbose:  opts.Verbose,
-		Config:   opts.Config,
-		Client:   opts.Client,
-		Metadata: metadata,
-	}
-
-	if opts.Config.BlobFs.Prefetch.Enabled {
-		bfs.PrefetchManager = NewPrefetchManager(ctx, opts.Config, opts.Client)
-		bfs.PrefetchManager.Start()
+		ctx:               ctx,
+		verbose:           opts.Verbose,
+		Config:            opts.Config,
+		Client:            opts.Client,
+		CoordinatorClient: opts.CoordinatorClient,
 	}
 
 	rootID := GenerateFsID("/")
 	rootPID := "" // Root node has no parent
 	rootPath := "/"
 
-	dirMeta, err := metadata.GetFsNode(bfs.ctx, rootID)
+	dirMeta, err := coordinatorClient.GetFsNode(bfs.ctx, rootID)
 	if err != nil || dirMeta == nil {
 		Logger.Infof("Root node metadata not found, creating it now...")
 
 		dirMeta = &BlobFsMetadata{PID: rootPID, ID: rootID, Path: rootPath, Ino: 1, Mode: fuse.S_IFDIR | 0755}
 
-		err := metadata.SetFsNode(bfs.ctx, rootID, dirMeta)
+		err := coordinatorClient.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
 			Logger.Fatalf("Unable to create blobfs root node dir metdata: %+v", err)
 		}

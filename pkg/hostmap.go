@@ -8,7 +8,7 @@ import (
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
-func NewHostMap(cfg BlobCacheConfig, onHostAdded func(*BlobCacheHost) error) *HostMap {
+func NewHostMap(cfg BlobCacheGlobalConfig, onHostAdded func(*BlobCacheHost) error) *HostMap {
 	return &HostMap{
 		hosts:       make(map[string]*BlobCacheHost),
 		mu:          sync.Mutex{},
@@ -21,21 +21,21 @@ type HostMap struct {
 	hosts       map[string]*BlobCacheHost
 	mu          sync.Mutex
 	onHostAdded func(*BlobCacheHost) error
-	cfg         BlobCacheConfig
+	cfg         BlobCacheGlobalConfig
 }
 
 func (hm *HostMap) Set(host *BlobCacheHost) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	_, exists := hm.hosts[host.Addr]
+	_, exists := hm.hosts[host.HostId]
 	if exists {
 		return
 	}
 
-	hm.hosts[host.Addr] = host
+	hm.hosts[host.HostId] = host
 	if hm.onHostAdded != nil {
-		Logger.Infof("Added new host @ %s (PrivateAddr=%s, RTT=%s)", host.Addr, host.PrivateAddr, host.RTT)
+		Logger.Infof("Added new host @ %s (PrivateAddr=%s, RTT=%s)", host.HostId, host.PrivateAddr, host.RTT)
 		hm.onHostAdded(host)
 	}
 }
@@ -44,13 +44,13 @@ func (hm *HostMap) Remove(host *BlobCacheHost) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	_, exists := hm.hosts[host.Addr]
+	_, exists := hm.hosts[host.HostId]
 	if !exists {
 		return
 	}
 
-	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.Addr, host.PrivateAddr, host.RTT)
-	delete(hm.hosts, host.Addr)
+	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.HostId, host.PrivateAddr, host.RTT)
+	delete(hm.hosts, host.HostId)
 }
 
 func (hm *HostMap) Members() mapset.Set[string] {
@@ -58,18 +58,29 @@ func (hm *HostMap) Members() mapset.Set[string] {
 	defer hm.mu.Unlock()
 
 	set := mapset.NewSet[string]()
-	for addr := range hm.hosts {
-		set.Add(hm.hosts[addr].Addr)
+	for host := range hm.hosts {
+		set.Add(hm.hosts[host].HostId)
 	}
 
 	return set
 }
 
-func (hm *HostMap) Get(addr string) *BlobCacheHost {
+func (hm *HostMap) GetAll() []*BlobCacheHost {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	host, exists := hm.hosts[addr]
+	hosts := make([]*BlobCacheHost, 0, len(hm.hosts))
+	for _, host := range hm.hosts {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func (hm *HostMap) Get(hostId string) *BlobCacheHost {
+	hm.mu.Lock()
+	defer hm.mu.Unlock()
+
+	host, exists := hm.hosts[hostId]
 	if !exists {
 		return nil
 	}

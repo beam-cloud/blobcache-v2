@@ -1,8 +1,10 @@
 package blobcache
 
 import (
-	"fmt"
+	"os"
 	"time"
+
+	proto "github.com/beam-cloud/blobcache-v2/proto"
 )
 
 const (
@@ -17,29 +19,59 @@ const (
 	defaultHostKeepAliveTimeoutS           int     = 60
 )
 
-type DiscoveryMode string
+type BlobCacheConfig struct {
+	Server BlobCacheServerConfig `key:"server" json:"server"`
+	Client BlobCacheClientConfig `key:"client" json:"client"`
+	Global BlobCacheGlobalConfig `key:"global" json:"global"`
+}
+
+type BlobCacheGlobalConfig struct {
+	DefaultLocality                 string  `key:"defaultLocality" json:"default_locality"`
+	CoordinatorHost                 string  `key:"coordinatorHost" json:"coordinator_host"`
+	ServerPort                      uint    `key:"serverPort" json:"server_port"`
+	DiscoveryIntervalS              int     `key:"discoveryIntervalS" json:"discovery_interval_s"`
+	RoundTripThresholdMilliseconds  uint    `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
+	HostStorageCapacityThresholdPct float64 `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
+	GRPCDialTimeoutS                int     `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
+	GRPCMessageSizeBytes            int     `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	DebugMode                       bool    `key:"debugMode" json:"debug_mode"`
+	TLSEnabled                      bool    `key:"tlsEnabled" json:"tls_enabled"`
+	PrettyLogs                      bool    `key:"prettyLogs" json:"pretty_logs"`
+}
+
+func (c *BlobCacheGlobalConfig) GetLocality() string {
+	locality := os.Getenv("BLOBCACHE_LOCALITY")
+	if locality != "" {
+		return locality
+	}
+
+	return c.DefaultLocality
+}
+
+type BlobCacheServerMode string
 
 const (
-	DiscoveryModeMetadata DiscoveryMode = "metadata"
+	BlobCacheServerModeCoordinator BlobCacheServerMode = "coordinator"
+	BlobCacheServerModeSlave       BlobCacheServerMode = "slave"
 )
 
-type BlobCacheConfig struct {
-	Token                           string         `key:"token" json:"token"`
-	DebugMode                       bool           `key:"debugMode" json:"debug_mode"`
-	PrettyLogs                      bool           `key:"prettyLogs" json:"pretty_logs"`
-	TLSEnabled                      bool           `key:"tlsEnabled" json:"tls_enabled"`
-	Port                            uint           `key:"port" json:"port"`
-	HostStorageCapacityThresholdPct float64        `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
-	ObjectTtlS                      int            `key:"objectTtlS" json:"object_ttl_s"`
-	RoundTripThresholdMilliseconds  uint           `key:"rttThresholdMilliseconds" json:"rtt_threshold_ms"`
-	MaxCachePct                     int64          `key:"maxCachePct" json:"max_cache_pct"`
-	PageSizeBytes                   int64          `key:"pageSizeBytes" json:"page_size_bytes"`
-	GRPCDialTimeoutS                int            `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
-	GRPCMessageSizeBytes            int            `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
-	Metadata                        MetadataConfig `key:"metadata" json:"metadata"`
-	DiscoveryIntervalS              int            `key:"discoveryIntervalS" json:"discovery_interval_s"`
-	DiscoveryMode                   string         `key:"discoveryMode" json:"discovery_mode"`
-	BlobFs                          BlobFsConfig   `key:"blobfs" json:"blobfs"`
+type BlobCacheServerConfig struct {
+	Mode          BlobCacheServerMode `key:"mode" json:"mode"`
+	Token         string              `key:"token" json:"token"`
+	PrettyLogs    bool                `key:"prettyLogs" json:"pretty_logs"`
+	ObjectTtlS    int                 `key:"objectTtlS" json:"object_ttl_s"`
+	MaxCachePct   int64               `key:"maxCachePct" json:"max_cache_pct"`
+	PageSizeBytes int64               `key:"pageSizeBytes" json:"page_size_bytes"`
+	Metadata      MetadataConfig      `key:"metadata" json:"metadata"`
+	Sources       []SourceConfig      `key:"sources" json:"sources"`
+}
+
+type BlobCacheClientConfig struct {
+	Token                 string       `key:"token" json:"token"`
+	MinRetryLengthBytes   int64        `key:"minRetryLengthBytes" json:"min_retry_length_bytes"`
+	MaxGetContentAttempts int          `key:"maxGetContentAttempts" json:"max_get_content_attempts"`
+	NTopHosts             int          `key:"nTopHosts" json:"n_top_hosts"`
+	BlobFs                BlobFsConfig `key:"blobfs" json:"blobfs"`
 }
 
 type BlobCacheMetadataMode string
@@ -107,26 +139,65 @@ type RedisConfig struct {
 }
 
 type BlobFsConfig struct {
-	Enabled            bool                 `key:"enabled" json:"enabled"`
-	Prefetch           BlobFsPrefetchConfig `key:"prefetch" json:"prefetch"`
-	MountPoint         string               `key:"mountPoint" json:"mount_point"`
-	Sources            []SourceConfig       `key:"sources" json:"sources"`
-	MaxBackgroundTasks int                  `key:"maxBackgroundTasks" json:"max_background_tasks"`
-	MaxWriteKB         int                  `key:"maxWriteKB" json:"max_write_kb"`
-	MaxReadAheadKB     int                  `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
-	DirectMount        bool                 `key:"directMount" json:"direct_mount"`
-	DirectIO           bool                 `key:"directIO" json:"direct_io"`
-	Options            []string             `key:"options" json:"options"`
+	Enabled            bool     `key:"enabled" json:"enabled"`
+	MountPoint         string   `key:"mountPoint" json:"mount_point"`
+	MaxBackgroundTasks int      `key:"maxBackgroundTasks" json:"max_background_tasks"`
+	MaxWriteKB         int      `key:"maxWriteKB" json:"max_write_kb"`
+	MaxReadAheadKB     int      `key:"maxReadAheadKB" json:"max_read_ahead_kb"`
+	DirectMount        bool     `key:"directMount" json:"direct_mount"`
+	DirectIO           bool     `key:"directIO" json:"direct_io"`
+	Options            []string `key:"options" json:"options"`
 }
 
-type BlobFsPrefetchConfig struct {
-	Enabled           bool     `key:"enabled" json:"enabled"`
-	MinFileSizeBytes  uint64   `key:"minFileSizeBytes" json:"min_file_size_bytes"`
-	EvictionIntervalS int      `key:"evictionIntervalS" json:"eviction_interval_s"`
-	IdleTtlS          int      `key:"idleTtlS" json:"idle_ttl_s"`
-	WindowSizeBytes   uint64   `key:"windowSizeBytes" json:"window_size_bytes"`
-	IgnoreFileExt     []string `key:"ignoreFileExt" json:"ignore_file_ext"`
-	DataTimeoutS      int      `key:"dataTimeoutS" json:"data_timeout_s"`
+type BlobFsMetadata struct {
+	PID       string `redis:"pid" json:"pid"`
+	ID        string `redis:"id" json:"id"`
+	Name      string `redis:"name" json:"name"`
+	Path      string `redis:"path" json:"path"`
+	Hash      string `redis:"hash" json:"hash"`
+	Ino       uint64 `redis:"ino" json:"ino"`
+	Size      uint64 `redis:"size" json:"size"`
+	Blocks    uint64 `redis:"blocks" json:"blocks"`
+	Atime     uint64 `redis:"atime" json:"atime"`
+	Mtime     uint64 `redis:"mtime" json:"mtime"`
+	Ctime     uint64 `redis:"ctime" json:"ctime"`
+	Atimensec uint32 `redis:"atimensec" json:"atimensec"`
+	Mtimensec uint32 `redis:"mtimensec" json:"mtimensec"`
+	Ctimensec uint32 `redis:"ctimensec" json:"ctimensec"`
+	Mode      uint32 `redis:"mode" json:"mode"`
+	Nlink     uint32 `redis:"nlink" json:"nlink"`
+	Rdev      uint32 `redis:"rdev" json:"rdev"`
+	Blksize   uint32 `redis:"blksize" json:"blksize"`
+	Padding   uint32 `redis:"padding" json:"padding"`
+	Uid       uint32 `redis:"uid" json:"uid"`
+	Gid       uint32 `redis:"gid" json:"gid"`
+	Gen       uint64 `redis:"gen" json:"gen"`
+}
+
+func (m *BlobFsMetadata) ToProto() *proto.BlobFsMetadata {
+	return &proto.BlobFsMetadata{
+		Id:        m.ID,
+		Pid:       m.PID,
+		Name:      m.Name,
+		Path:      m.Path,
+		Hash:      m.Hash,
+		Size:      m.Size,
+		Blocks:    m.Blocks,
+		Atime:     m.Atime,
+		Mtime:     m.Mtime,
+		Ctime:     m.Ctime,
+		Atimensec: m.Atimensec,
+		Mtimensec: m.Mtimensec,
+		Ctimensec: m.Ctimensec,
+		Mode:      m.Mode,
+		Nlink:     m.Nlink,
+		Rdev:      m.Rdev,
+		Blksize:   m.Blksize,
+		Padding:   m.Padding,
+		Uid:       m.Uid,
+		Gid:       m.Gid,
+		Gen:       m.Gen,
+	}
 }
 
 type SourceConfig struct {
@@ -159,14 +230,31 @@ type MountPointConfig struct {
 
 type BlobCacheHost struct {
 	RTT              time.Duration `redis:"rtt" json:"rtt"`
+	HostId           string        `redis:"host_id" json:"host_id"`
 	Addr             string        `redis:"addr" json:"addr"`
 	PrivateAddr      string        `redis:"private_addr" json:"private_addr"`
 	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`
 }
 
+// Bytes is needed for the rendezvous hasher
+func (h *BlobCacheHost) Bytes() []byte {
+	return []byte(h.HostId)
+}
+
+func (h *BlobCacheHost) ToProto() *proto.BlobCacheHost {
+	return &proto.BlobCacheHost{
+		HostId:           h.HostId,
+		Addr:             h.Addr,
+		PrivateIpAddr:    h.PrivateAddr,
+		CapacityUsagePct: float32(h.CapacityUsagePct),
+	}
+}
+
 type ClientRequest struct {
-	rt   ClientRequestType
-	hash string
+	rt        ClientRequestType
+	hash      string
+	key       string // This key is used for rendezvous hashing / deterministic routing (it's usually the same as the hash)
+	hostIndex int
 }
 
 type ClientRequestType int
@@ -175,29 +263,6 @@ const (
 	ClientRequestTypeStorage ClientRequestType = iota
 	ClientRequestTypeRetrieval
 )
-
-type BlobCacheEntry struct {
-	Hash         string `redis:"hash" json:"hash"`
-	Size         int64  `redis:"size" json:"size"`
-	SourcePath   string `redis:"source_path" json:"source_path"`
-	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
-}
-
-type ErrEntryNotFound struct {
-	Hash string
-}
-
-func (e *ErrEntryNotFound) Error() string {
-	return fmt.Sprintf("entry not found: %s", e.Hash)
-}
-
-type ErrNodeNotFound struct {
-	Id string
-}
-
-func (e *ErrNodeNotFound) Error() string {
-	return fmt.Sprintf("blobfs node not found: %s", e.Id)
-}
 
 // BlobFS types
 type FileSystemOpts struct {

@@ -84,7 +84,7 @@ func metaToAttr(metadata *BlobFsMetadata) fuse.Attr {
 }
 
 func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fuse.Attr, error) {
-	metadata, err := n.filesystem.Metadata.GetFsNode(ctx, fsId)
+	metadata, err := n.filesystem.CoordinatorClient.GetFsNode(ctx, fsId)
 	if err != nil {
 		return nil, nil, syscall.ENOENT
 	}
@@ -120,6 +120,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 		sourcePath := strings.ReplaceAll(fullPath, "%", "/")
 
 		n.log("Storing content from source with path: %s", sourcePath)
+
 		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
 		if err != nil {
 			return nil, syscall.ENOENT
@@ -161,30 +162,6 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	return nil, 0, fs.OK
 }
 
-func (n *FSNode) shouldPrefetch(node *BlobFsNode) bool {
-	if node.Prefetch != nil {
-		return *node.Prefetch
-	}
-
-	if !n.filesystem.Config.BlobFs.Prefetch.Enabled {
-		return false
-	}
-
-	if n.bfsNode.Attr.Size < n.filesystem.Config.BlobFs.Prefetch.MinFileSizeBytes {
-		return false
-	}
-
-	for _, ext := range n.filesystem.Config.BlobFs.Prefetch.IgnoreFileExt {
-		if strings.HasSuffix(node.Name, ext) {
-			return false
-		}
-	}
-
-	prefetch := true
-	node.Prefetch = &prefetch
-	return true
-}
-
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n.log("Read called with offset: %v", off)
 
@@ -193,19 +170,28 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	// Attempt to prefetch the file
-	if n.shouldPrefetch(n.bfsNode) {
-		buffer := n.filesystem.PrefetchManager.GetPrefetchBuffer(n.bfsNode.Hash, n.bfsNode.Attr.Size)
-		if buffer != nil {
-			err := buffer.GetRange(uint64(off), dest)
-			if err == nil {
-				return fuse.ReadResultData(dest), fs.OK
-			}
-		}
-	}
-
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
 	if err != nil {
+		if err == ErrContentNotFound {
+
+			sourcePath := n.bfsNode.Path
+
+			_, err := n.filesystem.Client.StoreContentFromSourceWithLock(sourcePath, 0)
+
+			// If multiple clients try to store the same file, some may get ErrUnableToAcquireLock
+			// In this case, we should tell the client to retry the Read instead of returning an error
+			if err != nil && err == ErrUnableToAcquireLock {
+				return nil, syscall.EAGAIN
+			} else if err != nil {
+				return nil, syscall.EIO
+			}
+
+			buffer, err = n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+			if err != nil {
+				return nil, syscall.EIO
+			}
+		}
+
 		return nil, syscall.EIO
 	}
 
@@ -226,7 +212,7 @@ func (n *FSNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	n.log("Readdir called")
 
-	children, err := n.filesystem.Metadata.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
+	children, err := n.filesystem.CoordinatorClient.GetFsNodeChildren(ctx, GenerateFsID(n.bfsNode.Path))
 	if err != nil {
 		return nil, fs.ENOATTR
 	}

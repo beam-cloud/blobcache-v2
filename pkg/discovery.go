@@ -2,7 +2,6 @@ package blobcache
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,17 +12,19 @@ import (
 )
 
 type DiscoveryClient struct {
-	cfg      BlobCacheConfig
-	hostMap  *HostMap
-	metadata *BlobCacheMetadata
-	mu       sync.Mutex
+	cfg         BlobCacheGlobalConfig
+	hostMap     *HostMap
+	coordinator CoordinatorClient
+	locality    string
+	mu          sync.Mutex
 }
 
-func NewDiscoveryClient(cfg BlobCacheConfig, hostMap *HostMap, metadata *BlobCacheMetadata) *DiscoveryClient {
+func NewDiscoveryClient(cfg BlobCacheGlobalConfig, hostMap *HostMap, coordinator CoordinatorClient, locality string) *DiscoveryClient {
 	return &DiscoveryClient{
-		cfg:      cfg,
-		hostMap:  hostMap,
-		metadata: metadata,
+		cfg:         cfg,
+		hostMap:     hostMap,
+		coordinator: coordinator,
+		locality:    locality,
 	}
 }
 
@@ -34,13 +35,8 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 }
 
 // Used by blobcache servers to discover their closest peers
-func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
-	// Default to metadata discovery if no mode is specified
-	if d.cfg.DiscoveryMode == "" {
-		d.cfg.DiscoveryMode = string(DiscoveryModeMetadata)
-	}
-
-	hosts, err := d.FindNearbyHosts(ctx)
+func (d *DiscoveryClient) Start(ctx context.Context) error {
+	hosts, err := d.discoverHosts(ctx)
 	if err == nil {
 		d.updateHostMap(hosts)
 	}
@@ -49,7 +45,7 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			hosts, err := d.FindNearbyHosts(ctx)
+			hosts, err := d.discoverHosts(ctx)
 			if err != nil {
 				continue
 			}
@@ -61,8 +57,8 @@ func (d *DiscoveryClient) StartInBackground(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*BlobCacheHost, error) {
-	hosts, err := d.metadata.GetAvailableHosts(ctx, d.hostMap.Remove)
+func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, error) {
+	hosts, err := d.coordinator.GetAvailableHosts(ctx, d.locality)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +70,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
 			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(host.Addr) != nil {
+			if d.hostMap.Get(host.HostId) != nil {
 				continue
 			}
 
@@ -82,7 +78,7 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 			go func(addr string) {
 				defer wg.Done()
 
-				hostState, err := d.GetHostStateViaMetadata(ctx, addr, host.PrivateAddr)
+				hostState, err := d.GetHostState(ctx, host)
 				if err != nil {
 					return
 				}
@@ -100,92 +96,20 @@ func (d *DiscoveryClient) discoverHostsViaMetadata(ctx context.Context) ([]*Blob
 	return filteredHosts, nil
 }
 
-func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost, error) {
-	var hosts []*BlobCacheHost
-	var err error
-
-	switch d.cfg.DiscoveryMode {
-	case string(DiscoveryModeMetadata):
-		hosts, err = d.discoverHostsViaMetadata(ctx)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("invalid discovery mode: %s", d.cfg.DiscoveryMode)
-	}
-
-	return hosts, nil
-}
-
-// checkService attempts to connect to the gRPC service and verifies its availability
-func (d *DiscoveryClient) GetHostState(ctx context.Context, addr string) (*BlobCacheHost, error) {
-	host := BlobCacheHost{
-		Addr:             addr,
-		RTT:              0,
-		PrivateAddr:      "",
-		CapacityUsagePct: 0.0,
-	}
-
+// GetHostState attempts to connect to the gRPC service and verifies its availability
+func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost) (*BlobCacheHost, error) {
 	var dialOpts = []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(DialWithTimeout),
-	}
-
-	conn, err := grpc.Dial(addr, dialOpts...)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	// Query host state to figure out what the round-trip times might look like
-	startTime := time.Now()
-	c := proto.NewBlobCacheClient(conn)
-	resp, err := c.GetState(ctx, &proto.GetStateRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	host.RTT = time.Since(startTime)
-	host.CapacityUsagePct = float64(resp.GetCapacityUsagePct())
-
-	if resp.PrivateIpAddr != "" {
-		privateAddr := fmt.Sprintf("%s:%d", resp.PrivateIpAddr, d.cfg.Port)
-		privateConn, privateErr := DialWithTimeout(ctx, privateAddr)
-		if privateErr == nil {
-			privateConn.Close()
-			host.PrivateAddr = privateAddr
-			host.RTT = time.Duration(0)
-		}
-	}
-
-	threshold := time.Duration(d.cfg.RoundTripThresholdMilliseconds) * time.Millisecond
-	if host.RTT > threshold {
-		return nil, errors.New("round-trip time exceeds threshold")
-	}
-
-	if resp.GetVersion() != BlobCacheVersion {
-		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
-	}
-
-	return &host, nil
-}
-
-func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, privateAddr string) (*BlobCacheHost, error) {
-	host := BlobCacheHost{
-		Addr:             addr,
-		RTT:              0,
-		PrivateAddr:      privateAddr,
-		CapacityUsagePct: 0.0,
-	}
-
-	var dialOpts = []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(d.cfg.GRPCMessageSizeBytes),
+			grpc.MaxCallSendMsgSize(d.cfg.GRPCMessageSizeBytes),
+		),
 	}
 
 	dialCtx, cancel := context.WithTimeout(ctx, time.Duration(d.cfg.GRPCDialTimeoutS)*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(dialCtx, privateAddr, dialOpts...)
+	conn, err := grpc.DialContext(dialCtx, host.PrivateAddr, dialOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,5 +129,5 @@ func (d *DiscoveryClient) GetHostStateViaMetadata(ctx context.Context, addr, pri
 		return nil, fmt.Errorf("version mismatch: %s != %s", resp.GetVersion(), BlobCacheVersion)
 	}
 
-	return &host, nil
+	return host, nil
 }

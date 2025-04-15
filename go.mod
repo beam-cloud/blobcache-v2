@@ -3,11 +3,13 @@ module github.com/beam-cloud/blobcache-v2
 go 1.22.10
 
 require (
+	github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8
 	github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2
 	github.com/bsm/redislock v0.9.4
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/djherbis/atime v1.1.0
 	github.com/go-faker/faker/v4 v4.6.0
+	github.com/golang/protobuf v1.5.4
 	github.com/google/uuid v1.6.0
 	github.com/hanwen/go-fuse/v2 v2.5.1
 	github.com/knadh/koanf/parsers/json v0.1.0
@@ -18,8 +20,8 @@ require (
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/shirou/gopsutil v2.21.11+incompatible
-	google.golang.org/grpc v1.62.0
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/grpc v1.71.1
+	google.golang.org/protobuf v1.36.4
 	gotest.tools v2.2.0+incompatible
 )
 
@@ -37,7 +39,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/knadh/koanf/maps v0.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -48,10 +49,10 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/zerolog v1.33.0
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sys v0.25.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240205150955-31a09d347014 // indirect
+	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/text v0.21.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
