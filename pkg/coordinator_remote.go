@@ -79,8 +79,6 @@ func (c *CoordinatorClientRemote) GetAvailableHosts(ctx context.Context, localit
 		return nil, err
 	}
 
-	Logger.Infof("Hosts: %v", response.Hosts)
-
 	hosts := make([]*BlobCacheHost, 0)
 	for _, host := range response.Hosts {
 		hosts = append(hosts, &BlobCacheHost{
