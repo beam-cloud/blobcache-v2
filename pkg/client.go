@@ -61,6 +61,8 @@ type localClientCache struct {
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
+	InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
+
 	hostId := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
 	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
@@ -276,7 +278,11 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 		defer close(contentChan)
 		defer cancel()
 
-		maxAttempts := 3
+		maxAttempts := 1
+		if length > c.clientConfig.MinRetryLengthBytes {
+			maxAttempts = c.clientConfig.MaxGetContentAttempts
+		}
+
 		for attempt := 0; attempt < maxAttempts; attempt++ {
 			client, _, err := c.getGRPCClient(&ClientRequest{
 				rt:        ClientRequestTypeRetrieval,
