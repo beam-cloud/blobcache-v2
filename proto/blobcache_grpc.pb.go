@@ -28,7 +28,8 @@ const (
 	BlobCache_GetAvailableHosts_FullMethodName              = "/blobcache.BlobCache/GetAvailableHosts"
 	BlobCache_SetClientLock_FullMethodName                  = "/blobcache.BlobCache/SetClientLock"
 	BlobCache_RemoveClientLock_FullMethodName               = "/blobcache.BlobCache/RemoveClientLock"
-	BlobCache_RetrieveEntry_FullMethodName                  = "/blobcache.BlobCache/RetrieveEntry"
+	BlobCache_SetStoreFromContentLock_FullMethodName        = "/blobcache.BlobCache/SetStoreFromContentLock"
+	BlobCache_RemoveStoreFromContentLock_FullMethodName     = "/blobcache.BlobCache/RemoveStoreFromContentLock"
 	BlobCache_SetFsNode_FullMethodName                      = "/blobcache.BlobCache/SetFsNode"
 	BlobCache_GetFsNode_FullMethodName                      = "/blobcache.BlobCache/GetFsNode"
 	BlobCache_GetFsNodeChildren_FullMethodName              = "/blobcache.BlobCache/GetFsNodeChildren"
@@ -49,7 +50,8 @@ type BlobCacheClient interface {
 	GetAvailableHosts(ctx context.Context, in *GetAvailableHostsRequest, opts ...grpc.CallOption) (*GetAvailableHostsResponse, error)
 	SetClientLock(ctx context.Context, in *SetClientLockRequest, opts ...grpc.CallOption) (*SetClientLockResponse, error)
 	RemoveClientLock(ctx context.Context, in *RemoveClientLockRequest, opts ...grpc.CallOption) (*RemoveClientLockResponse, error)
-	RetrieveEntry(ctx context.Context, in *RetrieveEntryRequest, opts ...grpc.CallOption) (*RetrieveEntryResponse, error)
+	SetStoreFromContentLock(ctx context.Context, in *SetStoreFromContentLockRequest, opts ...grpc.CallOption) (*SetStoreFromContentLockResponse, error)
+	RemoveStoreFromContentLock(ctx context.Context, in *RemoveStoreFromContentLockRequest, opts ...grpc.CallOption) (*RemoveStoreFromContentLockResponse, error)
 	SetFsNode(ctx context.Context, in *SetFsNodeRequest, opts ...grpc.CallOption) (*SetFsNodeResponse, error)
 	GetFsNode(ctx context.Context, in *GetFsNodeRequest, opts ...grpc.CallOption) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(ctx context.Context, in *GetFsNodeChildrenRequest, opts ...grpc.CallOption) (*GetFsNodeChildrenResponse, error)
@@ -165,10 +167,20 @@ func (c *blobCacheClient) RemoveClientLock(ctx context.Context, in *RemoveClient
 	return out, nil
 }
 
-func (c *blobCacheClient) RetrieveEntry(ctx context.Context, in *RetrieveEntryRequest, opts ...grpc.CallOption) (*RetrieveEntryResponse, error) {
+func (c *blobCacheClient) SetStoreFromContentLock(ctx context.Context, in *SetStoreFromContentLockRequest, opts ...grpc.CallOption) (*SetStoreFromContentLockResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RetrieveEntryResponse)
-	err := c.cc.Invoke(ctx, BlobCache_RetrieveEntry_FullMethodName, in, out, cOpts...)
+	out := new(SetStoreFromContentLockResponse)
+	err := c.cc.Invoke(ctx, BlobCache_SetStoreFromContentLock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) RemoveStoreFromContentLock(ctx context.Context, in *RemoveStoreFromContentLockRequest, opts ...grpc.CallOption) (*RemoveStoreFromContentLockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveStoreFromContentLockResponse)
+	err := c.cc.Invoke(ctx, BlobCache_RemoveStoreFromContentLock_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +232,8 @@ type BlobCacheServer interface {
 	GetAvailableHosts(context.Context, *GetAvailableHostsRequest) (*GetAvailableHostsResponse, error)
 	SetClientLock(context.Context, *SetClientLockRequest) (*SetClientLockResponse, error)
 	RemoveClientLock(context.Context, *RemoveClientLockRequest) (*RemoveClientLockResponse, error)
-	RetrieveEntry(context.Context, *RetrieveEntryRequest) (*RetrieveEntryResponse, error)
+	SetStoreFromContentLock(context.Context, *SetStoreFromContentLockRequest) (*SetStoreFromContentLockResponse, error)
+	RemoveStoreFromContentLock(context.Context, *RemoveStoreFromContentLockRequest) (*RemoveStoreFromContentLockResponse, error)
 	SetFsNode(context.Context, *SetFsNodeRequest) (*SetFsNodeResponse, error)
 	GetFsNode(context.Context, *GetFsNodeRequest) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(context.Context, *GetFsNodeChildrenRequest) (*GetFsNodeChildrenResponse, error)
@@ -261,8 +274,11 @@ func (UnimplementedBlobCacheServer) SetClientLock(context.Context, *SetClientLoc
 func (UnimplementedBlobCacheServer) RemoveClientLock(context.Context, *RemoveClientLockRequest) (*RemoveClientLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveClientLock not implemented")
 }
-func (UnimplementedBlobCacheServer) RetrieveEntry(context.Context, *RetrieveEntryRequest) (*RetrieveEntryResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RetrieveEntry not implemented")
+func (UnimplementedBlobCacheServer) SetStoreFromContentLock(context.Context, *SetStoreFromContentLockRequest) (*SetStoreFromContentLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetStoreFromContentLock not implemented")
+}
+func (UnimplementedBlobCacheServer) RemoveStoreFromContentLock(context.Context, *RemoveStoreFromContentLockRequest) (*RemoveStoreFromContentLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveStoreFromContentLock not implemented")
 }
 func (UnimplementedBlobCacheServer) SetFsNode(context.Context, *SetFsNodeRequest) (*SetFsNodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetFsNode not implemented")
@@ -438,20 +454,38 @@ func _BlobCache_RemoveClientLock_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _BlobCache_RetrieveEntry_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RetrieveEntryRequest)
+func _BlobCache_SetStoreFromContentLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetStoreFromContentLockRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BlobCacheServer).RetrieveEntry(ctx, in)
+		return srv.(BlobCacheServer).SetStoreFromContentLock(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: BlobCache_RetrieveEntry_FullMethodName,
+		FullMethod: BlobCache_SetStoreFromContentLock_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BlobCacheServer).RetrieveEntry(ctx, req.(*RetrieveEntryRequest))
+		return srv.(BlobCacheServer).SetStoreFromContentLock(ctx, req.(*SetStoreFromContentLockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_RemoveStoreFromContentLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveStoreFromContentLockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).RemoveStoreFromContentLock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_RemoveStoreFromContentLock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).RemoveStoreFromContentLock(ctx, req.(*RemoveStoreFromContentLockRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -546,8 +580,12 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BlobCache_RemoveClientLock_Handler,
 		},
 		{
-			MethodName: "RetrieveEntry",
-			Handler:    _BlobCache_RetrieveEntry_Handler,
+			MethodName: "SetStoreFromContentLock",
+			Handler:    _BlobCache_SetStoreFromContentLock_Handler,
+		},
+		{
+			MethodName: "RemoveStoreFromContentLock",
+			Handler:    _BlobCache_RemoveStoreFromContentLock_Handler,
 		},
 		{
 			MethodName: "SetFsNode",

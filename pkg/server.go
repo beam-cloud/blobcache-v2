@@ -86,7 +86,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		return nil, err
 	}
 
-	for _, sourceConfig := range cfg.Global.Sources {
+	for _, sourceConfig := range cfg.Server.Sources {
 		_, err := NewSource(sourceConfig)
 		if err != nil {
 			Logger.Errorf("Failed to configure content source: %+v", err)

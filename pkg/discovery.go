@@ -34,12 +34,7 @@ func (d *DiscoveryClient) updateHostMap(newHosts []*BlobCacheHost) {
 
 // Used by blobcache servers to discover their closest peers
 func (d *DiscoveryClient) Start(ctx context.Context) error {
-	// Default to coordinator discovery if no mode is specified
-	if d.cfg.DiscoveryMode == "" {
-		d.cfg.DiscoveryMode = string(DiscoveryModeCoordinator)
-	}
-
-	hosts, err := d.FindNearbyHosts(ctx)
+	hosts, err := d.discoverHosts(ctx)
 	if err == nil {
 		d.updateHostMap(hosts)
 	}
@@ -48,7 +43,7 @@ func (d *DiscoveryClient) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			hosts, err := d.FindNearbyHosts(ctx)
+			hosts, err := d.discoverHosts(ctx)
 			if err != nil {
 				continue
 			}
@@ -60,7 +55,7 @@ func (d *DiscoveryClient) Start(ctx context.Context) error {
 	}
 }
 
-func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*BlobCacheHost, error) {
+func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, error) {
 	hosts, err := d.coordinator.GetAvailableHosts(ctx, "myregion")
 	if err != nil {
 		return nil, err
@@ -97,23 +92,6 @@ func (d *DiscoveryClient) discoverHostsViaCoordinator(ctx context.Context) ([]*B
 
 	wg.Wait()
 	return filteredHosts, nil
-}
-
-func (d *DiscoveryClient) FindNearbyHosts(ctx context.Context) ([]*BlobCacheHost, error) {
-	var hosts []*BlobCacheHost
-	var err error
-
-	switch d.cfg.DiscoveryMode {
-	case string(DiscoveryModeCoordinator):
-		hosts, err = d.discoverHostsViaCoordinator(ctx)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("invalid discovery mode: %s", d.cfg.DiscoveryMode)
-	}
-
-	return hosts, nil
 }
 
 // GetHostState attempts to connect to the gRPC service and verifies its availability

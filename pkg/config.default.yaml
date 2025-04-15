@@ -21,7 +21,6 @@ global:
   coordinatorHost:
   serverPort: 2049
   discoveryIntervalS: 5
-  discoveryMode: metadata
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
   grpcDialTimeoutS: 1

@@ -21,7 +21,10 @@ service BlobCache {
   rpc SetClientLock(SetClientLockRequest) returns (SetClientLockResponse) {}
   rpc RemoveClientLock(RemoveClientLockRequest)
       returns (RemoveClientLockResponse) {}
-  rpc RetrieveEntry(RetrieveEntryRequest) returns (RetrieveEntryResponse) {}
+  rpc SetStoreFromContentLock(SetStoreFromContentLockRequest)
+      returns (SetStoreFromContentLockResponse) {}
+  rpc RemoveStoreFromContentLock(RemoveStoreFromContentLockRequest)
+      returns (RemoveStoreFromContentLockResponse) {}
   rpc SetFsNode(SetFsNodeRequest) returns (SetFsNodeResponse) {}
   rpc GetFsNode(GetFsNodeRequest) returns (GetFsNodeResponse) {}
   rpc GetFsNodeChildren(GetFsNodeChildrenRequest)
@@ -93,12 +96,13 @@ message RemoveClientLockRequest {
 
 message RemoveClientLockResponse {}
 
-message RetrieveEntryRequest { string hash = 1; }
+message SetStoreFromContentLockRequest { string source_path = 1; }
 
-message RetrieveEntryResponse {
-  string hash = 1;
-  string host = 2;
-}
+message SetStoreFromContentLockResponse {}
+
+message RemoveStoreFromContentLockRequest { string source_path = 1; }
+
+message RemoveStoreFromContentLockResponse {}
 
 message SetFsNodeRequest {
   string path = 1;
