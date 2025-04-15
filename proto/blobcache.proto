@@ -25,10 +25,16 @@ service BlobCache {
       returns (SetStoreFromContentLockResponse) {}
   rpc RemoveStoreFromContentLock(RemoveStoreFromContentLockRequest)
       returns (RemoveStoreFromContentLockResponse) {}
+  rpc RefreshStoreFromContentLock(RefreshStoreFromContentLockRequest)
+      returns (RefreshStoreFromContentLockResponse) {}
   rpc SetFsNode(SetFsNodeRequest) returns (SetFsNodeResponse) {}
   rpc GetFsNode(GetFsNodeRequest) returns (GetFsNodeResponse) {}
   rpc GetFsNodeChildren(GetFsNodeChildrenRequest)
       returns (GetFsNodeChildrenResponse) {}
+  rpc AddFsNodeChild(AddFsNodeChildRequest) returns (AddFsNodeChildResponse) {}
+  rpc AddHostToIndex(AddHostToIndexRequest) returns (AddHostToIndexResponse) {}
+  rpc SetHostKeepAlive(SetHostKeepAliveRequest)
+      returns (SetHostKeepAliveResponse) {}
 }
 
 message GetContentRequest {
@@ -45,21 +51,23 @@ message GetContentResponse {
 message StoreContentRequest { bytes content = 1; }
 
 message StoreContentResponse {
-  string hash = 1; // Hash of the stored content
-  bool ok = 2;
+  bool ok = 1;
+  string hash = 2; // Hash of the stored content
 }
 
 message StoreContentFromSourceWithLockResponse {
   string hash = 1; // Hash of the stored content
-  bool failed_to_acquire_lock = 2;
+  bool ok = 2;
+  bool failed_to_acquire_lock = 3;
 }
 
 message GetStateRequest {}
 
 message GetStateResponse {
-  string version = 1;
-  float capacity_usage_pct = 2;
-  string private_ip_addr = 3;
+  bool ok = 1;
+  string version = 2;
+  float capacity_usage_pct = 3;
+  string private_ip_addr = 4;
 }
 
 message StoreContentFromSourceRequest {
@@ -74,90 +82,116 @@ message StoreContentFromSourceResponse {
 
 message GetAvailableHostsRequest { string locality = 1; }
 
-message GetAvailableHostsResponse { repeated BlobCacheHost hosts = 1; }
+message GetAvailableHostsResponse {
+  bool ok = 1;
+  repeated BlobCacheHost hosts = 2;
+}
 
 message BlobCacheHost {
-  string host = 1;
+  string host_id = 1;
   string addr = 2;
   string private_ip_addr = 3;
+  float capacity_usage_pct = 4;
 }
 
 message SetClientLockRequest {
   string hash = 1;
-  string host = 2;
+  string host_id = 2;
 }
 
-message SetClientLockResponse {}
+message SetClientLockResponse { bool ok = 1; }
 
 message RemoveClientLockRequest {
   string hash = 1;
-  string host = 2;
+  string host_id = 2;
 }
 
-message RemoveClientLockResponse {}
+message RemoveClientLockResponse { bool ok = 1; }
 
-message SetStoreFromContentLockRequest { string source_path = 1; }
+message SetStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
 
-message SetStoreFromContentLockResponse {}
+message SetStoreFromContentLockResponse { bool ok = 1; }
 
-message RemoveStoreFromContentLockRequest { string source_path = 1; }
+message RefreshStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
 
-message RemoveStoreFromContentLockResponse {}
+message RefreshStoreFromContentLockResponse { bool ok = 1; }
+
+message RemoveStoreFromContentLockRequest {
+  string locality = 1;
+  string source_path = 2;
+}
+
+message RemoveStoreFromContentLockResponse { bool ok = 1; }
 
 message SetFsNodeRequest {
-  string path = 1;
-  string hash = 2;
-  uint64 size = 3;
-  uint64 blocks = 4;
-  uint64 atime = 5;
-  uint64 mtime = 6;
-  uint64 ctime = 7;
-  uint64 atimensec = 8;
-  uint64 mtimensec = 9;
-  uint64 ctimensec = 10;
-  uint64 mode = 11;
-  uint64 nlink = 12;
-  uint64 rdev = 13;
-  uint64 blksize = 14;
-  uint64 padding = 15;
-  uint64 uid = 16;
-  uint64 gid = 17;
-  uint64 gen = 18;
+  string id = 1;
+  BlobFsMetadata metadata = 2;
 }
 
-message SetFsNodeResponse {}
+message SetFsNodeResponse { bool ok = 1; }
 
 message GetFsNodeRequest { string id = 1; }
 
 message GetFsNodeResponse {
-  string id = 1;
-  string path = 2;
-  string hash = 3;
-  uint64 size = 4;
-  uint64 blocks = 5;
-  uint64 atime = 6;
-  uint64 mtime = 7;
-  uint64 ctime = 8;
-  uint64 atimensec = 9;
-  uint64 mtimensec = 10;
-  uint64 ctimensec = 11;
-  uint64 mode = 12;
-  uint64 nlink = 13;
-  uint64 rdev = 14;
-  uint64 blksize = 15;
-  uint64 padding = 16;
-  uint64 uid = 17;
-  uint64 gid = 18;
-  uint64 gen = 19;
+  bool ok = 1;
+  BlobFsMetadata metadata = 2;
 }
 
 message GetFsNodeChildrenRequest { string id = 1; }
 
-message GetFsNodeChildrenResponse { repeated FsNode children = 1; }
-
-message FsNode {
-  string id = 1;
-  string path = 2;
-  string hash = 3;
-  uint64 size = 4;
+message GetFsNodeChildrenResponse {
+  bool ok = 1;
+  repeated BlobFsMetadata children = 2;
 }
+
+message AddFsNodeChildRequest {
+  string pid = 1;
+  string id = 2;
+}
+
+message AddFsNodeChildResponse { bool ok = 1; }
+
+message BlobFsMetadata {
+  string pid = 1;
+  string id = 2;
+  string name = 3;
+  string path = 4;
+  string hash = 5;
+  uint64 ino = 6;
+  uint64 size = 7;
+  uint64 blocks = 8;
+  uint64 atime = 9;
+  uint64 mtime = 10;
+  uint64 ctime = 11;
+  uint32 atimensec = 12;
+  uint32 mtimensec = 13;
+  uint32 ctimensec = 14;
+  uint32 mode = 15;
+  uint32 nlink = 16;
+  uint32 rdev = 17;
+  uint32 blksize = 18;
+  uint32 padding = 19;
+  uint32 uid = 20;
+  uint32 gid = 21;
+  uint64 gen = 22;
+}
+
+message AddHostToIndexRequest {
+  string locality = 1;
+  BlobCacheHost host = 2;
+}
+
+message AddHostToIndexResponse { bool ok = 1; }
+
+message SetHostKeepAliveRequest {
+  string locality = 1;
+  BlobCacheHost host = 2;
+}
+
+message SetHostKeepAliveResponse { bool ok = 1; }

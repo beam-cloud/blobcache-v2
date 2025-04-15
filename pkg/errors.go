@@ -17,14 +17,6 @@ var (
 	ErrUnableToAcquireLock     = errors.New("unable to acquire lock")
 )
 
-type ErrEntryNotFound struct {
-	Hash string
-}
-
-func (e *ErrEntryNotFound) Error() string {
-	return fmt.Sprintf("entry not found: %s", e.Hash)
-}
-
 type ErrNodeNotFound struct {
 	Id string
 }

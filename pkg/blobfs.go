@@ -16,31 +16,6 @@ import (
 	"github.com/moby/sys/mountinfo"
 )
 
-type BlobFsMetadata struct {
-	PID       string `redis:"pid" json:"pid"`
-	ID        string `redis:"id" json:"id"`
-	Name      string `redis:"name" json:"name"`
-	Path      string `redis:"path" json:"path"`
-	Hash      string `redis:"hash" json:"hash"`
-	Ino       uint64 `redis:"ino" json:"ino"`
-	Size      uint64 `redis:"size" json:"size"`
-	Blocks    uint64 `redis:"blocks" json:"blocks"`
-	Atime     uint64 `redis:"atime" json:"atime"`
-	Mtime     uint64 `redis:"mtime" json:"mtime"`
-	Ctime     uint64 `redis:"ctime" json:"ctime"`
-	Atimensec uint32 `redis:"atimensec" json:"atimensec"`
-	Mtimensec uint32 `redis:"mtimensec" json:"mtimensec"`
-	Ctimensec uint32 `redis:"ctimensec" json:"ctimensec"`
-	Mode      uint32 `redis:"mode" json:"mode"`
-	Nlink     uint32 `redis:"nlink" json:"nlink"`
-	Rdev      uint32 `redis:"rdev" json:"rdev"`
-	Blksize   uint32 `redis:"blksize" json:"blksize"`
-	Padding   uint32 `redis:"padding" json:"padding"`
-	Uid       uint32 `redis:"uid" json:"uid"`
-	Gid       uint32 `redis:"gid" json:"gid"`
-	Gen       uint64 `redis:"gen" json:"gen"`
-}
-
 type StorageLayer interface {
 }
 
@@ -62,7 +37,7 @@ func SHA1StringToUint64(hash string) (uint64, error) {
 type BlobFsSystemOpts struct {
 	Verbose           bool
 	CoordinatorClient CoordinatorClient
-	Config            BlobCacheConfig
+	Config            BlobCacheClientConfig
 	Client            *BlobCacheClient
 }
 
@@ -72,11 +47,11 @@ type BlobFs struct {
 	verbose           bool
 	CoordinatorClient CoordinatorClient
 	Client            *BlobCacheClient
-	Config            BlobCacheConfig
+	Config            BlobCacheClientConfig
 }
 
 func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan error, *fuse.Server, error) {
-	mountPoint := opts.Config.Client.BlobFs.MountPoint
+	mountPoint := opts.Config.BlobFs.MountPoint
 	Logger.Infof("Mounting to %s", mountPoint)
 
 	if _, err := os.Stat(mountPoint); os.IsNotExist(err) {
@@ -105,23 +80,23 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		EntryTimeout: &entryTimeout,
 	}
 
-	maxWriteKB := opts.Config.Client.BlobFs.MaxWriteKB
+	maxWriteKB := opts.Config.BlobFs.MaxWriteKB
 	if maxWriteKB <= 0 {
 		maxWriteKB = 1024
 	}
 
-	maxReadAheadKB := opts.Config.Client.BlobFs.MaxReadAheadKB
+	maxReadAheadKB := opts.Config.BlobFs.MaxReadAheadKB
 	if maxReadAheadKB <= 0 {
 		maxReadAheadKB = 128
 	}
 
-	maxBackgroundTasks := opts.Config.Client.BlobFs.MaxBackgroundTasks
+	maxBackgroundTasks := opts.Config.BlobFs.MaxBackgroundTasks
 	if maxBackgroundTasks <= 0 {
 		maxBackgroundTasks = 512
 	}
 
 	options := []string{}
-	options = append(options, opts.Config.Client.BlobFs.Options...)
+	options = append(options, opts.Config.BlobFs.Options...)
 
 	server, err := fuse.NewServer(fs.NewNodeFS(root, fsOptions), mountPoint, &fuse.MountOptions{
 		MaxBackground:        maxBackgroundTasks,
@@ -132,7 +107,7 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 		MaxReadAhead:         maxReadAheadKB * 1024,
 		MaxWrite:             maxWriteKB * 1024,
 		Options:              options,
-		DirectMount:          opts.Config.Client.BlobFs.DirectMount,
+		DirectMount:          opts.Config.BlobFs.DirectMount,
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("could not create server: %v", err)

@@ -10,12 +10,13 @@ type CoordinatorClient interface {
 	GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error)
 	SetClientLock(ctx context.Context, hash string, host string) error
 	RemoveClientLock(ctx context.Context, hash string, host string) error
-	SetStoreFromContentLock(ctx context.Context, sourcePath string) error
-	RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error
-	RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error
+	SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error
+	RemoveStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error
+	RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error
 	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
 	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
 	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
+	AddFsNodeChild(ctx context.Context, pid, id string) error
 }
 
 type CoordinatorClientLocal struct {
@@ -42,16 +43,16 @@ func (c *CoordinatorClientLocal) SetHostKeepAlive(ctx context.Context, locality 
 	return c.metadata.SetHostKeepAlive(ctx, locality, host)
 }
 
-func (c *CoordinatorClientLocal) SetStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return c.metadata.SetStoreFromContentLock(ctx, sourcePath)
+func (c *CoordinatorClientLocal) SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return c.metadata.SetStoreFromContentLock(ctx, locality, sourcePath)
 }
 
-func (c *CoordinatorClientLocal) RemoveStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return c.metadata.RemoveStoreFromContentLock(ctx, sourcePath)
+func (c *CoordinatorClientLocal) RemoveStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return c.metadata.RemoveStoreFromContentLock(ctx, locality, sourcePath)
 }
 
-func (c *CoordinatorClientLocal) RefreshStoreFromContentLock(ctx context.Context, sourcePath string) error {
-	return c.metadata.RefreshStoreFromContentLock(ctx, sourcePath)
+func (c *CoordinatorClientLocal) RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {
+	return c.metadata.RefreshStoreFromContentLock(ctx, locality, sourcePath)
 }
 
 func (c *CoordinatorClientLocal) GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
@@ -74,6 +75,10 @@ func (c *CoordinatorClientLocal) SetFsNode(ctx context.Context, id string, metad
 
 func (c *CoordinatorClientLocal) GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error) {
 	return c.metadata.GetFsNode(ctx, id)
+}
+
+func (c *CoordinatorClientLocal) AddFsNodeChild(ctx context.Context, pid, id string) error {
+	return c.metadata.AddFsNodeChild(ctx, pid, id)
 }
 
 func (c *CoordinatorClientLocal) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {

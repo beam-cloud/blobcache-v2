@@ -153,7 +153,7 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 	n.log("Open called with flags: %v", flags)
 
 	// Enable DirectIO if specified
-	if n.filesystem.Config.Client.BlobFs.DirectIO {
+	if n.filesystem.Config.BlobFs.DirectIO {
 		fuseFlags |= fuse.FOPEN_DIRECT_IO
 		fuseFlags &= ^uint32(fuse.FOPEN_KEEP_CACHE)
 		return nil, fuseFlags, fs.OK
@@ -172,6 +172,23 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 
 	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
 	if err != nil {
+		if err == ErrContentNotFound {
+
+			sourcePath := n.bfsNode.Path
+
+			_, err := n.filesystem.Client.StoreContentFromSourceWithLock(sourcePath, 0)
+			if err != nil && err == ErrUnableToAcquireLock {
+				return nil, syscall.EAGAIN
+			} else if err != nil {
+				return nil, syscall.EIO
+			}
+
+			buffer, err = n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+			if err != nil {
+				return nil, syscall.EIO
+			}
+		}
+
 		return nil, syscall.EIO
 	}
 

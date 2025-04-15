@@ -12,11 +12,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
+	"github.com/djherbis/atime"
 	"github.com/google/uuid"
+	"github.com/hanwen/go-fuse/v2/fuse"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -36,7 +39,8 @@ type CacheService struct {
 	ctx  context.Context
 	mode BlobCacheServerMode
 	proto.UnimplementedBlobCacheServer
-	hostname      string
+	hostId        string
+	locality      string
 	privateIpAddr string
 	publicIpAddr  string
 	cas           *ContentAddressableStorage
@@ -45,12 +49,10 @@ type CacheService struct {
 	coordinator   CoordinatorClient
 }
 
-func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
-
+func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
+	hostId := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 	currentHost := &BlobCacheHost{
-		Addr: fmt.Sprintf("%s:%d", hostname, cfg.Global.ServerPort),
-		RTT:  0,
+		RTT: 0,
 	}
 
 	var coordinator CoordinatorClient
@@ -76,12 +78,12 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
 
-	currentHost.Host = hostname
+	currentHost.HostId = hostId
 	currentHost.Addr = fmt.Sprintf("%s:%d", publicIpAddr, cfg.Global.ServerPort)
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
 
-	cas, err := NewContentAddressableStorage(ctx, currentHost, "myregion", coordinator, cfg)
+	cas, err := NewContentAddressableStorage(ctx, currentHost, locality, coordinator, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +101,8 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	cs := &CacheService{
 		ctx:           ctx,
 		mode:          cfg.Server.Mode,
-		hostname:      hostname,
+		hostId:        hostId,
+		locality:      locality,
 		cas:           cas,
 		serverConfig:  cfg.Server,
 		globalConfig:  cfg.Global,
@@ -109,17 +112,16 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	}
 
 	go cs.HostKeepAlive()
-
 	return cs, nil
 }
 
 func (cs *CacheService) HostKeepAlive() {
-	err := cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.locality, cs.cas.currentHost)
+	err := cs.coordinator.SetHostKeepAlive(cs.ctx, cs.locality, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to set host keepalive: %v", err)
 	}
 
-	err = cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.locality, cs.cas.currentHost)
+	err = cs.coordinator.AddHostToIndex(cs.ctx, cs.locality, cs.cas.currentHost)
 	if err != nil {
 		Logger.Warnf("Failed to add host to index: %v", err)
 	}
@@ -135,8 +137,8 @@ func (cs *CacheService) HostKeepAlive() {
 			cs.cas.currentHost.PrivateAddr = fmt.Sprintf("%s:%d", cs.privateIpAddr, cs.globalConfig.ServerPort)
 			cs.cas.currentHost.CapacityUsagePct = cs.usagePct()
 
-			cs.coordinator.AddHostToIndex(cs.ctx, cs.cas.locality, cs.cas.currentHost)
-			cs.coordinator.SetHostKeepAlive(cs.ctx, cs.cas.locality, cs.cas.currentHost)
+			cs.coordinator.AddHostToIndex(cs.ctx, cs.locality, cs.cas.currentHost)
+			cs.coordinator.SetHostKeepAlive(cs.ctx, cs.locality, cs.cas.currentHost)
 		}
 	}
 }
@@ -158,7 +160,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.serverConfig)
+	Logger.Infof("Running %s@%s, cfg: %+v", cs.hostId, addr, cs.serverConfig)
 
 	go s.Serve(localListener)
 
@@ -247,17 +249,110 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	// if sourcePath != "" && cs.metadata != nil {
-	// 	err := cs.metadata.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
-	// 	if err != nil {
-	// 		Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
-	// 		return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
-	// 	}
-	// }
+	if sourcePath != "" && cs.coordinator != nil {
+		err := cs.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
+		if err != nil {
+			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
+			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
+		}
+	}
 
 	Logger.Infof("Store[OK] - [%s]", hash)
 	content = nil
 	return hash, nil
+}
+
+func (cs *CacheService) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
+	path = filepath.Join("/", filepath.Clean(path))
+	parts := strings.Split(path, string(filepath.Separator))
+
+	rootParentId := GenerateFsID("/")
+
+	// Iterate over the components and construct the path hierarchy
+	currentPath := "/"
+	previousParentId := rootParentId // start with the root ID
+	for i, part := range parts {
+		if i == 0 && part == "" {
+			continue // Skip the empty part for root
+		}
+
+		if currentPath == "/" {
+			currentPath = filepath.Join("/", part)
+		} else {
+			currentPath = filepath.Join(currentPath, part)
+		}
+
+		currentNodeId := GenerateFsID(currentPath)
+		inode, err := SHA1StringToUint64(currentNodeId)
+		if err != nil {
+			return err
+		}
+
+		// Initialize default metadata
+		now := time.Now()
+		nowSec := uint64(now.Unix())
+		nowNsec := uint32(now.Nanosecond())
+		metadata := &BlobFsMetadata{
+			PID:       previousParentId,
+			ID:        currentNodeId,
+			Name:      part,
+			Path:      currentPath,
+			Ino:       inode,
+			Mode:      fuse.S_IFDIR | 0755,
+			Atime:     nowSec,
+			Mtime:     nowSec,
+			Ctime:     nowSec,
+			Atimensec: nowNsec,
+			Mtimensec: nowNsec,
+			Ctimensec: nowNsec,
+		}
+
+		// If currentPath matches the input path, use the actual file info
+		if currentPath == path {
+			fileInfo, err := os.Stat(currentPath)
+			if err != nil {
+				return err
+			}
+
+			// Update metadata fields with actual file info values
+			modTime := fileInfo.ModTime()
+			accessTime := atime.Get(fileInfo)
+			metadata.Mode = uint32(fileInfo.Mode())
+			metadata.Atime = uint64(accessTime.Unix())
+			metadata.Atimensec = uint32(accessTime.Nanosecond())
+			metadata.Mtime = uint64(modTime.Unix())
+			metadata.Mtimensec = uint32(modTime.Nanosecond())
+
+			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
+			metadata.Ctime = uint64(modTime.Unix())
+			metadata.Ctimensec = uint32(modTime.Nanosecond())
+
+			metadata.Size = uint64(fileInfo.Size())
+			if fileInfo.IsDir() {
+				metadata.Hash = GenerateFsID(currentPath)
+				metadata.Size = 0
+			} else {
+				metadata.Hash = hash
+				metadata.Size = size
+			}
+		}
+
+		// Set metadata
+		err = cs.coordinator.SetFsNode(ctx, currentNodeId, metadata)
+		if err != nil {
+			return err
+		}
+
+		// Add the current node as a child of the previous node
+		err = cs.coordinator.AddFsNodeChild(ctx, previousParentId, currentNodeId)
+		if err != nil {
+			return err
+		}
+
+		previousParentId = currentNodeId
+	}
+
+	return nil
 }
 
 func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) error {
@@ -315,14 +410,14 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
 		Logger.Infof("StoreFromContent[ERR] - source not found: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.NotFound, "File does not exist: %s", localPath)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	// Open the file
 	file, err := os.Open(localPath)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error reading source: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, status.Errorf(codes.Internal, "Failed to open file: %v", err)
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 	defer file.Close()
 
@@ -337,7 +432,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	hash, err := cs.store(ctx, &buffer, localPath, req.SourceOffset)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error storing data in cache: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, err
+		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
 	}
 
 	buffer.Reset()
@@ -349,27 +444,10 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	return &proto.StoreContentFromSourceResponse{Ok: true, Hash: hash}, nil
 }
 
-func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAvailableHostsRequest) (*proto.GetAvailableHostsResponse, error) {
-	Logger.Infof("GetAvailableHosts[ACK] - [%s]", req.Locality)
-
-	hosts, err := cs.coordinator.GetAvailableHosts(ctx, req.Locality)
-	if err != nil {
-		return nil, err
-	}
-
-	protoHosts := make([]*proto.BlobCacheHost, 0)
-	for _, host := range hosts {
-		protoHosts = append(protoHosts, &proto.BlobCacheHost{Host: host.Host, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr})
-	}
-
-	Logger.Infof("GetAvailableHosts[OK] - [%s]", protoHosts)
-	return &proto.GetAvailableHostsResponse{Hosts: protoHosts}, nil
-}
-
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.SourcePath
-	if err := cs.coordinator.SetStoreFromContentLock(ctx, sourcePath); err != nil {
-		return &proto.StoreContentFromSourceWithLockResponse{FailedToAcquireLock: true}, nil
+	if err := cs.coordinator.SetStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
+		return &proto.StoreContentFromSourceWithLockResponse{Ok: false, FailedToAcquireLock: true}, nil
 	}
 
 	storeContext, cancel := context.WithCancel(ctx)
@@ -384,19 +462,19 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 				return
 			case <-ticker.C:
 				Logger.Infof("StoreContentFromSourceWithLock[REFRESH] - [%s]", sourcePath)
-				cs.coordinator.RefreshStoreFromContentLock(ctx, sourcePath)
+				cs.coordinator.RefreshStoreFromContentLock(ctx, cs.locality, sourcePath)
 			}
 		}
 	}()
 
 	storeContentFromSourceResp, err := cs.StoreContentFromSource(storeContext, req)
 	if err != nil {
-		return nil, err
+		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false}, nil
 	}
 
-	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, sourcePath); err != nil {
+	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
 		Logger.Errorf("StoreContentFromSourceWithLock[ERR] - error removing lock: %v", err)
 	}
 
-	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash}, nil
+	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash, Ok: true}, nil
 }

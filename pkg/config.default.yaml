@@ -12,12 +12,16 @@ server:
     redisTLSEnabled: false
 client:
   token:
+  nTopHosts: 3
+  minRetryLengthBytes: 10000000 # 10MB
+  maxGetContentAttempts: 3
   blobfs:
     directIO: false
     mountPoint: /tmp/test
     maxBackgroundTasks: 512
     maxReadAheadKB: 128
 global:
+  defaultLocality: us-east-1
   coordinatorHost:
   serverPort: 2049
   discoveryIntervalS: 5

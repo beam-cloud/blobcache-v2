@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -46,19 +47,19 @@ type RendezvousHasher interface {
 }
 
 type BlobCacheClient struct {
-	ctx                     context.Context
-	clientConfig            BlobCacheClientConfig
-	globalConfig            BlobCacheGlobalConfig
-	hostname                string
-	grpcClients             map[string]proto.BlobCacheClient
-	hostMap                 *HostMap
-	mu                      sync.RWMutex
-	discoveryClient         *DiscoveryClient
-	coordinator             CoordinatorClient
-	closestHostWithCapacity *BlobCacheHost
-	localHostCache          map[string]*localClientCache
-	blobfsServer            *fuse.Server
-	hasher                  RendezvousHasher
+	ctx             context.Context
+	locality        string
+	clientConfig    BlobCacheClientConfig
+	globalConfig    BlobCacheGlobalConfig
+	hostId          string
+	grpcClients     map[string]proto.BlobCacheClient
+	hostMap         *HostMap
+	mu              sync.RWMutex
+	discoveryClient *DiscoveryClient
+	coordinator     CoordinatorClient
+	localHostCache  map[string]*localClientCache
+	blobfsServer    *fuse.Server
+	hasher          RendezvousHasher
 }
 
 type localClientCache struct {
@@ -67,27 +68,33 @@ type localClientCache struct {
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
+	hostId := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
 	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	if err != nil {
 		return nil, err
 	}
 
+	locality := os.Getenv("BLOBCACHE_LOCALITY")
+	if locality == "" {
+		Logger.Infof("BLOBCACHE_LOCALITY is not set, using default locality: %s", cfg.Global.DefaultLocality)
+		locality = cfg.Global.DefaultLocality
+	}
+
 	bc := &BlobCacheClient{
-		ctx:                     ctx,
-		clientConfig:            cfg.Client,
-		globalConfig:            cfg.Global,
-		hostname:                hostname,
-		grpcClients:             make(map[string]proto.BlobCacheClient),
-		localHostCache:          make(map[string]*localClientCache),
-		mu:                      sync.RWMutex{},
-		coordinator:             coordinator,
-		closestHostWithCapacity: nil,
+		ctx:            ctx,
+		locality:       locality,
+		clientConfig:   cfg.Client,
+		globalConfig:   cfg.Global,
+		hostId:         hostId,
+		grpcClients:    make(map[string]proto.BlobCacheClient),
+		localHostCache: make(map[string]*localClientCache),
+		mu:             sync.RWMutex{},
+		coordinator:    coordinator,
 	}
 
 	bc.hostMap = NewHostMap(cfg.Global, bc.addHost)
-	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator)
+	bc.discoveryClient = NewDiscoveryClient(cfg.Global, bc.hostMap, coordinator, locality)
 	bc.hasher = rendezvous.New[*BlobCacheHost]()
 
 	// Start searching for nearby blobcache hosts
@@ -99,7 +106,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 	// Mount cache as a FUSE filesystem if blobfs is enabled
 	if bc.clientConfig.BlobFs.Enabled {
 		startServer, _, server, err := Mount(ctx, BlobFsSystemOpts{
-			Config:            cfg,
+			Config:            cfg.Client,
 			CoordinatorClient: coordinator,
 			Client:            bc,
 			Verbose:           bc.globalConfig.DebugMode,
@@ -132,7 +139,7 @@ func (c *BlobCacheClient) Cleanup() error {
 }
 
 func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
-	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, "myregion")
+	hosts, err := c.coordinator.GetAvailableHosts(c.ctx, c.locality)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +186,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.grpcClients[host.Host] = proto.NewBlobCacheClient(conn)
+	c.grpcClients[host.HostId] = proto.NewBlobCacheClient(conn)
 	c.hasher.Add(host)
 
 	go c.monitorHost(host)
@@ -194,7 +201,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 		select {
 		case <-ticker.C:
 			err := func() error {
-				client, exists := c.grpcClients[host.Host]
+				client, exists := c.grpcClients[host.HostId]
 				if !exists {
 					return ErrHostNotFound
 				}
@@ -219,10 +226,6 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 				c.hostMap.Remove(host)
 				c.hasher.Remove(host)
 
-				if c.closestHostWithCapacity != nil && c.closestHostWithCapacity.Addr == host.Addr {
-					c.closestHostWithCapacity = nil
-				}
-
 				delete(c.grpcClients, host.Addr)
 
 				return
@@ -238,11 +241,17 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	for attempt := 0; attempt < 3; attempt += 1 {
-		client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-			rt:   ClientRequestTypeRetrieval,
-			hash: hash,
-			key:  hash,
+	maxAttempts := 1
+	if length > c.clientConfig.MinRetryLengthBytes {
+		maxAttempts = c.clientConfig.MaxGetContentAttempts
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt += 1 {
+		client, _, err := c.getGRPCClient(&ClientRequest{
+			rt:        ClientRequestTypeRetrieval,
+			hash:      hash,
+			key:       hash,
+			hostIndex: attempt,
 		})
 		if err != nil {
 			return nil, err
@@ -251,6 +260,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
+
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
 			c.mu.Unlock()
@@ -273,11 +283,13 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 		defer close(contentChan)
 		defer cancel()
 
-		for attempt := 0; attempt < 3; attempt++ {
-			client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-				rt:   ClientRequestTypeRetrieval,
-				hash: hash,
-				key:  hash,
+		maxAttempts := 3
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			client, _, err := c.getGRPCClient(&ClientRequest{
+				rt:        ClientRequestTypeRetrieval,
+				hash:      hash,
+				key:       hash,
+				hostIndex: attempt,
 			})
 			if err != nil {
 				return
@@ -330,6 +342,7 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 					}
 				}
 				c.mu.RUnlock()
+
 				c.mu.Lock()
 				for _, hash := range stale {
 					delete(c.localHostCache, hash)
@@ -343,14 +356,13 @@ func (c *BlobCacheClient) manageLocalClientCache(ttl time.Duration, interval tim
 	}()
 }
 
-func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
+func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCacheClient, *BlobCacheHost, error) {
 	var host *BlobCacheHost = nil
 
-	hostIndex := 0
 	switch request.rt {
 	case ClientRequestTypeStorage:
-		// TODO: Make N configurable and cycle through hosts based on attempt number
-		hosts := c.hasher.GetN(3, request.key)
+		hosts := c.hasher.GetN(c.clientConfig.NTopHosts, request.key)
+		hostIndex := min(int64(request.hostIndex), int64(len(hosts)-1))
 
 		if len(hosts) > 0 {
 			host = hosts[hostIndex]
@@ -366,8 +378,8 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		} else {
 			c.mu.Lock()
 
-			// TODO: Make N configurable and cycle through hosts based on attempt number
-			hosts := c.hasher.GetN(3, request.key)
+			hosts := c.hasher.GetN(c.clientConfig.NTopHosts, request.key)
+			hostIndex := min(int64(request.hostIndex), int64(len(hosts)-1))
 
 			if len(hosts) == 0 {
 				host = nil
@@ -389,11 +401,12 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		return nil, nil, ErrHostNotFound
 	}
 
-	client, exists := c.grpcClients[host.Host]
+	client, exists := c.grpcClients[host.HostId]
 	if !exists {
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)
 		c.mu.Unlock()
+
 		return nil, nil, ErrHostNotFound
 	}
 
@@ -404,10 +417,11 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt:   ClientRequestTypeStorage,
-		hash: hash,
-		key:  hash,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		hash:      hash,
+		key:       hash,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -439,9 +453,10 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt:  ClientRequestTypeStorage,
-		key: sourcePath,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       sourcePath,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -459,9 +474,10 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt:  ClientRequestTypeStorage,
-		key: sourcePath,
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       sourcePath,
+		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
@@ -474,6 +490,10 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 
 	if resp.FailedToAcquireLock {
 		return "", ErrUnableToAcquireLock
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
 	}
 
 	return resp.Hash, nil
@@ -513,7 +533,7 @@ func (c *BlobCacheClient) GetState() error {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
-	client, _, err := c.getGRPCClient(ctx, &ClientRequest{rt: ClientRequestTypeRetrieval})
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
 	if err != nil {
 		return err
 	}

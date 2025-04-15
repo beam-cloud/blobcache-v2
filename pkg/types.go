@@ -2,6 +2,8 @@ package blobcache
 
 import (
 	"time"
+
+	proto "github.com/beam-cloud/blobcache-v2/proto"
 )
 
 const (
@@ -16,12 +18,6 @@ const (
 	defaultHostKeepAliveTimeoutS           int     = 60
 )
 
-type DiscoveryMode string
-
-const (
-	DiscoveryModeCoordinator DiscoveryMode = "coordinator"
-)
-
 type BlobCacheConfig struct {
 	Server BlobCacheServerConfig `key:"server" json:"server"`
 	Client BlobCacheClientConfig `key:"client" json:"client"`
@@ -29,6 +25,7 @@ type BlobCacheConfig struct {
 }
 
 type BlobCacheGlobalConfig struct {
+	DefaultLocality                 string  `key:"defaultLocality" json:"default_locality"`
 	CoordinatorHost                 string  `key:"coordinatorHost" json:"coordinator_host"`
 	ServerPort                      uint    `key:"serverPort" json:"server_port"`
 	DiscoveryIntervalS              int     `key:"discoveryIntervalS" json:"discovery_interval_s"`
@@ -60,8 +57,11 @@ type BlobCacheServerConfig struct {
 }
 
 type BlobCacheClientConfig struct {
-	Token  string       `key:"token" json:"token"`
-	BlobFs BlobFsConfig `key:"blobfs" json:"blobfs"`
+	Token                 string       `key:"token" json:"token"`
+	MinRetryLengthBytes   int64        `key:"minRetryLengthBytes" json:"min_retry_length_bytes"`
+	MaxGetContentAttempts int          `key:"maxGetContentAttempts" json:"max_get_content_attempts"`
+	NTopHosts             int          `key:"nTopHosts" json:"n_top_hosts"`
+	BlobFs                BlobFsConfig `key:"blobfs" json:"blobfs"`
 }
 
 type BlobCacheMetadataMode string
@@ -139,6 +139,57 @@ type BlobFsConfig struct {
 	Options            []string `key:"options" json:"options"`
 }
 
+type BlobFsMetadata struct {
+	PID       string `redis:"pid" json:"pid"`
+	ID        string `redis:"id" json:"id"`
+	Name      string `redis:"name" json:"name"`
+	Path      string `redis:"path" json:"path"`
+	Hash      string `redis:"hash" json:"hash"`
+	Ino       uint64 `redis:"ino" json:"ino"`
+	Size      uint64 `redis:"size" json:"size"`
+	Blocks    uint64 `redis:"blocks" json:"blocks"`
+	Atime     uint64 `redis:"atime" json:"atime"`
+	Mtime     uint64 `redis:"mtime" json:"mtime"`
+	Ctime     uint64 `redis:"ctime" json:"ctime"`
+	Atimensec uint32 `redis:"atimensec" json:"atimensec"`
+	Mtimensec uint32 `redis:"mtimensec" json:"mtimensec"`
+	Ctimensec uint32 `redis:"ctimensec" json:"ctimensec"`
+	Mode      uint32 `redis:"mode" json:"mode"`
+	Nlink     uint32 `redis:"nlink" json:"nlink"`
+	Rdev      uint32 `redis:"rdev" json:"rdev"`
+	Blksize   uint32 `redis:"blksize" json:"blksize"`
+	Padding   uint32 `redis:"padding" json:"padding"`
+	Uid       uint32 `redis:"uid" json:"uid"`
+	Gid       uint32 `redis:"gid" json:"gid"`
+	Gen       uint64 `redis:"gen" json:"gen"`
+}
+
+func (m *BlobFsMetadata) ToProto() *proto.BlobFsMetadata {
+	return &proto.BlobFsMetadata{
+		Id:        m.ID,
+		Pid:       m.PID,
+		Name:      m.Name,
+		Path:      m.Path,
+		Hash:      m.Hash,
+		Size:      m.Size,
+		Blocks:    m.Blocks,
+		Atime:     m.Atime,
+		Mtime:     m.Mtime,
+		Ctime:     m.Ctime,
+		Atimensec: m.Atimensec,
+		Mtimensec: m.Mtimensec,
+		Ctimensec: m.Ctimensec,
+		Mode:      m.Mode,
+		Nlink:     m.Nlink,
+		Rdev:      m.Rdev,
+		Blksize:   m.Blksize,
+		Padding:   m.Padding,
+		Uid:       m.Uid,
+		Gid:       m.Gid,
+		Gen:       m.Gen,
+	}
+}
+
 type SourceConfig struct {
 	Mode           string           `key:"mode" json:"mode"`
 	FilesystemName string           `key:"fsName" json:"filesystem_name"`
@@ -169,7 +220,7 @@ type MountPointConfig struct {
 
 type BlobCacheHost struct {
 	RTT              time.Duration `redis:"rtt" json:"rtt"`
-	Host             string        `redis:"host" json:"host"`
+	HostId           string        `redis:"host_id" json:"host_id"`
 	Addr             string        `redis:"addr" json:"addr"`
 	PrivateAddr      string        `redis:"private_addr" json:"private_addr"`
 	CapacityUsagePct float64       `redis:"capacity_usage_pct" json:"capacity_usage_pct"`
@@ -177,13 +228,23 @@ type BlobCacheHost struct {
 
 // Bytes is needed for the rendezvous hasher
 func (h *BlobCacheHost) Bytes() []byte {
-	return []byte(h.Host)
+	return []byte(h.HostId)
+}
+
+func (h *BlobCacheHost) ToProto() *proto.BlobCacheHost {
+	return &proto.BlobCacheHost{
+		HostId:           h.HostId,
+		Addr:             h.Addr,
+		PrivateIpAddr:    h.PrivateAddr,
+		CapacityUsagePct: float32(h.CapacityUsagePct),
+	}
 }
 
 type ClientRequest struct {
-	rt   ClientRequestType
-	hash string
-	key  string
+	rt        ClientRequestType
+	hash      string
+	key       string // This key is used for rendezvous hashing / deterministic routing (it's usually the same as the hash)
+	hostIndex int
 }
 
 type ClientRequestType int
@@ -192,13 +253,6 @@ const (
 	ClientRequestTypeStorage ClientRequestType = iota
 	ClientRequestTypeRetrieval
 )
-
-type BlobCacheEntry struct {
-	Hash         string `redis:"hash" json:"hash"`
-	Size         int64  `redis:"size" json:"size"`
-	SourcePath   string `redis:"source_path" json:"source_path"`
-	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
-}
 
 // BlobFS types
 type FileSystemOpts struct {
