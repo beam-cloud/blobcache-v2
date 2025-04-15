@@ -179,6 +179,7 @@ type BlobCacheHost struct {
 type ClientRequest struct {
 	rt   ClientRequestType
 	hash string
+	key  string
 }
 
 type ClientRequestType int

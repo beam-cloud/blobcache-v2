@@ -235,6 +235,7 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		client, _, err := c.getGRPCClient(ctx, &ClientRequest{
 			rt:   ClientRequestTypeRetrieval,
 			hash: hash,
+			key:  hash,
 		})
 		if err != nil {
 			return nil, err
@@ -269,6 +270,7 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 			client, _, err := c.getGRPCClient(ctx, &ClientRequest{
 				rt:   ClientRequestTypeRetrieval,
 				hash: hash,
+				key:  hash,
 			})
 			if err != nil {
 				return
@@ -345,7 +347,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 	switch request.rt {
 	case ClientRequestTypeStorage:
 		// TODO: Make N configurable and cycle through hosts based on attempt number
-		hosts := c.hasher.GetN(3, request.hash)
+		hosts := c.hasher.GetN(3, request.key)
 
 		if len(hosts) > 0 {
 			host = hosts[hostIndex]
@@ -362,7 +364,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 			c.mu.Lock()
 
 			// TODO: Make N configurable and cycle through hosts based on attempt number
-			hosts := c.hasher.GetN(3, request.hash)
+			hosts := c.hasher.GetN(3, request.key)
 
 			if len(hosts) == 0 {
 				host = nil
@@ -402,6 +404,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
 		rt:   ClientRequestTypeStorage,
 		hash: hash,
+		key:  hash,
 	})
 	if err != nil {
 		return "", err
@@ -429,12 +432,13 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64, hash string) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
 	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+		rt:  ClientRequestTypeStorage,
+		key: sourcePath,
 	})
 	if err != nil {
 		return "", err
@@ -453,7 +457,8 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 	defer cancel()
 
 	client, _, err := c.getGRPCClient(ctx, &ClientRequest{
-		rt: ClientRequestTypeStorage,
+		rt:  ClientRequestTypeStorage,
+		key: sourcePath,
 	})
 	if err != nil {
 		return "", err
