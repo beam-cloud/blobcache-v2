@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 
@@ -71,11 +70,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		return nil, err
 	}
 
-	locality := os.Getenv("BLOBCACHE_LOCALITY")
-	if locality == "" {
-		Logger.Infof("BLOBCACHE_LOCALITY is not set, using default locality: %s", cfg.Global.DefaultLocality)
-		locality = cfg.Global.DefaultLocality
-	}
+	locality := cfg.Global.GetLocality()
 
 	bc := &BlobCacheClient{
 		ctx:                   ctx,

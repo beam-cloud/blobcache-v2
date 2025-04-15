@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 
 	blobcache "github.com/beam-cloud/blobcache-v2/pkg"
 )
@@ -19,12 +18,7 @@ func main() {
 
 	blobcache.InitLogger(cfg.Global.DebugMode, cfg.Global.PrettyLogs)
 
-	locality := os.Getenv("BLOBCACHE_LOCALITY")
-	if locality == "" {
-		blobcache.Logger.Infof("BLOBCACHE_LOCALITY is not set, using default locality: %s", cfg.Global.DefaultLocality)
-		locality = cfg.Global.DefaultLocality
-	}
-
+	locality := cfg.Global.GetLocality()
 	s, err := blobcache.NewCacheService(ctx, cfg, locality)
 	if err != nil {
 		log.Fatal(err)

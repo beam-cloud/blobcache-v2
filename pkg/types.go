@@ -1,6 +1,7 @@
 package blobcache
 
 import (
+	"os"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
@@ -36,6 +37,15 @@ type BlobCacheGlobalConfig struct {
 	DebugMode                       bool    `key:"debugMode" json:"debug_mode"`
 	TLSEnabled                      bool    `key:"tlsEnabled" json:"tls_enabled"`
 	PrettyLogs                      bool    `key:"prettyLogs" json:"pretty_logs"`
+}
+
+func (c *BlobCacheGlobalConfig) GetLocality() string {
+	locality := os.Getenv("BLOBCACHE_LOCALITY")
+	if locality != "" {
+		return locality
+	}
+
+	return c.DefaultLocality
 }
 
 type BlobCacheServerMode string
