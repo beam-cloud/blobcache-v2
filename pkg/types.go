@@ -16,12 +16,6 @@ const (
 	defaultHostKeepAliveTimeoutS           int     = 60
 )
 
-type DiscoveryMode string
-
-const (
-	DiscoveryModeCoordinator DiscoveryMode = "coordinator"
-)
-
 type BlobCacheConfig struct {
 	Server BlobCacheServerConfig `key:"server" json:"server"`
 	Client BlobCacheClientConfig `key:"client" json:"client"`
@@ -203,7 +197,7 @@ type BlobCacheHost struct {
 type ClientRequest struct {
 	rt   ClientRequestType
 	hash string
-	key  string
+	key  string // This key is used for rendezvous hashing / deterministic routing (it's usually the same as the hash)
 }
 
 type ClientRequestType int
@@ -212,13 +206,6 @@ const (
 	ClientRequestTypeStorage ClientRequestType = iota
 	ClientRequestTypeRetrieval
 )
-
-type BlobCacheEntry struct {
-	Hash         string `redis:"hash" json:"hash"`
-	Size         int64  `redis:"size" json:"size"`
-	SourcePath   string `redis:"source_path" json:"source_path"`
-	SourceOffset int64  `redis:"source_offset" json:"source_offset"`
-}
 
 // BlobFS types
 type FileSystemOpts struct {
