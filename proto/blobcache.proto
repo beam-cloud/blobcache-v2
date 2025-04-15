@@ -89,6 +89,7 @@ message BlobCacheHost {
   string host_id = 1;
   string addr = 2;
   string private_ip_addr = 3;
+  float capacity_usage_pct = 4;
 }
 
 message SetClientLockRequest {
