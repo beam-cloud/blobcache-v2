@@ -28,14 +28,14 @@ func (hm *HostMap) Set(host *BlobCacheHost) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	_, exists := hm.hosts[host.Host]
+	_, exists := hm.hosts[host.HostId]
 	if exists {
 		return
 	}
 
-	hm.hosts[host.Host] = host
+	hm.hosts[host.HostId] = host
 	if hm.onHostAdded != nil {
-		Logger.Infof("Added new host @ %s (PrivateAddr=%s, RTT=%s)", host.Host, host.PrivateAddr, host.RTT)
+		Logger.Infof("Added new host @ %s (PrivateAddr=%s, RTT=%s)", host.HostId, host.PrivateAddr, host.RTT)
 		hm.onHostAdded(host)
 	}
 }
@@ -44,13 +44,13 @@ func (hm *HostMap) Remove(host *BlobCacheHost) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	_, exists := hm.hosts[host.Host]
+	_, exists := hm.hosts[host.HostId]
 	if !exists {
 		return
 	}
 
-	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.Host, host.PrivateAddr, host.RTT)
-	delete(hm.hosts, host.Host)
+	Logger.Infof("Removed host @ %s (PrivateAddr=%s, RTT=%s)", host.HostId, host.PrivateAddr, host.RTT)
+	delete(hm.hosts, host.HostId)
 }
 
 func (hm *HostMap) Members() mapset.Set[string] {
@@ -59,7 +59,7 @@ func (hm *HostMap) Members() mapset.Set[string] {
 
 	set := mapset.NewSet[string]()
 	for host := range hm.hosts {
-		set.Add(hm.hosts[host].Host)
+		set.Add(hm.hosts[host].HostId)
 	}
 
 	return set
@@ -76,11 +76,11 @@ func (hm *HostMap) GetAll() []*BlobCacheHost {
 	return hosts
 }
 
-func (hm *HostMap) Get(hostName string) *BlobCacheHost {
+func (hm *HostMap) Get(hostId string) *BlobCacheHost {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
-	host, exists := hm.hosts[hostName]
+	host, exists := hm.hosts[hostId]
 	if !exists {
 		return nil
 	}

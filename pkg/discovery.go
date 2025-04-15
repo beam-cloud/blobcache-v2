@@ -68,7 +68,7 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 	for _, host := range hosts {
 		if host.PrivateAddr != "" {
 			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(host.Host) != nil {
+			if d.hostMap.Get(host.HostId) != nil {
 				continue
 			}
 

@@ -22,31 +22,31 @@ type getTestcase struct {
 func TestHashGet(t *testing.T) {
 	hostMap := NewHostMap(BlobCacheGlobalConfig{}, nil)
 
-	hostMap.Set(&BlobCacheHost{Host: "a"})
-	hostMap.Set(&BlobCacheHost{Host: "b"})
-	hostMap.Set(&BlobCacheHost{Host: "c"})
-	hostMap.Set(&BlobCacheHost{Host: "d"})
-	hostMap.Set(&BlobCacheHost{Host: "e"})
+	hostMap.Set(&BlobCacheHost{HostId: "a"})
+	hostMap.Set(&BlobCacheHost{HostId: "b"})
+	hostMap.Set(&BlobCacheHost{HostId: "c"})
+	hostMap.Set(&BlobCacheHost{HostId: "d"})
+	hostMap.Set(&BlobCacheHost{HostId: "e"})
 
 	hash := NewRendezvousHasher()
 	hash.Add(hostMap.GetAll()...)
 
 	gotHost := hash.Get("foo")
-	if gotHost != nil && gotHost.Host != "e" {
-		t.Errorf("got: %#v, expected: %#v", gotHost, &BlobCacheHost{Host: "e"})
+	if gotHost != nil && gotHost.HostId != "e" {
+		t.Errorf("got: %#v, expected: %#v", gotHost, &BlobCacheHost{HostId: "e"})
 	}
 
 	hash.Add(hostMap.GetAll()...)
 
 	testcases := []getTestcase{
-		{"", &BlobCacheHost{Host: "d"}},
-		{"foo", &BlobCacheHost{Host: "e"}},
-		{"bar", &BlobCacheHost{Host: "c"}},
+		{"", &BlobCacheHost{HostId: "d"}},
+		{"foo", &BlobCacheHost{HostId: "e"}},
+		{"bar", &BlobCacheHost{HostId: "c"}},
 	}
 
 	for _, testcase := range testcases {
 		gotHost := hash.Get(testcase.key)
-		if gotHost.Host != testcase.expectedHost.Host {
+		if gotHost.HostId != testcase.expectedHost.HostId {
 			t.Errorf("got: %#v, expected: %#v", gotHost, testcase.expectedHost)
 		}
 	}
@@ -63,21 +63,21 @@ func Test_Hash_GetN(t *testing.T) {
 
 	hash := NewRendezvousHasher()
 
-	hostMap.Set(&BlobCacheHost{Host: "a"})
-	hostMap.Set(&BlobCacheHost{Host: "b"})
-	hostMap.Set(&BlobCacheHost{Host: "c"})
-	hostMap.Set(&BlobCacheHost{Host: "d"})
-	hostMap.Set(&BlobCacheHost{Host: "e"})
+	hostMap.Set(&BlobCacheHost{HostId: "a"})
+	hostMap.Set(&BlobCacheHost{HostId: "b"})
+	hostMap.Set(&BlobCacheHost{HostId: "c"})
+	hostMap.Set(&BlobCacheHost{HostId: "d"})
+	hostMap.Set(&BlobCacheHost{HostId: "e"})
 
 	hash.Add(hostMap.GetAll()...)
 
 	testcases := []getNTestcase{
-		{1, "foo", []*BlobCacheHost{{Host: "e"}}},
-		{2, "bar", []*BlobCacheHost{{Host: "c"}, {Host: "e"}}},
-		{3, "baz", []*BlobCacheHost{{Host: "d"}, {Host: "a"}, {Host: "b"}}},
-		{2, "biz", []*BlobCacheHost{{Host: "b"}, {Host: "a"}}},
+		{1, "foo", []*BlobCacheHost{{HostId: "e"}}},
+		{2, "bar", []*BlobCacheHost{{HostId: "c"}, {HostId: "e"}}},
+		{3, "baz", []*BlobCacheHost{{HostId: "d"}, {HostId: "a"}, {HostId: "b"}}},
+		{2, "biz", []*BlobCacheHost{{HostId: "b"}, {HostId: "a"}}},
 		{0, "boz", []*BlobCacheHost{}},
-		{100, "floo", []*BlobCacheHost{{Host: "d"}, {Host: "a"}, {Host: "b"}, {Host: "c"}, {Host: "e"}}},
+		{100, "floo", []*BlobCacheHost{{HostId: "d"}, {HostId: "a"}, {HostId: "b"}, {HostId: "c"}, {HostId: "e"}}},
 	}
 
 	for _, testcase := range testcases {
@@ -91,11 +91,11 @@ func Test_Hash_GetN(t *testing.T) {
 func TestHashRemove(t *testing.T) {
 	hostMap := NewHostMap(BlobCacheGlobalConfig{}, nil)
 
-	hostMap.Set(&BlobCacheHost{Host: "a"})
-	hostMap.Set(&BlobCacheHost{Host: "b"})
-	hostMap.Set(&BlobCacheHost{Host: "c"})
-	hostMap.Set(&BlobCacheHost{Host: "d"})
-	hostMap.Set(&BlobCacheHost{Host: "e"})
+	hostMap.Set(&BlobCacheHost{HostId: "a"})
+	hostMap.Set(&BlobCacheHost{HostId: "b"})
+	hostMap.Set(&BlobCacheHost{HostId: "c"})
+	hostMap.Set(&BlobCacheHost{HostId: "d"})
+	hostMap.Set(&BlobCacheHost{HostId: "e"})
 
 	hash := NewRendezvousHasher()
 	hash.Add(hostMap.GetAll()...)
@@ -103,7 +103,7 @@ func TestHashRemove(t *testing.T) {
 	var keyForB string
 	for i := 0; i < 10000; i++ {
 		randomKey := fmt.Sprintf("key-%d", i)
-		if hash.Get(randomKey).Host == "b" {
+		if hash.Get(randomKey).HostId == "b" {
 			keyForB = randomKey
 			break
 		}
@@ -117,7 +117,7 @@ func TestHashRemove(t *testing.T) {
 
 	// Check if the key now maps to a different node
 	newNode := hash.Get(keyForB)
-	if newNode.Host == "b" {
+	if newNode.HostId == "b" {
 		t.Errorf("Key %s still maps to removed node 'b'", keyForB)
 	}
 

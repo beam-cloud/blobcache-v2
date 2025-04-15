@@ -30,9 +30,12 @@ const (
 	BlobCache_RemoveClientLock_FullMethodName               = "/blobcache.BlobCache/RemoveClientLock"
 	BlobCache_SetStoreFromContentLock_FullMethodName        = "/blobcache.BlobCache/SetStoreFromContentLock"
 	BlobCache_RemoveStoreFromContentLock_FullMethodName     = "/blobcache.BlobCache/RemoveStoreFromContentLock"
+	BlobCache_RefreshStoreFromContentLock_FullMethodName    = "/blobcache.BlobCache/RefreshStoreFromContentLock"
 	BlobCache_SetFsNode_FullMethodName                      = "/blobcache.BlobCache/SetFsNode"
 	BlobCache_GetFsNode_FullMethodName                      = "/blobcache.BlobCache/GetFsNode"
 	BlobCache_GetFsNodeChildren_FullMethodName              = "/blobcache.BlobCache/GetFsNodeChildren"
+	BlobCache_AddHostToIndex_FullMethodName                 = "/blobcache.BlobCache/AddHostToIndex"
+	BlobCache_SetHostKeepAlive_FullMethodName               = "/blobcache.BlobCache/SetHostKeepAlive"
 )
 
 // BlobCacheClient is the client API for BlobCache service.
@@ -52,9 +55,12 @@ type BlobCacheClient interface {
 	RemoveClientLock(ctx context.Context, in *RemoveClientLockRequest, opts ...grpc.CallOption) (*RemoveClientLockResponse, error)
 	SetStoreFromContentLock(ctx context.Context, in *SetStoreFromContentLockRequest, opts ...grpc.CallOption) (*SetStoreFromContentLockResponse, error)
 	RemoveStoreFromContentLock(ctx context.Context, in *RemoveStoreFromContentLockRequest, opts ...grpc.CallOption) (*RemoveStoreFromContentLockResponse, error)
+	RefreshStoreFromContentLock(ctx context.Context, in *RefreshStoreFromContentLockRequest, opts ...grpc.CallOption) (*RefreshStoreFromContentLockResponse, error)
 	SetFsNode(ctx context.Context, in *SetFsNodeRequest, opts ...grpc.CallOption) (*SetFsNodeResponse, error)
 	GetFsNode(ctx context.Context, in *GetFsNodeRequest, opts ...grpc.CallOption) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(ctx context.Context, in *GetFsNodeChildrenRequest, opts ...grpc.CallOption) (*GetFsNodeChildrenResponse, error)
+	AddHostToIndex(ctx context.Context, in *AddHostToIndexRequest, opts ...grpc.CallOption) (*AddHostToIndexResponse, error)
+	SetHostKeepAlive(ctx context.Context, in *SetHostKeepAliveRequest, opts ...grpc.CallOption) (*SetHostKeepAliveResponse, error)
 }
 
 type blobCacheClient struct {
@@ -187,6 +193,16 @@ func (c *blobCacheClient) RemoveStoreFromContentLock(ctx context.Context, in *Re
 	return out, nil
 }
 
+func (c *blobCacheClient) RefreshStoreFromContentLock(ctx context.Context, in *RefreshStoreFromContentLockRequest, opts ...grpc.CallOption) (*RefreshStoreFromContentLockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefreshStoreFromContentLockResponse)
+	err := c.cc.Invoke(ctx, BlobCache_RefreshStoreFromContentLock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *blobCacheClient) SetFsNode(ctx context.Context, in *SetFsNodeRequest, opts ...grpc.CallOption) (*SetFsNodeResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetFsNodeResponse)
@@ -217,6 +233,26 @@ func (c *blobCacheClient) GetFsNodeChildren(ctx context.Context, in *GetFsNodeCh
 	return out, nil
 }
 
+func (c *blobCacheClient) AddHostToIndex(ctx context.Context, in *AddHostToIndexRequest, opts ...grpc.CallOption) (*AddHostToIndexResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AddHostToIndexResponse)
+	err := c.cc.Invoke(ctx, BlobCache_AddHostToIndex_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) SetHostKeepAlive(ctx context.Context, in *SetHostKeepAliveRequest, opts ...grpc.CallOption) (*SetHostKeepAliveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetHostKeepAliveResponse)
+	err := c.cc.Invoke(ctx, BlobCache_SetHostKeepAlive_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlobCacheServer is the server API for BlobCache service.
 // All implementations must embed UnimplementedBlobCacheServer
 // for forward compatibility.
@@ -234,9 +270,12 @@ type BlobCacheServer interface {
 	RemoveClientLock(context.Context, *RemoveClientLockRequest) (*RemoveClientLockResponse, error)
 	SetStoreFromContentLock(context.Context, *SetStoreFromContentLockRequest) (*SetStoreFromContentLockResponse, error)
 	RemoveStoreFromContentLock(context.Context, *RemoveStoreFromContentLockRequest) (*RemoveStoreFromContentLockResponse, error)
+	RefreshStoreFromContentLock(context.Context, *RefreshStoreFromContentLockRequest) (*RefreshStoreFromContentLockResponse, error)
 	SetFsNode(context.Context, *SetFsNodeRequest) (*SetFsNodeResponse, error)
 	GetFsNode(context.Context, *GetFsNodeRequest) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(context.Context, *GetFsNodeChildrenRequest) (*GetFsNodeChildrenResponse, error)
+	AddHostToIndex(context.Context, *AddHostToIndexRequest) (*AddHostToIndexResponse, error)
+	SetHostKeepAlive(context.Context, *SetHostKeepAliveRequest) (*SetHostKeepAliveResponse, error)
 	mustEmbedUnimplementedBlobCacheServer()
 }
 
@@ -280,6 +319,9 @@ func (UnimplementedBlobCacheServer) SetStoreFromContentLock(context.Context, *Se
 func (UnimplementedBlobCacheServer) RemoveStoreFromContentLock(context.Context, *RemoveStoreFromContentLockRequest) (*RemoveStoreFromContentLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveStoreFromContentLock not implemented")
 }
+func (UnimplementedBlobCacheServer) RefreshStoreFromContentLock(context.Context, *RefreshStoreFromContentLockRequest) (*RefreshStoreFromContentLockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RefreshStoreFromContentLock not implemented")
+}
 func (UnimplementedBlobCacheServer) SetFsNode(context.Context, *SetFsNodeRequest) (*SetFsNodeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetFsNode not implemented")
 }
@@ -288,6 +330,12 @@ func (UnimplementedBlobCacheServer) GetFsNode(context.Context, *GetFsNodeRequest
 }
 func (UnimplementedBlobCacheServer) GetFsNodeChildren(context.Context, *GetFsNodeChildrenRequest) (*GetFsNodeChildrenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFsNodeChildren not implemented")
+}
+func (UnimplementedBlobCacheServer) AddHostToIndex(context.Context, *AddHostToIndexRequest) (*AddHostToIndexResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddHostToIndex not implemented")
+}
+func (UnimplementedBlobCacheServer) SetHostKeepAlive(context.Context, *SetHostKeepAliveRequest) (*SetHostKeepAliveResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetHostKeepAlive not implemented")
 }
 func (UnimplementedBlobCacheServer) mustEmbedUnimplementedBlobCacheServer() {}
 func (UnimplementedBlobCacheServer) testEmbeddedByValue()                   {}
@@ -490,6 +538,24 @@ func _BlobCache_RemoveStoreFromContentLock_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlobCache_RefreshStoreFromContentLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshStoreFromContentLockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).RefreshStoreFromContentLock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_RefreshStoreFromContentLock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).RefreshStoreFromContentLock(ctx, req.(*RefreshStoreFromContentLockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BlobCache_SetFsNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetFsNodeRequest)
 	if err := dec(in); err != nil {
@@ -544,6 +610,42 @@ func _BlobCache_GetFsNodeChildren_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlobCache_AddHostToIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddHostToIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).AddHostToIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_AddHostToIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).AddHostToIndex(ctx, req.(*AddHostToIndexRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_SetHostKeepAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetHostKeepAliveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).SetHostKeepAlive(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_SetHostKeepAlive_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).SetHostKeepAlive(ctx, req.(*SetHostKeepAliveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlobCache_ServiceDesc is the grpc.ServiceDesc for BlobCache service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -588,6 +690,10 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _BlobCache_RemoveStoreFromContentLock_Handler,
 		},
 		{
+			MethodName: "RefreshStoreFromContentLock",
+			Handler:    _BlobCache_RefreshStoreFromContentLock_Handler,
+		},
+		{
 			MethodName: "SetFsNode",
 			Handler:    _BlobCache_SetFsNode_Handler,
 		},
@@ -598,6 +704,14 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFsNodeChildren",
 			Handler:    _BlobCache_GetFsNodeChildren_Handler,
+		},
+		{
+			MethodName: "AddHostToIndex",
+			Handler:    _BlobCache_AddHostToIndex_Handler,
+		},
+		{
+			MethodName: "SetHostKeepAlive",
+			Handler:    _BlobCache_SetHostKeepAlive_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -18,9 +18,9 @@ type RendezvousHasher struct {
 }
 
 type hostScore struct {
-	hostName []byte
-	host     *BlobCacheHost
-	score    uint32
+	hostId []byte
+	host   *BlobCacheHost
+	score  uint32
 }
 
 func NewRendezvousHasher() *RendezvousHasher {
@@ -33,14 +33,14 @@ func NewRendezvousHasher() *RendezvousHasher {
 // Add adds additional hosts
 func (h *RendezvousHasher) Add(hosts ...*BlobCacheHost) {
 	for _, host := range hosts {
-		h.hosts = append(h.hosts, hostScore{host: host, hostName: []byte(host.Host)})
+		h.hosts = append(h.hosts, hostScore{host: host, hostId: []byte(host.HostId)})
 	}
 }
 
 // Remove removes a host
 func (h *RendezvousHasher) Remove(host *BlobCacheHost) {
 	for i, ns := range h.hosts {
-		if ns.host.Host == host.Host {
+		if ns.host.HostId == host.HostId {
 			h.hosts = append(h.hosts[:i], h.hosts[i+1:]...)
 			return
 		}
@@ -52,16 +52,16 @@ func (h *RendezvousHasher) Remove(host *BlobCacheHost) {
 func (h *RendezvousHasher) Get(key string) *BlobCacheHost {
 	var maxScore uint32
 	var maxHost *BlobCacheHost = nil
-	var maxHostName []byte
+	var maxHostId []byte
 
 	keyBytes := unsafeBytes(key)
 
 	for _, host := range h.hosts {
-		score := h.hash(host.hostName, keyBytes)
-		if score > maxScore || (score == maxScore && bytes.Compare(host.hostName, maxHostName) < 0) {
+		score := h.hash(host.hostId, keyBytes)
+		if score > maxScore || (score == maxScore && bytes.Compare(host.hostId, maxHostId) < 0) {
 			maxScore = score
 			maxHost = host.host
-			maxHostName = host.hostName
+			maxHostId = host.hostId
 		}
 	}
 
@@ -73,7 +73,7 @@ func (h *RendezvousHasher) Get(key string) *BlobCacheHost {
 func (h *RendezvousHasher) GetN(n int, key string) []*BlobCacheHost {
 	keyBytes := unsafeBytes(key)
 	for i := range h.hosts {
-		h.hosts[i].score = h.hash(h.hosts[i].hostName, keyBytes)
+		h.hosts[i].score = h.hash(h.hosts[i].hostId, keyBytes)
 	}
 	sort.Sort(&h.hosts)
 
@@ -94,15 +94,15 @@ func (s *hostScores) Len() int      { return len(*s) }
 func (s *hostScores) Swap(i, j int) { (*s)[i], (*s)[j] = (*s)[j], (*s)[i] }
 func (s *hostScores) Less(i, j int) bool {
 	if (*s)[i].score == (*s)[j].score {
-		return bytes.Compare((*s)[i].hostName, (*s)[j].hostName) < 0
+		return bytes.Compare((*s)[i].hostId, (*s)[j].hostId) < 0
 	}
 	return (*s)[j].score < (*s)[i].score // Descending
 }
 
-func (h *RendezvousHasher) hash(hostName, key []byte) uint32 {
+func (h *RendezvousHasher) hash(hostId, key []byte) uint32 {
 	h.hasher.Reset()
 	h.hasher.Write(key)
-	h.hasher.Write(hostName)
+	h.hasher.Write(hostId)
 	return h.hasher.Sum32()
 }
 

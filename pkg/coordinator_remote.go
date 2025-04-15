@@ -55,7 +55,7 @@ func NewCoordinatorClientRemote(cfg BlobCacheGlobalConfig, token string) (Coordi
 }
 
 func (c *CoordinatorClientRemote) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
-	r, err := c.client.AddHostToIndex(ctx, &proto.AddHostToIndexRequest{Locality: locality, Host: &proto.BlobCacheHost{Host: host.Host, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr}})
+	r, err := c.client.AddHostToIndex(ctx, &proto.AddHostToIndexRequest{Locality: locality, Host: &proto.BlobCacheHost{HostId: host.HostId, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr}})
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (c *CoordinatorClientRemote) AddHostToIndex(ctx context.Context, locality s
 }
 
 func (c *CoordinatorClientRemote) SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error {
-	r, err := c.client.SetHostKeepAlive(ctx, &proto.SetHostKeepAliveRequest{Locality: locality, Host: &proto.BlobCacheHost{Host: host.Host, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr}})
+	r, err := c.client.SetHostKeepAlive(ctx, &proto.SetHostKeepAliveRequest{Locality: locality, Host: &proto.BlobCacheHost{HostId: host.HostId, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr}})
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (c *CoordinatorClientRemote) GetAvailableHosts(ctx context.Context, localit
 	hosts := make([]*BlobCacheHost, 0)
 	for _, host := range response.Hosts {
 		hosts = append(hosts, &BlobCacheHost{
-			Host:        host.Host,
+			HostId:      host.HostId,
 			Addr:        host.Addr,
 			PrivateAddr: host.PrivateIpAddr,
 		})
@@ -137,8 +137,8 @@ func (c *CoordinatorClientRemote) GetAvailableHosts(ctx context.Context, localit
 	return hosts, nil
 }
 
-func (c *CoordinatorClientRemote) SetClientLock(ctx context.Context, hash string, host string) error {
-	r, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, Host: host})
+func (c *CoordinatorClientRemote) SetClientLock(ctx context.Context, hash string, hostId string) error {
+	r, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, HostId: hostId})
 	if err != nil {
 		return err
 	}
@@ -150,8 +150,8 @@ func (c *CoordinatorClientRemote) SetClientLock(ctx context.Context, hash string
 	return nil
 }
 
-func (c *CoordinatorClientRemote) RemoveClientLock(ctx context.Context, hash string, host string) error {
-	r, err := c.client.RemoveClientLock(ctx, &proto.RemoveClientLockRequest{Hash: hash, Host: host})
+func (c *CoordinatorClientRemote) RemoveClientLock(ctx context.Context, hash string, hostId string) error {
+	r, err := c.client.RemoveClientLock(ctx, &proto.RemoveClientLockRequest{Hash: hash, HostId: hostId})
 	if err != nil {
 		return err
 	}

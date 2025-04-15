@@ -42,7 +42,7 @@ type BlobCacheClient struct {
 	ctx                     context.Context
 	clientConfig            BlobCacheClientConfig
 	globalConfig            BlobCacheGlobalConfig
-	hostname                string
+	hostId                  string
 	grpcClients             map[string]proto.BlobCacheClient
 	hostMap                 *HostMap
 	mu                      sync.RWMutex
@@ -60,7 +60,7 @@ type localClientCache struct {
 }
 
 func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheClient, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
+	hostId := fmt.Sprintf("%s-%s", BlobCacheClientPrefix, uuid.New().String()[:6])
 
 	coordinator, err := NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
 	if err != nil {
@@ -71,7 +71,7 @@ func NewBlobCacheClient(ctx context.Context, cfg BlobCacheConfig) (*BlobCacheCli
 		ctx:                     ctx,
 		clientConfig:            cfg.Client,
 		globalConfig:            cfg.Global,
-		hostname:                hostname,
+		hostId:                  hostId,
 		grpcClients:             make(map[string]proto.BlobCacheClient),
 		localHostCache:          make(map[string]*localClientCache),
 		mu:                      sync.RWMutex{},
@@ -172,7 +172,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.grpcClients[host.Host] = proto.NewBlobCacheClient(conn)
+	c.grpcClients[host.HostId] = proto.NewBlobCacheClient(conn)
 	c.hasher.Add(host)
 
 	go c.monitorHost(host)
@@ -187,7 +187,7 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 		select {
 		case <-ticker.C:
 			err := func() error {
-				client, exists := c.grpcClients[host.Host]
+				client, exists := c.grpcClients[host.HostId]
 				if !exists {
 					return ErrHostNotFound
 				}
@@ -384,7 +384,7 @@ func (c *BlobCacheClient) getGRPCClient(ctx context.Context, request *ClientRequ
 		return nil, nil, ErrHostNotFound
 	}
 
-	client, exists := c.grpcClients[host.Host]
+	client, exists := c.grpcClients[host.HostId]
 	if !exists {
 		c.mu.Lock()
 		delete(c.localHostCache, request.hash)

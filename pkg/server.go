@@ -36,7 +36,7 @@ type CacheService struct {
 	ctx  context.Context
 	mode BlobCacheServerMode
 	proto.UnimplementedBlobCacheServer
-	hostname      string
+	hostId        string
 	privateIpAddr string
 	publicIpAddr  string
 	cas           *ContentAddressableStorage
@@ -46,11 +46,10 @@ type CacheService struct {
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, error) {
-	hostname := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+	hostId := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 
 	currentHost := &BlobCacheHost{
-		Addr: fmt.Sprintf("%s:%d", hostname, cfg.Global.ServerPort),
-		RTT:  0,
+		RTT: 0,
 	}
 
 	var coordinator CoordinatorClient
@@ -76,7 +75,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 		Logger.Infof("Discovered private ip address: %s", privateIpAddr)
 	}
 
-	currentHost.Host = hostname
+	currentHost.HostId = hostId
 	currentHost.Addr = fmt.Sprintf("%s:%d", publicIpAddr, cfg.Global.ServerPort)
 	currentHost.PrivateAddr = fmt.Sprintf("%s:%d", privateIpAddr, cfg.Global.ServerPort)
 	currentHost.CapacityUsagePct = 0
@@ -99,7 +98,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig) (*CacheService, e
 	cs := &CacheService{
 		ctx:           ctx,
 		mode:          cfg.Server.Mode,
-		hostname:      hostname,
+		hostId:        hostId,
 		cas:           cas,
 		serverConfig:  cfg.Server,
 		globalConfig:  cfg.Global,
@@ -158,7 +157,7 @@ func (cs *CacheService) StartServer(port uint) error {
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
-	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostname, addr, cs.serverConfig)
+	Logger.Infof("Running @ %s%s, cfg: %+v", cs.hostId, addr, cs.serverConfig)
 
 	go s.Serve(localListener)
 
@@ -359,7 +358,7 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 
 	protoHosts := make([]*proto.BlobCacheHost, 0)
 	for _, host := range hosts {
-		protoHosts = append(protoHosts, &proto.BlobCacheHost{Host: host.Host, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr})
+		protoHosts = append(protoHosts, &proto.BlobCacheHost{HostId: host.HostId, Addr: host.Addr, PrivateIpAddr: host.PrivateAddr})
 	}
 
 	Logger.Infof("GetAvailableHosts[OK] - [%s]", protoHosts)
