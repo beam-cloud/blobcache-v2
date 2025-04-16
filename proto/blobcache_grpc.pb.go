@@ -27,6 +27,7 @@ const (
 	BlobCache_StoreContentFromSourceWithLock_FullMethodName = "/blobcache.BlobCache/StoreContentFromSourceWithLock"
 	BlobCache_GetState_FullMethodName                       = "/blobcache.BlobCache/GetState"
 	BlobCache_GetAvailableHosts_FullMethodName              = "/blobcache.BlobCache/GetAvailableHosts"
+	BlobCache_GetRegionConfig_FullMethodName                = "/blobcache.BlobCache/GetRegionConfig"
 	BlobCache_SetClientLock_FullMethodName                  = "/blobcache.BlobCache/SetClientLock"
 	BlobCache_RemoveClientLock_FullMethodName               = "/blobcache.BlobCache/RemoveClientLock"
 	BlobCache_SetStoreFromContentLock_FullMethodName        = "/blobcache.BlobCache/SetStoreFromContentLock"
@@ -54,6 +55,7 @@ type BlobCacheClient interface {
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
 	// Coordinator RPCs
 	GetAvailableHosts(ctx context.Context, in *GetAvailableHostsRequest, opts ...grpc.CallOption) (*GetAvailableHostsResponse, error)
+	GetRegionConfig(ctx context.Context, in *GetRegionConfigRequest, opts ...grpc.CallOption) (*GetRegionConfigResponse, error)
 	SetClientLock(ctx context.Context, in *SetClientLockRequest, opts ...grpc.CallOption) (*SetClientLockResponse, error)
 	RemoveClientLock(ctx context.Context, in *RemoveClientLockRequest, opts ...grpc.CallOption) (*RemoveClientLockResponse, error)
 	SetStoreFromContentLock(ctx context.Context, in *SetStoreFromContentLockRequest, opts ...grpc.CallOption) (*SetStoreFromContentLockResponse, error)
@@ -161,6 +163,16 @@ func (c *blobCacheClient) GetAvailableHosts(ctx context.Context, in *GetAvailabl
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAvailableHostsResponse)
 	err := c.cc.Invoke(ctx, BlobCache_GetAvailableHosts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) GetRegionConfig(ctx context.Context, in *GetRegionConfigRequest, opts ...grpc.CallOption) (*GetRegionConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetRegionConfigResponse)
+	err := c.cc.Invoke(ctx, BlobCache_GetRegionConfig_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +303,7 @@ type BlobCacheServer interface {
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
 	// Coordinator RPCs
 	GetAvailableHosts(context.Context, *GetAvailableHostsRequest) (*GetAvailableHostsResponse, error)
+	GetRegionConfig(context.Context, *GetRegionConfigRequest) (*GetRegionConfigResponse, error)
 	SetClientLock(context.Context, *SetClientLockRequest) (*SetClientLockResponse, error)
 	RemoveClientLock(context.Context, *RemoveClientLockRequest) (*RemoveClientLockResponse, error)
 	SetStoreFromContentLock(context.Context, *SetStoreFromContentLockRequest) (*SetStoreFromContentLockResponse, error)
@@ -335,6 +348,9 @@ func (UnimplementedBlobCacheServer) GetState(context.Context, *GetStateRequest) 
 }
 func (UnimplementedBlobCacheServer) GetAvailableHosts(context.Context, *GetAvailableHostsRequest) (*GetAvailableHostsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableHosts not implemented")
+}
+func (UnimplementedBlobCacheServer) GetRegionConfig(context.Context, *GetRegionConfigRequest) (*GetRegionConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetRegionConfig not implemented")
 }
 func (UnimplementedBlobCacheServer) SetClientLock(context.Context, *SetClientLockRequest) (*SetClientLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetClientLock not implemented")
@@ -512,6 +528,24 @@ func _BlobCache_GetAvailableHosts_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BlobCacheServer).GetAvailableHosts(ctx, req.(*GetAvailableHostsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_GetRegionConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRegionConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).GetRegionConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_GetRegionConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).GetRegionConfig(ctx, req.(*GetRegionConfigRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -744,6 +778,10 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAvailableHosts",
 			Handler:    _BlobCache_GetAvailableHosts_Handler,
+		},
+		{
+			MethodName: "GetRegionConfig",
+			Handler:    _BlobCache_GetRegionConfig_Handler,
 		},
 		{
 			MethodName: "SetClientLock",

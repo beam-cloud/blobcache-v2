@@ -23,6 +23,17 @@ func (cs *CacheService) GetAvailableHosts(ctx context.Context, req *proto.GetAva
 	return &proto.GetAvailableHostsResponse{Hosts: protoHosts, Ok: true}, nil
 }
 
+func (cs *CacheService) GetRegionConfig(ctx context.Context, req *proto.GetRegionConfigRequest) (*proto.GetRegionConfigResponse, error) {
+	Logger.Infof("GetRegionConfig[ACK] - [%s]", req.Locality)
+
+	config, ok := cs.serverConfig.Regions[req.Locality]
+	if !ok {
+		return &proto.GetRegionConfigResponse{Ok: false, ServerConfig: nil}, nil
+	}
+
+	return &proto.GetRegionConfigResponse{Ok: true, ServerConfig: config.ServerConfig.ToProto()}, nil
+}
+
 func (cs *CacheService) SetClientLock(ctx context.Context, req *proto.SetClientLockRequest) (*proto.SetClientLockResponse, error) {
 	Logger.Debugf("SetClientLock[ACK] - [%s]", req.Hash)
 

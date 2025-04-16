@@ -132,6 +132,20 @@ func (c *CoordinatorClientRemote) GetAvailableHosts(ctx context.Context, localit
 	return hosts, nil
 }
 
+func (c *CoordinatorClientRemote) GetRegionConfig(ctx context.Context, locality string) (BlobCacheServerConfig, error) {
+	response, err := c.client.GetRegionConfig(ctx, &proto.GetRegionConfigRequest{Locality: locality})
+	if err != nil {
+		return BlobCacheServerConfig{}, err
+	}
+
+	if !response.Ok {
+		return BlobCacheServerConfig{}, errors.New("failed to get region config")
+	}
+
+	cfg := BlobCacheServerConfigFromProto(response.ServerConfig)
+	return cfg, nil
+}
+
 func (c *CoordinatorClientRemote) SetClientLock(ctx context.Context, hash string, hostId string) error {
 	r, err := c.client.SetClientLock(ctx, &proto.SetClientLockRequest{Hash: hash, HostId: hostId})
 	if err != nil {

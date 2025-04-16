@@ -1,4 +1,10 @@
-# blobcache
+# Blobcache
 
 ## Overview
-A very simple in-memory cache used as a content-addressed cache. Exposes a GRPC server that can be embedded directly in a golang application.
+Blobcache is a distributed, in-memory cache used to cache objects near the workloads that need them. It does not require an external metadata server
+for each region, making it easy to spin up in various regions without performance penalties.
+
+## Features
+- **Tiered Storage**: Fast and efficient caching mechanism - both in-memory and on disk
+- **Content-Addressed**: Stores data based on content hash, so workloads sharing the same data (i.e. model weights), can benefit from the distributed cache.
+- **GRPC Interface**: Easily embeddable in Golang applications for seamless integration

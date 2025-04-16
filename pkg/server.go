@@ -50,7 +50,6 @@ type CacheService struct {
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
-	hostId := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 	currentHost := &BlobCacheHost{
 		RTT: 0,
 	}
@@ -62,12 +61,29 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		coordinator, err = NewCoordinatorClientLocal(cfg.Global, cfg.Server)
 	default:
 		coordinator, err = NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
+		if err != nil {
+			return nil, err
+		}
+
+		regionConfig, err := coordinator.GetRegionConfig(ctx, locality)
+		if err != nil {
+			Logger.Infof("No region-specific config found for locality %s, using current config", locality)
+		} else {
+			cfg.Server = regionConfig
+		}
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	Logger.Infof("Server started in %s mode", cfg.Server.Mode)
+	// Create the disk cache directory if it doesn't exist
+	err = os.MkdirAll(cfg.Server.DiskCacheDir, 0755)
+	if err != nil {
+		return nil, err
+	}
+
+	hostId := getHostId(cfg.Server)
+	Logger.Infof("Server<%s> started in %s mode", hostId, cfg.Server.Mode)
 
 	publicIpAddr, _ := GetPublicIpAddr()
 	if publicIpAddr != "" {
@@ -114,6 +130,20 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 
 	go cs.HostKeepAlive()
 	return cs, nil
+}
+
+func getHostId(serverConfig BlobCacheServerConfig) string {
+	filePath := filepath.Join(serverConfig.DiskCacheDir, "HOST_ID")
+
+	hostId := ""
+	if content, err := os.ReadFile(filePath); err == nil {
+		hostId = strings.TrimSpace(string(content))
+	} else {
+		hostId = fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+		os.WriteFile(filePath, []byte(hostId), 0644)
+	}
+
+	return hostId
 }
 
 func (cs *CacheService) HostKeepAlive() {

@@ -53,10 +53,14 @@ func main() {
 	hashBytes := sha256.Sum256(b)
 	fileHash := hex.EncodeToString(hashBytes[:])
 
-	hash, err := storeFile(client, filePath, fileHash)
+	var totalStoreTime float64
+
+	hash, storeElapsedTime, err := storeFile(client, filePath, fileHash)
 	if err != nil {
 		log.Fatalf("Failed to store file: %v\n", err)
 	}
+	log.Printf("StoreContent elapsed time: %f seconds\n", storeElapsedTime)
+	totalStoreTime += storeElapsedTime
 
 	var totalStreamResult, totalGetContentResult TestResult
 	for i := 0; i < totalIterations; i++ {
@@ -83,10 +87,12 @@ func main() {
 		log.Printf("TestGetContent - %v\n", getContentResult)
 	}
 
-	GenerateReport(totalStreamResult, totalGetContentResult, len(b), totalIterations)
+	GenerateReport(totalStreamResult, totalGetContentResult, totalStoreTime, len(b), totalIterations)
 }
 
-func storeFile(client *blobcache.BlobCacheClient, filePath string, fileHash string) (string, error) {
+func storeFile(client *blobcache.BlobCacheClient, filePath string, fileHash string) (string, float64, error) {
+	startTime := time.Now() // Start timing
+
 	chunks := make(chan []byte)
 	go func() {
 		file, err := os.Open(filePath)
@@ -116,9 +122,11 @@ func storeFile(client *blobcache.BlobCacheClient, filePath string, fileHash stri
 
 	hash, err := client.StoreContent(chunks, fileHash)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return hash, nil
+
+	elapsedTime := time.Since(startTime).Seconds() // Calculate elapsed time
+	return hash, elapsedTime, nil
 }
 
 func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSize int, expectedHash string) (TestResult, error) {
@@ -212,13 +220,17 @@ func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int
 	return TestResult{ElapsedTime: elapsedTime, ContentCheckPassed: contentCheckPassed}, nil
 }
 
-func GenerateReport(streamResult, contentResult TestResult, fileSize, iterations int) {
+func GenerateReport(streamResult, contentResult TestResult, totalStoreTime float64, fileSize, iterations int) {
 	averageTimeStream := streamResult.ElapsedTime / float64(iterations)
 	averageTimeContent := contentResult.ElapsedTime / float64(iterations)
+	averageTimeStore := totalStoreTime / float64(iterations)
 	totalBytesReadMB := float64(fileSize*iterations) / (1024 * 1024)
 	mbPerSecondStream := totalBytesReadMB / streamResult.ElapsedTime
 	mbPerSecondContent := totalBytesReadMB / contentResult.ElapsedTime
 
+	log.Printf("================================================")
+	log.Printf("Total time for StoreContent: %f seconds\n", totalStoreTime)
+	log.Printf("Average time per iteration for StoreContent: %f seconds\n", averageTimeStore)
 	log.Printf("Total time for GetContentStream: %f seconds\n", streamResult.ElapsedTime)
 	log.Printf("Average time per iteration for GetContentStream: %f seconds\n", averageTimeStream)
 	log.Printf("Total time for GetContent: %f seconds\n", contentResult.ElapsedTime)
