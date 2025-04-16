@@ -51,7 +51,6 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 	}
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
-	os.MkdirAll(cas.diskCacheDir, 0755)
 
 	availableMemoryMb := getAvailableMemoryMb()
 	maxCacheSizeMb := (availableMemoryMb * cas.serverConfig.MaxCachePct) / 100

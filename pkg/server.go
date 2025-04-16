@@ -50,7 +50,6 @@ type CacheService struct {
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
-	hostId := fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
 	currentHost := &BlobCacheHost{
 		RTT: 0,
 	}
@@ -77,7 +76,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		return nil, err
 	}
 
-	Logger.Infof("Server started in %s mode", cfg.Server.Mode)
+	// Create the disk cache directory if it doesn't exist
+	err = os.MkdirAll(cfg.Server.DiskCacheDir, 0755)
+	if err != nil {
+		Logger.Errorf("Failed to create disk cache directory: %v", err)
+		return nil, err
+	}
+
+	hostId := getHostId(cfg.Server)
+	Logger.Infof("Server<%s> started in %s mode", hostId, cfg.Server.Mode)
 
 	publicIpAddr, _ := GetPublicIpAddr()
 	if publicIpAddr != "" {
@@ -124,6 +131,20 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 
 	go cs.HostKeepAlive()
 	return cs, nil
+}
+
+func getHostId(serverConfig BlobCacheServerConfig) string {
+	filePath := filepath.Join(serverConfig.DiskCacheDir, "HOST_ID")
+
+	hostId := ""
+	if content, err := os.ReadFile(filePath); err == nil {
+		hostId = strings.TrimSpace(string(content))
+	} else {
+		hostId = fmt.Sprintf("%s-%s", BlobCacheHostPrefix, uuid.New().String()[:6])
+		os.WriteFile(filePath, []byte(hostId), 0644)
+	}
+
+	return hostId
 }
 
 func (cs *CacheService) HostKeepAlive() {
