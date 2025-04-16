@@ -1,7 +1,7 @@
 # Blobcache
 
 ## Overview
-Blobcache is a distributed, in-memory cache designed used to cache objects near workloads. It does not require an external metadata server
+Blobcache is a distributed, in-memory cache used to cache objects near workloads. It does not require an external metadata server
 for each region, making it easy to spin up in various regions without performance penalties.
 
 ## Features
