@@ -68,10 +68,10 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 
 		regionConfig, err := coordinator.GetRegionConfig(ctx, locality)
 		if err != nil {
-			return nil, err
+			Logger.Infof("No region-specific config found for locality %s, using current config", locality)
+		} else {
+			cfg.Server = regionConfig
 		}
-
-		cfg.Server = regionConfig
 	}
 	if err != nil {
 		return nil, err
