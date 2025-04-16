@@ -16,6 +16,10 @@ import (
 	"github.com/shirou/gopsutil/mem"
 )
 
+const (
+	diskCacheUsageCheckInterval = 1 * time.Minute
+)
+
 type ContentAddressableStorage struct {
 	ctx                     context.Context
 	currentHost             *BlobCacheHost
@@ -280,7 +284,7 @@ func min(a, b int64) int64 {
 }
 
 func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(diskCacheUsageCheckInterval)
 	defer ticker.Stop()
 
 	for {
