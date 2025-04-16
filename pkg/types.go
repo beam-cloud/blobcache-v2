@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	BlobCacheHostPrefix   string = "blobcache-host"
-	BlobCacheClientPrefix string = "blobcache-client"
-	BlobCacheVersion      string = "dev"
+	BlobCacheHostPrefix string = "blobcache-host"
+	BlobCacheVersion    string = "dev"
 )
 
 const (
@@ -56,14 +55,16 @@ const (
 )
 
 type BlobCacheServerConfig struct {
-	Mode          BlobCacheServerMode `key:"mode" json:"mode"`
-	Token         string              `key:"token" json:"token"`
-	PrettyLogs    bool                `key:"prettyLogs" json:"pretty_logs"`
-	ObjectTtlS    int                 `key:"objectTtlS" json:"object_ttl_s"`
-	MaxCachePct   int64               `key:"maxCachePct" json:"max_cache_pct"`
-	PageSizeBytes int64               `key:"pageSizeBytes" json:"page_size_bytes"`
-	Metadata      MetadataConfig      `key:"metadata" json:"metadata"`
-	Sources       []SourceConfig      `key:"sources" json:"sources"`
+	Mode                 BlobCacheServerMode `key:"mode" json:"mode"`
+	DiskCacheDir         string              `key:"diskCacheDir" json:"disk_cache_dir"`
+	DiskCacheMaxUsagePct float64             `key:"diskCacheMaxUsagePct" json:"disk_cache_max_usage_pct"`
+	Token                string              `key:"token" json:"token"`
+	PrettyLogs           bool                `key:"prettyLogs" json:"pretty_logs"`
+	ObjectTtlS           int                 `key:"objectTtlS" json:"object_ttl_s"`
+	MaxCachePct          int64               `key:"maxCachePct" json:"max_cache_pct"`
+	PageSizeBytes        int64               `key:"pageSizeBytes" json:"page_size_bytes"`
+	Metadata             MetadataConfig      `key:"metadata" json:"metadata"`
+	Sources              []SourceConfig      `key:"sources" json:"sources"`
 }
 
 type BlobCacheClientConfig struct {

@@ -1,5 +1,7 @@
 server:
   mode: slave
+  diskCacheDir: /blobcache-data
+  diskCacheMaxUsagePct: 0.95
   token:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95

@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/beam-cloud/ristretto"
@@ -13,14 +17,18 @@ import (
 )
 
 type ContentAddressableStorage struct {
-	ctx            context.Context
-	currentHost    *BlobCacheHost
-	locality       string
-	cache          *ristretto.Cache[string, interface{}]
-	serverConfig   BlobCacheServerConfig
-	globalConfig   BlobCacheGlobalConfig
-	coordinator    CoordinatorClient
-	maxCacheSizeMb int64
+	ctx                     context.Context
+	currentHost             *BlobCacheHost
+	locality                string
+	cache                   *ristretto.Cache[string, interface{}]
+	serverConfig            BlobCacheServerConfig
+	globalConfig            BlobCacheGlobalConfig
+	coordinator             CoordinatorClient
+	maxCacheSizeMb          int64
+	diskCacheDir            string
+	mu                      sync.Mutex
+	currentDiskUsageMb      int64
+	diskCachedUsageExceeded bool
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
@@ -35,7 +43,12 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		coordinator:  coordinator,
 		currentHost:  currentHost,
 		locality:     locality,
+		diskCacheDir: config.Server.DiskCacheDir,
+		mu:           sync.Mutex{},
 	}
+
+	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
+	os.MkdirAll(cas.diskCacheDir, 0755)
 
 	availableMemoryMb := getAvailableMemoryMb()
 	maxCacheSizeMb := (availableMemoryMb * cas.serverConfig.MaxCachePct) / 100
@@ -62,6 +75,9 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	cas.cache = cache
 	cas.maxCacheSizeMb = maxCacheSizeMb
+	go cas.calculateDiskUsagePeriodically()
+	go cas.monitorDiskCacheUsage()
+
 	return cas, nil
 }
 
@@ -86,6 +102,11 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		Logger.Debugf("Cost added before Add: %+v", cas.cache.Metrics.CostAdded())
 	}
 
+	dirPath := filepath.Join(cas.diskCacheDir, hash)
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
 	// Break content into chunks and store
 	for offset := int64(0); offset < size; offset += cas.serverConfig.PageSizeBytes {
 		chunkIdx := offset / cas.serverConfig.PageSizeBytes
@@ -97,8 +118,18 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		// Copy the chunk into a new buffer
 		chunk := make([]byte, end-offset)
 		copy(chunk, content[offset:end])
-
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
+
+		// Write through to disk cache if we still have storage available
+		if !cas.diskCachedUsageExceeded {
+			go func() {
+				filePath := filepath.Join(dirPath, chunkKey)
+				if err := os.WriteFile(filePath, chunk, 0644); err != nil {
+					Logger.Errorf("failed to write to disk cache: %w", err)
+				}
+			}()
+		}
+
 		chunkKeys = append(chunkKeys, chunkKey)
 
 		_, exists := cas.cache.GetTTL(chunkKey)
@@ -144,10 +175,19 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		chunkIdx := o / cas.serverConfig.PageSizeBytes
 		chunkKey := fmt.Sprintf("%s-%d", hash, chunkIdx)
 
-		// Check cache for chunk
-		value, found := cas.cache.Get(chunkKey)
+		var value interface{}
+		var found bool = false
+
+		// Check in-memory cache for chunk
+		value, found = cas.cache.Get(chunkKey)
+
+		// Not found in memory, check disk cache before giving up
 		if !found {
-			return 0, ErrContentNotFound
+			var err error
+			value, found, err = cas.getFromDiskCache(hash, chunkKey)
+			if err != nil || !found {
+				return 0, err
+			}
 		}
 
 		v, ok := value.(cacheValue)
@@ -177,6 +217,27 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 	}
 
 	return dstOffset, nil
+}
+
+func (cas *ContentAddressableStorage) getFromDiskCache(hash, chunkKey string) (value cacheValue, found bool, err error) {
+	cas.mu.Lock()
+	defer cas.mu.Unlock()
+
+	rawValue, found := cas.cache.Get(chunkKey)
+	if found {
+		return rawValue.(cacheValue), true, nil
+	}
+
+	chunkPath := filepath.Join(cas.diskCacheDir, hash, chunkKey)
+	chunkBytes, err := os.ReadFile(chunkPath)
+	if err != nil {
+		return cacheValue{}, false, ErrContentNotFound
+	}
+
+	value = cacheValue{Hash: hash, Content: chunkBytes}
+	cas.cache.Set(chunkKey, value, int64(len(chunkBytes)))
+
+	return value, true, nil
 }
 
 func (cas *ContentAddressableStorage) onEvict(item *ristretto.Item[interface{}]) {
@@ -217,4 +278,83 @@ func min(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func (cas *ContentAddressableStorage) calculateDiskUsagePeriodically() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cas.ctx.Done():
+			return
+		case <-ticker.C:
+			usage, err := cas.getCurrentDiskUsageMb()
+			if err == nil {
+				cas.mu.Lock()
+				cas.currentDiskUsageMb = usage
+				cas.mu.Unlock()
+			}
+		}
+	}
+}
+
+func (cas *ContentAddressableStorage) getCurrentDiskUsageMb() (int64, error) {
+	usage, err := getDiskUsageMb(cas.diskCacheDir)
+	if err != nil {
+		return 0, err
+	}
+	return usage, nil
+}
+
+func getDiskUsageMb(path string) (int64, error) {
+	var totalUsage int64 = 0
+	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalUsage += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return totalUsage / (1024 * 1024), nil
+}
+
+func getTotalDiskSpaceMb(path string) (int64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, err
+	}
+	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
+}
+
+func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cas.ctx.Done():
+			return
+		case <-ticker.C:
+			usage, err := getDiskUsageMb(cas.diskCacheDir)
+			if err == nil {
+				totalDiskSpace, err := getTotalDiskSpaceMb(cas.diskCacheDir)
+				if err == nil {
+					usagePct := float64(usage) / float64(totalDiskSpace)
+
+					Logger.Infof("Disk cache usage: %dMB / %dMB (%.2f%%)", usage, totalDiskSpace, usagePct*100)
+
+					cas.mu.Lock()
+					cas.diskCachedUsageExceeded = usagePct > cas.serverConfig.DiskCacheMaxUsagePct
+					cas.mu.Unlock()
+				}
+			}
+		}
+	}
 }
