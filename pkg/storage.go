@@ -27,7 +27,6 @@ type ContentAddressableStorage struct {
 	maxCacheSizeMb          int64
 	diskCacheDir            string
 	mu                      sync.Mutex
-	currentDiskUsageMb      int64
 	diskCachedUsageExceeded bool
 }
 
@@ -75,7 +74,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	cas.cache = cache
 	cas.maxCacheSizeMb = maxCacheSizeMb
-	go cas.calculateDiskUsagePeriodically()
+
 	go cas.monitorDiskCacheUsage()
 
 	return cas, nil
@@ -122,12 +121,10 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 
 		// Write through to disk cache if we still have storage available
 		if !cas.diskCachedUsageExceeded {
-			go func() {
-				filePath := filepath.Join(dirPath, chunkKey)
-				if err := os.WriteFile(filePath, chunk, 0644); err != nil {
-					Logger.Errorf("failed to write to disk cache: %w", err)
-				}
-			}()
+			filePath := filepath.Join(dirPath, chunkKey)
+			if err := os.WriteFile(filePath, chunk, 0644); err != nil {
+				return fmt.Errorf("failed to write to disk cache: %w", err)
+			}
 		}
 
 		chunkKeys = append(chunkKeys, chunkKey)
@@ -278,33 +275,6 @@ func min(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-func (cas *ContentAddressableStorage) calculateDiskUsagePeriodically() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-cas.ctx.Done():
-			return
-		case <-ticker.C:
-			usage, err := cas.getCurrentDiskUsageMb()
-			if err == nil {
-				cas.mu.Lock()
-				cas.currentDiskUsageMb = usage
-				cas.mu.Unlock()
-			}
-		}
-	}
-}
-
-func (cas *ContentAddressableStorage) getCurrentDiskUsageMb() (int64, error) {
-	usage, err := getDiskUsageMb(cas.diskCacheDir)
-	if err != nil {
-		return 0, err
-	}
-	return usage, nil
 }
 
 func getDiskUsageMb(path string) (int64, error) {
