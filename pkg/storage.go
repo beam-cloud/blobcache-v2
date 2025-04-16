@@ -279,32 +279,6 @@ func min(a, b int64) int64 {
 	return b
 }
 
-func getDiskUsageMb(path string) (int64, error) {
-	var totalUsage int64 = 0
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			totalUsage += info.Size()
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return totalUsage / (1024 * 1024), nil
-}
-
-func getTotalDiskSpaceMb(path string) (int64, error) {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(path, &stat)
-	if err != nil {
-		return 0, err
-	}
-	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
-}
-
 func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
@@ -329,4 +303,30 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 			}
 		}
 	}
+}
+
+func getDiskUsageMb(path string) (int64, error) {
+	var totalUsage int64 = 0
+	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalUsage += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return totalUsage / (1024 * 1024), nil
+}
+
+func getTotalDiskSpaceMb(path string) (int64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, err
+	}
+	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
 }
