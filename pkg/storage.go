@@ -102,8 +102,10 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 	}
 
 	dirPath := filepath.Join(cas.diskCacheDir, hash)
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return fmt.Errorf("failed to create cache directory: %w", err)
+	if !cas.diskCachedUsageExceeded {
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			return fmt.Errorf("failed to create cache directory: %w", err)
+		}
 	}
 
 	// Break content into chunks and store
