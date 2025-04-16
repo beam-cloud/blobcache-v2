@@ -79,7 +79,6 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 	// Create the disk cache directory if it doesn't exist
 	err = os.MkdirAll(cfg.Server.DiskCacheDir, 0755)
 	if err != nil {
-		Logger.Errorf("Failed to create disk cache directory: %v", err)
 		return nil, err
 	}
 
