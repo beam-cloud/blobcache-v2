@@ -12,6 +12,12 @@ server:
     redisAddr:
     redisPasswd:
     redisTLSEnabled: false
+  regions:
+    us-east-1:
+      token:
+      rttThresholdMilliseconds: 40
+      hostStorageCapacityThresholdPct: 0.5
+      maxCachePct: 50
 client:
   token:
   nTopHosts: 3
