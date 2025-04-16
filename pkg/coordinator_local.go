@@ -8,6 +8,7 @@ type CoordinatorClient interface {
 	AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error
 	SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error
 	GetAvailableHosts(ctx context.Context, locality string) ([]*BlobCacheHost, error)
+	GetRegionConfig(ctx context.Context, locality string) (BlobCacheServerConfig, error)
 	SetClientLock(ctx context.Context, hash string, host string) error
 	RemoveClientLock(ctx context.Context, hash string, host string) error
 	SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error
@@ -33,6 +34,10 @@ func NewCoordinatorClientLocal(globalConfig BlobCacheGlobalConfig, serverConfig 
 	}
 
 	return &CoordinatorClientLocal{globalConfig: globalConfig, serverConfig: serverConfig, metadata: metadata}, nil
+}
+
+func (c *CoordinatorClientLocal) GetRegionConfig(ctx context.Context, locality string) (BlobCacheServerConfig, error) {
+	return c.serverConfig, nil
 }
 
 func (c *CoordinatorClientLocal) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {

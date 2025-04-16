@@ -19,6 +19,8 @@ service BlobCache {
   // Coordinator RPCs
   rpc GetAvailableHosts(GetAvailableHostsRequest)
       returns (GetAvailableHostsResponse) {}
+  rpc GetRegionConfig(GetRegionConfigRequest)
+      returns (GetRegionConfigResponse) {}
   rpc SetClientLock(SetClientLockRequest) returns (SetClientLockResponse) {}
   rpc RemoveClientLock(RemoveClientLockRequest)
       returns (RemoveClientLockResponse) {}
@@ -95,6 +97,49 @@ message GetAvailableHostsRequest { string locality = 1; }
 message GetAvailableHostsResponse {
   bool ok = 1;
   repeated BlobCacheHost hosts = 2;
+}
+
+message GetRegionConfigRequest { string locality = 1; }
+
+message GetRegionConfigResponse {
+  bool ok = 1;
+  BlobCacheServerConfig server_config = 2;
+}
+
+message BlobCacheServerConfig {
+  string mode = 1;
+  string disk_cache_dir = 2;
+  float disk_cache_max_usage_pct = 3;
+  int64 max_cache_pct = 4;
+  int64 page_size_bytes = 5;
+  int64 object_ttl_s = 6;
+  bool pretty_logs = 7;
+  string token = 8;
+  repeated SourceConfig sources = 9;
+}
+
+message SourceConfig {
+  string mode = 1;
+  string filesystem_name = 2;
+  string filesystem_path = 3;
+  JuiceFSConfig juicefs = 4;
+  MountPointConfig mountpoint = 5;
+}
+
+message JuiceFSConfig {
+  string redis_uri = 1;
+  string bucket = 2;
+  string access_key = 3;
+  string secret_key = 4;
+}
+
+message MountPointConfig {
+  string bucket_name = 1;
+  string access_key = 2;
+  string secret_key = 3;
+  string region = 4;
+  string endpoint_url = 5;
+  bool force_path_style = 6;
 }
 
 message BlobCacheHost {

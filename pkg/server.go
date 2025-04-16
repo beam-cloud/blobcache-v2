@@ -62,6 +62,16 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		coordinator, err = NewCoordinatorClientLocal(cfg.Global, cfg.Server)
 	default:
 		coordinator, err = NewCoordinatorClientRemote(cfg.Global, cfg.Client.Token)
+		if err != nil {
+			return nil, err
+		}
+
+		regionConfig, err := coordinator.GetRegionConfig(ctx, locality)
+		if err != nil {
+			return nil, err
+		}
+
+		cfg.Server = regionConfig
 	}
 	if err != nil {
 		return nil, err

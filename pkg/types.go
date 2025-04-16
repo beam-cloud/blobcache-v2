@@ -65,6 +65,106 @@ type BlobCacheServerConfig struct {
 	PageSizeBytes        int64               `key:"pageSizeBytes" json:"page_size_bytes"`
 	Metadata             MetadataConfig      `key:"metadata" json:"metadata"`
 	Sources              []SourceConfig      `key:"sources" json:"sources"`
+
+	// Allows a coordinator to override a slave server's config for a specific locality/region
+	Regions map[string]RegionConfig `key:"regions" json:"regions"`
+}
+
+func (c *BlobCacheServerConfig) ToProto() *proto.BlobCacheServerConfig {
+	protoConfig := &proto.BlobCacheServerConfig{
+		Mode:                 string(c.Mode),
+		DiskCacheDir:         c.DiskCacheDir,
+		DiskCacheMaxUsagePct: float32(c.DiskCacheMaxUsagePct),
+		MaxCachePct:          c.MaxCachePct,
+		PageSizeBytes:        c.PageSizeBytes,
+		ObjectTtlS:           int64(c.ObjectTtlS),
+		PrettyLogs:           c.PrettyLogs,
+		Token:                c.Token,
+		Sources:              make([]*proto.SourceConfig, 0),
+	}
+
+	for _, source := range c.Sources {
+		protoSource := &proto.SourceConfig{
+			Mode:           string(source.Mode),
+			FilesystemName: source.FilesystemName,
+			FilesystemPath: source.FilesystemPath,
+		}
+
+		switch source.Mode {
+		case SourceModeMountPoint:
+			protoSource.Mountpoint = &proto.MountPointConfig{
+				BucketName:     source.MountPoint.BucketName,
+				AccessKey:      source.MountPoint.AccessKey,
+				SecretKey:      source.MountPoint.SecretKey,
+				Region:         source.MountPoint.Region,
+				EndpointUrl:    source.MountPoint.EndpointURL,
+				ForcePathStyle: source.MountPoint.ForcePathStyle,
+			}
+
+		case SourceModeJuiceFS:
+			protoSource.Juicefs = &proto.JuiceFSConfig{
+				RedisUri:  source.JuiceFS.RedisURI,
+				Bucket:    source.JuiceFS.Bucket,
+				AccessKey: source.JuiceFS.AccessKey,
+				SecretKey: source.JuiceFS.SecretKey,
+			}
+
+		}
+
+		protoConfig.Sources = append(protoConfig.Sources, protoSource)
+	}
+
+	return protoConfig
+}
+
+func BlobCacheServerConfigFromProto(protoConfig *proto.BlobCacheServerConfig) BlobCacheServerConfig {
+	cfg := BlobCacheServerConfig{
+		Mode:                 BlobCacheServerMode(protoConfig.Mode),
+		DiskCacheDir:         protoConfig.DiskCacheDir,
+		DiskCacheMaxUsagePct: float64(protoConfig.DiskCacheMaxUsagePct),
+		MaxCachePct:          protoConfig.MaxCachePct,
+		PageSizeBytes:        protoConfig.PageSizeBytes,
+		ObjectTtlS:           int(protoConfig.ObjectTtlS),
+		PrettyLogs:           protoConfig.PrettyLogs,
+		Token:                protoConfig.Token,
+		Sources:              make([]SourceConfig, len(protoConfig.Sources)),
+	}
+
+	for i, protoSource := range protoConfig.Sources {
+		localSource := SourceConfig{
+			Mode:           protoSource.Mode,
+			FilesystemName: protoSource.FilesystemName,
+			FilesystemPath: protoSource.FilesystemPath,
+		}
+
+		switch protoSource.Mode {
+		case SourceModeMountPoint:
+			localSource.MountPoint = MountPointConfig{
+				BucketName:     protoSource.Mountpoint.BucketName,
+				AccessKey:      protoSource.Mountpoint.AccessKey,
+				SecretKey:      protoSource.Mountpoint.SecretKey,
+				Region:         protoSource.Mountpoint.Region,
+				EndpointURL:    protoSource.Mountpoint.EndpointUrl,
+				ForcePathStyle: protoSource.Mountpoint.ForcePathStyle,
+			}
+
+		case SourceModeJuiceFS:
+			localSource.JuiceFS = JuiceFSConfig{
+				RedisURI:  protoSource.Juicefs.RedisUri,
+				Bucket:    protoSource.Juicefs.Bucket,
+				AccessKey: protoSource.Juicefs.AccessKey,
+				SecretKey: protoSource.Juicefs.SecretKey,
+			}
+		}
+
+		cfg.Sources[i] = localSource
+	}
+
+	return cfg
+}
+
+type RegionConfig struct {
+	ServerConfig BlobCacheServerConfig `key:"server" json:"server"`
 }
 
 type BlobCacheClientConfig struct {
