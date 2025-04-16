@@ -30,8 +30,8 @@ type ContentAddressableStorage struct {
 	coordinator             CoordinatorClient
 	maxCacheSizeMb          int64
 	diskCacheDir            string
-	mu                      sync.Mutex
 	diskCachedUsageExceeded bool
+	mu                      sync.Mutex
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
