@@ -2,7 +2,6 @@ package blobcache
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"sync"
 	"time"
@@ -11,7 +10,6 @@ import (
 	rendezvous "github.com/beam-cloud/rendezvous"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
@@ -137,11 +135,7 @@ func (c *BlobCacheClient) GetNearbyHosts() ([]*BlobCacheHost, error) {
 func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 
-	isTLS := c.globalConfig.TLSEnabled
-	if isTLS {
-		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
-		transportCredentials = grpc.WithTransportCredentials(h2creds)
-	}
+	// TODO: revisit TLS here for external addresses, for now since we're using the internal (private) addresses, it should only use TLS for the coordinator
 
 	addr := host.Addr
 

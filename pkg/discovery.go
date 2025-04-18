@@ -98,8 +98,10 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 
 // GetHostState attempts to connect to the gRPC service and verifies its availability
 func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost) (*BlobCacheHost, error) {
+	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+
 	var dialOpts = []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		transportCredentials,
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(d.cfg.GRPCMessageSizeBytes),
 			grpc.MaxCallSendMsgSize(d.cfg.GRPCMessageSizeBytes),
