@@ -20,6 +20,7 @@ require (
 	github.com/moby/sys/mountinfo v0.7.2
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/shirou/gopsutil v2.21.11+incompatible
+	github.com/tj/assert v0.0.3
 	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.4
 	gotest.tools v2.2.0+incompatible
@@ -30,6 +31,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
 )
 
 require (

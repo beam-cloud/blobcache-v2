@@ -30,6 +30,14 @@ func getDefaultInterface() (string, error) {
 	return "", fmt.Errorf("default route not found")
 }
 
+func isTLSEnabled(addr string) bool {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	return port == "443"
+}
+
 func GetPublicIpAddr() (string, error) {
 	resp, err := http.Get("https://api.ipify.org?format=text")
 	if err != nil {

@@ -162,7 +162,18 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 }
 
 func (cas *ContentAddressableStorage) Exists(hash string) bool {
-	_, exists := cas.cache.GetTTL(hash)
+	var exists bool = false
+
+	_, exists = cas.cache.GetTTL(hash)
+	if !exists {
+		exists, err := os.Stat(filepath.Join(cas.diskCacheDir, hash))
+		if err != nil {
+			return false
+		}
+
+		return exists.IsDir()
+	}
+
 	return exists
 }
 

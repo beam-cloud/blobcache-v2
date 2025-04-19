@@ -39,5 +39,4 @@ global:
   grpcMessageSizeBytes: 1000000000
   debugMode: false
   prettyLogs: false
-  tlsEnabled: false
   sources: []
