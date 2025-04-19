@@ -111,6 +111,7 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost)
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
+
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
 		grpc.WithDefaultCallOptions(

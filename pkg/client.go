@@ -2,7 +2,6 @@ package blobcache
 
 import (
 	"context"
-	"crypto/tls"
 	"io"
 	"sync"
 	"time"
@@ -11,7 +10,6 @@ import (
 	rendezvous "github.com/beam-cloud/rendezvous"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
