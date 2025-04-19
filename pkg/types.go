@@ -34,7 +34,6 @@ type BlobCacheGlobalConfig struct {
 	GRPCDialTimeoutS                int     `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
 	GRPCMessageSizeBytes            int     `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
 	DebugMode                       bool    `key:"debugMode" json:"debug_mode"`
-	TLSEnabled                      bool    `key:"tlsEnabled" json:"tls_enabled"`
 	PrettyLogs                      bool    `key:"prettyLogs" json:"pretty_logs"`
 }
 

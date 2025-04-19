@@ -187,7 +187,8 @@ func NewFileSystem(ctx context.Context, opts BlobFsSystemOpts) (*BlobFs, error) 
 
 		err := coordinatorClient.SetFsNode(bfs.ctx, rootID, dirMeta)
 		if err != nil {
-			Logger.Fatalf("Unable to create blobfs root node dir metdata: %+v", err)
+			Logger.Errorf("Unable to create blobfs root node dir metdata: %+v", err)
+			return nil, err
 		}
 	}
 

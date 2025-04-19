@@ -2,12 +2,14 @@ package blobcache
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"sync"
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -68,28 +70,27 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 	mu := sync.Mutex{}
 
 	for _, host := range hosts {
-		if host.PrivateAddr != "" {
-			// Don't try to get the state on peers we're already aware of
-			if d.hostMap.Get(host.HostId) != nil {
-				continue
+		// Don't try to get the state on peers we're already aware of
+		if d.hostMap.Get(host.HostId) != nil {
+			continue
+		}
+
+		wg.Add(1)
+		go func(addr string) {
+			defer wg.Done()
+
+			hostState, err := d.GetHostState(ctx, host)
+			if err != nil {
+				return
 			}
 
-			wg.Add(1)
-			go func(addr string) {
-				defer wg.Done()
+			mu.Lock()
+			filteredHosts = append(filteredHosts, hostState)
+			mu.Unlock()
 
-				hostState, err := d.GetHostState(ctx, host)
-				if err != nil {
-					return
-				}
+			Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
+		}(host.Addr)
 
-				mu.Lock()
-				filteredHosts = append(filteredHosts, hostState)
-				mu.Unlock()
-
-				Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
-			}(host.Addr)
-		}
 	}
 
 	wg.Wait()
@@ -98,7 +99,18 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 
 // GetHostState attempts to connect to the gRPC service and verifies its availability
 func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost) (*BlobCacheHost, error) {
+	addr := host.Addr
+
+	if host.PrivateAddr != "" {
+		addr = host.PrivateAddr
+	}
+
 	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+	if isTLSEnabled(addr) {
+		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
+		transportCredentials = grpc.WithTransportCredentials(h2creds)
+	}
+
 
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,

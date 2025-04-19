@@ -18,15 +18,13 @@ type CoordinatorClientRemote struct {
 }
 
 func NewCoordinatorClientRemote(cfg BlobCacheGlobalConfig, token string) (CoordinatorClient, error) {
-	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+	addr := cfg.CoordinatorHost
 
-	isTLS := cfg.TLSEnabled
-	if isTLS {
+	transportCredentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+	if isTLSEnabled(addr) {
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
-
-	addr := cfg.CoordinatorHost
 
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
