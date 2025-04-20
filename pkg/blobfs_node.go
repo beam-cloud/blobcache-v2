@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -231,25 +232,221 @@ func (n *FSNode) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 
 func (n *FSNode) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (inode *fs.Inode, fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	n.log("Create called with name: %s, flags: %v, mode: %v", name, flags, mode)
-	return nil, nil, 0, syscall.EROFS
+
+	// Construct the full path for the new file
+	fullPath := path.Join(n.bfsNode.Path, name)
+
+	// Generate a new FsID for the file
+	newFsId := GenerateFsID(fullPath)
+
+	// Initialize default metadata for the new file
+	now := time.Now()
+	nowSec := uint64(now.Unix())
+	nowNsec := uint32(now.Nanosecond())
+	metadata := &BlobFsMetadata{
+		PID:       n.bfsNode.ID,
+		ID:        newFsId,
+		Name:      name,
+		Path:      fullPath,
+		Ino:       0, // This will be set later
+		Mode:      mode,
+		Atime:     nowSec,
+		Mtime:     nowSec,
+		Ctime:     nowSec,
+		Atimensec: nowNsec,
+		Mtimensec: nowNsec,
+		Ctimensec: nowNsec,
+		Size:      0,
+		Hash:      "", // No hash for a new file
+	}
+
+	// Set metadata in the coordinator
+	err := n.filesystem.CoordinatorClient.SetFsNode(ctx, newFsId, metadata)
+	if err != nil {
+		return nil, nil, 0, syscall.EIO
+	}
+
+	// Add the new file as a child of the current node
+	err = n.filesystem.CoordinatorClient.AddFsNodeChild(ctx, n.bfsNode.ID, newFsId)
+	if err != nil {
+		return nil, nil, 0, syscall.EIO
+	}
+
+	// Create a new inode for the file
+	inode = n.NewInode(ctx, &FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
+		Path: fullPath,
+		ID:   newFsId,
+		Name: name,
+		Attr: fuse.Attr{
+			Mode: mode,
+		},
+	}}, fs.StableAttr{Mode: mode, Ino: metadata.Ino})
+
+	// Fill in the EntryOut struct
+	out.Attr = fuse.Attr{
+		Mode: mode,
+		Ino:  metadata.Ino,
+	}
+
+	return inode, nil, 0, fs.OK
 }
 
 func (n *FSNode) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	n.log("Mkdir called with name: %s, mode: %v", name, mode)
-	return nil, syscall.EROFS
+
+	// Construct the full path for the new directory
+	fullPath := path.Join(n.bfsNode.Path, name)
+
+	// Generate a new FsID for the directory
+	newFsId := GenerateFsID(fullPath)
+
+	// Initialize default metadata for the new directory
+	now := time.Now()
+	nowSec := uint64(now.Unix())
+	nowNsec := uint32(now.Nanosecond())
+	metadata := &BlobFsMetadata{
+		PID:       n.bfsNode.ID,
+		ID:        newFsId,
+		Name:      name,
+		Path:      fullPath,
+		Ino:       0, // This will be set later
+		Mode:      fuse.S_IFDIR | mode,
+		Atime:     nowSec,
+		Mtime:     nowSec,
+		Ctime:     nowSec,
+		Atimensec: nowNsec,
+		Mtimensec: nowNsec,
+		Ctimensec: nowNsec,
+		Size:      0,
+		Hash:      "", // No hash for a new directory
+	}
+
+	// Set metadata in the coordinator
+	err := n.filesystem.CoordinatorClient.SetFsNode(ctx, newFsId, metadata)
+	if err != nil {
+		return nil, syscall.EIO
+	}
+
+	// Add the new directory as a child of the current node
+	err = n.filesystem.CoordinatorClient.AddFsNodeChild(ctx, n.bfsNode.ID, newFsId)
+	if err != nil {
+		return nil, syscall.EIO
+	}
+
+	// Create a new inode for the directory
+	inode := n.NewInode(ctx, &FSNode{filesystem: n.filesystem, bfsNode: &BlobFsNode{
+		Path: fullPath,
+		ID:   newFsId,
+		Name: name,
+		Attr: fuse.Attr{
+			Mode: fuse.S_IFDIR | mode,
+		},
+	}}, fs.StableAttr{Mode: fuse.S_IFDIR | mode, Ino: metadata.Ino})
+
+	// Fill in the EntryOut struct
+	out.Attr = fuse.Attr{
+		Mode: fuse.S_IFDIR | mode,
+		Ino:  metadata.Ino,
+	}
+
+	return inode, fs.OK
 }
 
 func (n *FSNode) Rmdir(ctx context.Context, name string) syscall.Errno {
 	n.log("Rmdir called with name: %s", name)
-	return syscall.EROFS
+
+	// Construct the full path for the directory to be removed
+	fullPath := path.Join(n.bfsNode.Path, name)
+
+	// Generate the FsID for the directory
+	fsId := GenerateFsID(fullPath)
+
+	// Check if the directory is empty
+	children, err := n.filesystem.CoordinatorClient.GetFsNodeChildren(ctx, fsId)
+	if err != nil {
+		return syscall.EIO
+	}
+	if len(children) > 0 {
+		return syscall.ENOTEMPTY
+	}
+
+	// Remove the directory from the coordinator
+	err = n.filesystem.CoordinatorClient.RemoveFsNode(ctx, fsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	// Remove the directory from the parent's children
+	err = n.filesystem.CoordinatorClient.RemoveFsNodeChild(ctx, n.bfsNode.ID, fsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	return fs.OK
 }
 
 func (n *FSNode) Unlink(ctx context.Context, name string) syscall.Errno {
 	n.log("Unlink called with name: %s", name)
-	return syscall.EROFS
+
+	// Construct the full path for the file to be deleted
+	fullPath := path.Join(n.bfsNode.Path, name)
+
+	// Generate the FsID for the file
+	fsId := GenerateFsID(fullPath)
+
+	// Remove the file from the coordinator
+	err := n.filesystem.CoordinatorClient.RemoveFsNode(ctx, fsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	// Remove the file from the parent's children
+	err = n.filesystem.CoordinatorClient.RemoveFsNodeChild(ctx, n.bfsNode.ID, fsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	return fs.OK
 }
 
 func (n *FSNode) Rename(ctx context.Context, oldName string, newParent fs.InodeEmbedder, newName string, flags uint32) syscall.Errno {
 	n.log("Rename called with oldName: %s, newName: %s, flags: %v", oldName, newName, flags)
-	return syscall.EROFS
+
+	// Construct the full path for the old and new names
+	oldFullPath := path.Join(n.bfsNode.Path, oldName)
+	newFullPath := path.Join(n.bfsNode.Path, newName)
+
+	// Generate the FsID for the old and new paths
+	oldFsId := GenerateFsID(oldFullPath)
+	newFsId := GenerateFsID(newFullPath)
+
+	// Get the metadata for the old path
+	metadata, err := n.filesystem.CoordinatorClient.GetFsNode(ctx, oldFsId)
+	if err != nil {
+		return syscall.ENOENT
+	}
+
+	// Update the metadata with the new name and path
+	metadata.Name = newName
+	metadata.Path = newFullPath
+
+	// Set the updated metadata in the coordinator
+	err = n.filesystem.CoordinatorClient.SetFsNode(ctx, newFsId, metadata)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	// Remove the old node from the parent's children
+	err = n.filesystem.CoordinatorClient.RemoveFsNodeChild(ctx, n.bfsNode.ID, oldFsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	// Add the new node as a child of the parent
+	err = n.filesystem.CoordinatorClient.AddFsNodeChild(ctx, n.bfsNode.ID, newFsId)
+	if err != nil {
+		return syscall.EIO
+	}
+
+	return fs.OK
 }

@@ -257,6 +257,32 @@ func (c *CoordinatorClientRemote) AddFsNodeChild(ctx context.Context, pid, id st
 	return nil
 }
 
+func (c *CoordinatorClientRemote) RemoveFsNode(ctx context.Context, id string) error {
+	r, err := c.client.RemoveFsNode(ctx, &proto.RemoveFsNodeRequest{Id: id})
+	if err != nil {
+		return err
+	}
+
+	if !r.Ok {
+		return errors.New("failed to remove fs node")
+	}
+
+	return nil
+}
+
+func (c *CoordinatorClientRemote) RemoveFsNodeChild(ctx context.Context, pid, id string) error {
+	r, err := c.client.RemoveFsNodeChild(ctx, &proto.RemoveFsNodeChildRequest{Pid: pid, Id: id})
+	if err != nil {
+		return err
+	}
+
+	if !r.Ok {
+		return errors.New("failed to remove fs node child")
+	}
+
+	return nil
+}
+
 func (c *CoordinatorClientRemote) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {
 	response, err := c.client.GetFsNodeChildren(ctx, &proto.GetFsNodeChildrenRequest{Id: id})
 	if err != nil {

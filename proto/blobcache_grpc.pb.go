@@ -37,6 +37,8 @@ const (
 	BlobCache_GetFsNode_FullMethodName                      = "/blobcache.BlobCache/GetFsNode"
 	BlobCache_GetFsNodeChildren_FullMethodName              = "/blobcache.BlobCache/GetFsNodeChildren"
 	BlobCache_AddFsNodeChild_FullMethodName                 = "/blobcache.BlobCache/AddFsNodeChild"
+	BlobCache_RemoveFsNode_FullMethodName                   = "/blobcache.BlobCache/RemoveFsNode"
+	BlobCache_RemoveFsNodeChild_FullMethodName              = "/blobcache.BlobCache/RemoveFsNodeChild"
 	BlobCache_AddHostToIndex_FullMethodName                 = "/blobcache.BlobCache/AddHostToIndex"
 	BlobCache_SetHostKeepAlive_FullMethodName               = "/blobcache.BlobCache/SetHostKeepAlive"
 )
@@ -65,6 +67,8 @@ type BlobCacheClient interface {
 	GetFsNode(ctx context.Context, in *GetFsNodeRequest, opts ...grpc.CallOption) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(ctx context.Context, in *GetFsNodeChildrenRequest, opts ...grpc.CallOption) (*GetFsNodeChildrenResponse, error)
 	AddFsNodeChild(ctx context.Context, in *AddFsNodeChildRequest, opts ...grpc.CallOption) (*AddFsNodeChildResponse, error)
+	RemoveFsNode(ctx context.Context, in *RemoveFsNodeRequest, opts ...grpc.CallOption) (*RemoveFsNodeResponse, error)
+	RemoveFsNodeChild(ctx context.Context, in *RemoveFsNodeChildRequest, opts ...grpc.CallOption) (*RemoveFsNodeChildResponse, error)
 	AddHostToIndex(ctx context.Context, in *AddHostToIndexRequest, opts ...grpc.CallOption) (*AddHostToIndexResponse, error)
 	SetHostKeepAlive(ctx context.Context, in *SetHostKeepAliveRequest, opts ...grpc.CallOption) (*SetHostKeepAliveResponse, error)
 }
@@ -269,6 +273,26 @@ func (c *blobCacheClient) AddFsNodeChild(ctx context.Context, in *AddFsNodeChild
 	return out, nil
 }
 
+func (c *blobCacheClient) RemoveFsNode(ctx context.Context, in *RemoveFsNodeRequest, opts ...grpc.CallOption) (*RemoveFsNodeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveFsNodeResponse)
+	err := c.cc.Invoke(ctx, BlobCache_RemoveFsNode_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) RemoveFsNodeChild(ctx context.Context, in *RemoveFsNodeChildRequest, opts ...grpc.CallOption) (*RemoveFsNodeChildResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveFsNodeChildResponse)
+	err := c.cc.Invoke(ctx, BlobCache_RemoveFsNodeChild_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *blobCacheClient) AddHostToIndex(ctx context.Context, in *AddHostToIndexRequest, opts ...grpc.CallOption) (*AddHostToIndexResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddHostToIndexResponse)
@@ -313,6 +337,8 @@ type BlobCacheServer interface {
 	GetFsNode(context.Context, *GetFsNodeRequest) (*GetFsNodeResponse, error)
 	GetFsNodeChildren(context.Context, *GetFsNodeChildrenRequest) (*GetFsNodeChildrenResponse, error)
 	AddFsNodeChild(context.Context, *AddFsNodeChildRequest) (*AddFsNodeChildResponse, error)
+	RemoveFsNode(context.Context, *RemoveFsNodeRequest) (*RemoveFsNodeResponse, error)
+	RemoveFsNodeChild(context.Context, *RemoveFsNodeChildRequest) (*RemoveFsNodeChildResponse, error)
 	AddHostToIndex(context.Context, *AddHostToIndexRequest) (*AddHostToIndexResponse, error)
 	SetHostKeepAlive(context.Context, *SetHostKeepAliveRequest) (*SetHostKeepAliveResponse, error)
 	mustEmbedUnimplementedBlobCacheServer()
@@ -378,6 +404,12 @@ func (UnimplementedBlobCacheServer) GetFsNodeChildren(context.Context, *GetFsNod
 }
 func (UnimplementedBlobCacheServer) AddFsNodeChild(context.Context, *AddFsNodeChildRequest) (*AddFsNodeChildResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddFsNodeChild not implemented")
+}
+func (UnimplementedBlobCacheServer) RemoveFsNode(context.Context, *RemoveFsNodeRequest) (*RemoveFsNodeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveFsNode not implemented")
+}
+func (UnimplementedBlobCacheServer) RemoveFsNodeChild(context.Context, *RemoveFsNodeChildRequest) (*RemoveFsNodeChildResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveFsNodeChild not implemented")
 }
 func (UnimplementedBlobCacheServer) AddHostToIndex(context.Context, *AddHostToIndexRequest) (*AddHostToIndexResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddHostToIndex not implemented")
@@ -712,6 +744,42 @@ func _BlobCache_AddFsNodeChild_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlobCache_RemoveFsNode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFsNodeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).RemoveFsNode(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_RemoveFsNode_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).RemoveFsNode(ctx, req.(*RemoveFsNodeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_RemoveFsNodeChild_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFsNodeChildRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).RemoveFsNodeChild(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_RemoveFsNodeChild_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).RemoveFsNodeChild(ctx, req.(*RemoveFsNodeChildRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _BlobCache_AddHostToIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddHostToIndexRequest)
 	if err := dec(in); err != nil {
@@ -818,6 +886,14 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddFsNodeChild",
 			Handler:    _BlobCache_AddFsNodeChild_Handler,
+		},
+		{
+			MethodName: "RemoveFsNode",
+			Handler:    _BlobCache_RemoveFsNode_Handler,
+		},
+		{
+			MethodName: "RemoveFsNodeChild",
+			Handler:    _BlobCache_RemoveFsNodeChild_Handler,
 		},
 		{
 			MethodName: "AddHostToIndex",

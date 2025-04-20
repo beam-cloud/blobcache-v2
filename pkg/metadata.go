@@ -198,8 +198,12 @@ func (m *BlobCacheMetadata) AddFsNodeChild(ctx context.Context, pid, id string) 
 	return nil
 }
 
-func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, id string) error {
-	return nil
+func (m *BlobCacheMetadata) RemoveFsNode(ctx context.Context, id string) error {
+	return m.rdb.Del(ctx, MetadataKeys.MetadataFsNode(id)).Err()
+}
+
+func (m *BlobCacheMetadata) RemoveFsNodeChild(ctx context.Context, pid, id string) error {
+	return m.rdb.SRem(ctx, MetadataKeys.MetadataFsNodeChildren(pid), id).Err()
 }
 
 func (m *BlobCacheMetadata) SetStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error {

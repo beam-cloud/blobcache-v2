@@ -268,7 +268,7 @@ func (cs *CacheService) GetContentStream(req *proto.GetContentRequest, stream pr
 	return nil
 }
 
-func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourcePath string, sourceOffset int64) (string, error) {
+func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer) (string, error) {
 	content := buffer.Bytes()
 	size := buffer.Len()
 
@@ -278,19 +278,10 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer, sourceP
 	hash := hex.EncodeToString(hashBytes[:])
 
 	// Store in local in-memory cache
-	err := cs.cas.Add(ctx, hash, content, sourcePath, sourceOffset)
+	err := cs.cas.Add(ctx, hash, content)
 	if err != nil {
 		Logger.Infof("Store[ERR] - [%s] - %v", hash, err)
 		return "", status.Errorf(codes.Internal, "Failed to add content: %v", err)
-	}
-
-	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	if sourcePath != "" && cs.coordinator != nil {
-		err := cs.StoreContentInBlobFs(ctx, sourcePath, hash, uint64(size))
-		if err != nil {
-			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, sourcePath, err)
-			return "", status.Errorf(codes.Internal, "Failed to store blobfs reference: %v", err)
-		}
 	}
 
 	Logger.Infof("Store[OK] - [%s]", hash)
@@ -415,7 +406,7 @@ func (cs *CacheService) StoreContent(stream proto.BlobCache_StoreContentServer) 
 		}
 	}
 
-	hash, err := cs.store(ctx, &buffer, "", 0)
+	hash, err := cs.store(ctx, &buffer)
 	if err != nil {
 		return err
 	}
@@ -465,10 +456,19 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	}
 
 	// Store the content
-	hash, err := cs.store(ctx, &buffer, localPath, req.SourceOffset)
+	hash, err := cs.store(ctx, &buffer)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error storing data in cache: %v", err)
 		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+	}
+
+	// Store references in blobfs if it's enabled (for disk access to the cached content)
+	if cs.coordinator != nil {
+		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()))
+		if err != nil {
+			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, localPath, err)
+			return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+		}
 	}
 
 	buffer.Reset()
