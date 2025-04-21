@@ -477,7 +477,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64, bucketName string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -498,7 +498,7 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sourceOffset int64) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sourceOffset int64, bucketName string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 

@@ -122,7 +122,7 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 		n.log("Storing content from source with path: %s", sourcePath)
 
-		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0)
+		_, err := n.filesystem.Client.StoreContentFromSource(sourcePath, 0, "")
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
@@ -177,7 +177,7 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 
 			sourcePath := n.bfsNode.Path
 
-			_, err := n.filesystem.Client.StoreContentFromSourceWithLock(sourcePath, 0)
+			_, err := n.filesystem.Client.StoreContentFromSourceWithLock(sourcePath, 0, "")
 
 			// If multiple clients try to store the same file, some may get ErrUnableToAcquireLock
 			// In this case, we should tell the client to retry the Read instead of returning an error
