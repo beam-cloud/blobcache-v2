@@ -477,7 +477,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64, bucketName string) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, bucketName string, hash string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -490,7 +490,7 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: 0})
 	if err != nil {
 		return "", err
 	}
@@ -498,7 +498,7 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sourceOffset int64, bucketName string) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, bucketName string, hash string) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -511,7 +511,7 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
+	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: 0})
 	if err != nil {
 		return "", err
 	}
