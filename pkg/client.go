@@ -490,7 +490,7 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, bucketName s
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: 0})
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, BucketName: bucketName})
 	if err != nil {
 		return "", err
 	}
@@ -511,7 +511,7 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, buck
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: 0})
+	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, BucketName: bucketName})
 	if err != nil {
 		return "", err
 	}
