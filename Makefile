@@ -1,6 +1,6 @@
 chartVersion := 0.1.1
 imageVersion := latest
-GOOS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+GOOS ?= linux
 GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
 
