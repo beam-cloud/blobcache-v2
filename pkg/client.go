@@ -621,6 +621,7 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 	if !resp.Ok {
 		return "", ErrUnableToPopulateContent
 	}
+
 	return resp.Hash, nil
 }
 
