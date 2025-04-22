@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -47,6 +48,7 @@ type CacheService struct {
 	serverConfig  BlobCacheServerConfig
 	globalConfig  BlobCacheGlobalConfig
 	coordinator   CoordinatorClient
+	s3ClientCache sync.Map
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
@@ -126,6 +128,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		coordinator:   coordinator,
 		privateIpAddr: privateIpAddr,
 		publicIpAddr:  publicIpAddr,
+		s3ClientCache: sync.Map{},
 	}
 
 	go cs.HostKeepAlive()
@@ -454,26 +457,35 @@ func (cs *CacheService) cacheSourceFromLocalPath(localPath string, buffer *bytes
 }
 
 func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *bytes.Buffer) error {
-	s3Client, err := NewS3Client(cs.ctx, struct {
-		BucketName  string
-		Path        string
-		Region      string
-		EndpointURL string
-		AccessKey   string
-		SecretKey   string
-	}{
-		BucketName:  source.BucketName,
-		Path:        source.Path,
-		Region:      source.Region,
-		EndpointURL: source.EndpointUrl,
-		AccessKey:   source.AccessKey,
-		SecretKey:   source.SecretKey,
-	})
-	if err != nil {
-		return err
+	key := fmt.Sprintf("%s/%s/%s/%s", source.EndpointUrl, source.Region, source.BucketName, source.Path)
+
+	var s3Client *S3Client
+	if cachedS3Client, ok := cs.s3ClientCache.Load(key); ok {
+		s3Client = cachedS3Client.(*S3Client)
+	} else {
+		s3Client, err := NewS3Client(cs.ctx, struct {
+			BucketName  string
+			Path        string
+			Region      string
+			EndpointURL string
+			AccessKey   string
+			SecretKey   string
+		}{
+			BucketName:  source.BucketName,
+			Path:        source.Path,
+			Region:      source.Region,
+			EndpointURL: source.EndpointUrl,
+			AccessKey:   source.AccessKey,
+			SecretKey:   source.SecretKey,
+		})
+		if err != nil {
+			return err
+		}
+
+		cs.s3ClientCache.Store(key, s3Client)
 	}
 
-	err = s3Client.DownloadIntoBuffer(cs.ctx, source.Path, buffer)
+	err := s3Client.DownloadIntoBuffer(cs.ctx, source.Path, buffer)
 	if err != nil {
 		return err
 	}

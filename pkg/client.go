@@ -36,6 +36,18 @@ type RendezvousHasher interface {
 	GetN(n int, key string) []*BlobCacheHost
 }
 
+type ClientOption func(*ClientOpt)
+
+type ClientOpt struct {
+	RoutingKey string
+}
+
+func WithRoutingKey(key string) ClientOption {
+	return func(opt *ClientOpt) {
+		opt.RoutingKey = key
+	}
+}
+
 type BlobCacheClient struct {
 	ctx                   context.Context
 	locality              string
@@ -262,7 +274,7 @@ func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
 	return false, nil
 }
 
-func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {
+func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, opts ...ClientOption) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
@@ -271,11 +283,18 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		maxAttempts = int(c.maxGetContentAttempts)
 	}
 
-	for attempt := 0; attempt < maxAttempts; attempt += 1 {
+	options := ClientOpt{RoutingKey: hash}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	routingKey := options.RoutingKey
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
 			hash:      hash,
-			key:       hash,
+			key:       routingKey,
 			hostIndex: attempt,
 		})
 		if err != nil {
@@ -285,11 +304,9 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
-
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
 			c.mu.Unlock()
-
 			continue
 		}
 
@@ -442,14 +459,19 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	return client, host, nil
 }
 
-func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string, opts ...ClientOption) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
+
+	options := ClientOpt{RoutingKey: hash}
+	for _, opt := range opts {
+		opt(&options)
+	}
 
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
 		hash:      hash,
-		key:       hash,
+		key:       options.RoutingKey,
 		hostIndex: 0,
 	})
 	if err != nil {
@@ -485,13 +507,18 @@ func (c *BlobCacheClient) StoreContentFromSource(source struct {
 	EndpointURL string
 	AccessKey   string
 	SecretKey   string
-}) (string, error) {
+}, opts ...ClientOption) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
+	options := ClientOpt{RoutingKey: fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path)}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
-		key:       fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path),
+		key:       options.RoutingKey,
 		hostIndex: 0,
 	})
 	if err != nil {
@@ -524,13 +551,18 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(source struct {
 	EndpointURL string
 	AccessKey   string
 	SecretKey   string
-}) (string, error) {
+}, opts ...ClientOption) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
+	options := ClientOpt{RoutingKey: fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path)}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
-		key:       fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path),
+		key:       options.RoutingKey,
 		hostIndex: 0,
 	})
 	if err != nil {
