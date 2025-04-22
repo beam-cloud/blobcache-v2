@@ -138,7 +138,11 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 			SecretKey:   "",
 		}
 
-		_, err := n.filesystem.Client.StoreContentFromSource(cacheSource)
+		_, err := n.filesystem.Client.StoreContentFromSource(cacheSource, struct {
+			RoutingKey string
+		}{
+			RoutingKey: sourcePath,
+		})
 		if err != nil {
 			return nil, syscall.ENOENT
 		}
@@ -187,11 +191,16 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		return fuse.ReadResultData(dest[:0]), fs.OK
 	}
 
-	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+	sourcePath := n.bfsNode.Path
+
+	buffer, err := n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)), struct {
+		RoutingKey string
+	}{
+		RoutingKey: sourcePath,
+	})
 	if err != nil {
 		if err == ErrContentNotFound {
 
-			sourcePath := n.bfsNode.Path
 			cacheSource := struct {
 				Path        string
 				BucketName  string
@@ -207,7 +216,11 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 				AccessKey:   "",
 				SecretKey:   "",
 			}
-			_, err = n.filesystem.Client.StoreContentFromSourceWithLock(cacheSource)
+			_, err = n.filesystem.Client.StoreContentFromSourceWithLock(cacheSource, struct {
+				RoutingKey string
+			}{
+				RoutingKey: sourcePath,
+			})
 			// If multiple clients try to store the same file, some may get ErrUnableToAcquireLock
 			// In this case, we should tell the client to retry the Read instead of returning an error
 			if err != nil && err == ErrUnableToAcquireLock {
@@ -216,7 +229,11 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 				return nil, syscall.EIO
 			}
 
-			buffer, err = n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)))
+			buffer, err = n.filesystem.Client.GetContent(n.bfsNode.Hash, off, int64(len(dest)), struct {
+				RoutingKey string
+			}{
+				RoutingKey: sourcePath,
+			})
 			if err != nil {
 				return nil, syscall.EIO
 			}
