@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -477,20 +478,36 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, bucketName string) (string, error) {
+type CacheSource struct {
+	Path        string
+	BucketName  string
+	Region      string
+	EndpointURL string
+	AccessKey   string
+	SecretKey   string
+}
+
+func (c *BlobCacheClient) StoreContentFromSource(source CacheSource) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
-		key:       sourcePath,
+		key:       fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path),
 		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, BucketName: bucketName})
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path:        source.Path,
+		BucketName:  source.BucketName,
+		Region:      source.Region,
+		EndpointUrl: source.EndpointURL,
+		AccessKey:   source.AccessKey,
+		SecretKey:   source.SecretKey,
+	}})
 	if err != nil {
 		return "", err
 	}
@@ -498,20 +515,27 @@ func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, bucketName s
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, bucketName string) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSourceWithLock(source CacheSource) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
-		key:       sourcePath,
+		key:       fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path),
 		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, BucketName: bucketName})
+	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path:        source.Path,
+		BucketName:  source.BucketName,
+		Region:      source.Region,
+		EndpointUrl: source.EndpointURL,
+		AccessKey:   source.AccessKey,
+		SecretKey:   source.SecretKey,
+	}})
 	if err != nil {
 		return "", err
 	}

@@ -85,10 +85,16 @@ message GetStateResponse {
   string private_ip_addr = 4;
 }
 
-message StoreContentFromSourceRequest {
-  string source_path = 1;
+message CacheSource {
+  string path = 1;
   string bucket_name = 2;
+  string region = 3;
+  string endpoint_url = 4;
+  string access_key = 5;
+  string secret_key = 6;
 }
+
+message StoreContentFromSourceRequest { CacheSource source = 1; }
 
 message StoreContentFromSourceResponse {
   bool ok = 1;
