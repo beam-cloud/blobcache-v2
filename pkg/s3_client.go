@@ -32,7 +32,6 @@ func NewS3Client(ctx context.Context, source struct {
 	AccessKey   string
 	SecretKey   string
 }) (*S3Client, error) {
-	Logger.Infof("NewS3Client[ACK] - [%v]", source)
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(source.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
@@ -45,15 +44,15 @@ func NewS3Client(ctx context.Context, source struct {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	// If a custom endpoint is provided, use it
 	if source.EndpointURL != "" {
+		Logger.Infof("NewS3Client[ACK] - using custom endpoint: %s", source.EndpointURL)
 		cfg.BaseEndpoint = aws.String(source.EndpointURL)
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
-
 	return &S3Client{
 		s3Client: s3Client,
+		source:   source,
 	}, nil
 }
 

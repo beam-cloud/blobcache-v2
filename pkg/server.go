@@ -506,7 +506,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
-	if cs.coordinator != nil {
+	if cs.coordinator != nil && req.Source.BucketName == "" {
 		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()))
 		if err != nil {
 			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, localPath, err)
