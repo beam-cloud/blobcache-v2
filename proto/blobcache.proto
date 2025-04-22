@@ -74,6 +74,7 @@ message StoreContentFromSourceWithLockResponse {
   string hash = 1; // Hash of the stored content
   bool ok = 2;
   bool failed_to_acquire_lock = 3;
+  string error_msg = 4;
 }
 
 message GetStateRequest {}
@@ -99,6 +100,7 @@ message StoreContentFromSourceRequest { CacheSource source = 1; }
 message StoreContentFromSourceResponse {
   bool ok = 1;
   string hash = 2;
+  string error_msg = 3;
 }
 
 message GetAvailableHostsRequest { string locality = 1; }

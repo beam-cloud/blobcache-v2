@@ -489,12 +489,12 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	if req.Source.BucketName == "" {
 		err := cs.cacheSourceFromLocalPath(localPath, &buffer)
 		if err != nil {
-			return &proto.StoreContentFromSourceResponse{Ok: false}, err
+			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
 		}
 	} else {
 		err := cs.cacheSourceFromS3(req.Source, &buffer)
 		if err != nil {
-			return &proto.StoreContentFromSourceResponse{Ok: false}, err
+			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
 		}
 	}
 
@@ -502,15 +502,17 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	hash, err := cs.store(ctx, &buffer)
 	if err != nil {
 		Logger.Infof("StoreFromContent[ERR] - error storing data in cache: %v", err)
-		return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+		return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, nil
 	}
 
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
+	// This is unnecessary for workspace storage, but still required for CLIP to lazy load content from cache
+	// and volume caching + juicefs to work
 	if cs.coordinator != nil && req.Source.BucketName == "" {
 		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()))
 		if err != nil {
 			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, localPath, err)
-			return &proto.StoreContentFromSourceResponse{Ok: false}, nil
+			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, nil
 		}
 	}
 
@@ -526,7 +528,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.Source.Path
 	if err := cs.coordinator.SetStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
-		return &proto.StoreContentFromSourceWithLockResponse{Ok: false, FailedToAcquireLock: true}, nil
+		return &proto.StoreContentFromSourceWithLockResponse{Ok: false, FailedToAcquireLock: true, ErrorMsg: err.Error()}, nil
 	}
 
 	storeContext, cancel := context.WithCancel(ctx)
@@ -548,7 +550,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 
 	storeContentFromSourceResp, err := cs.StoreContentFromSource(storeContext, req)
 	if err != nil {
-		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false}, nil
+		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false, ErrorMsg: err.Error()}, nil
 	}
 
 	if err := cs.coordinator.RemoveStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
