@@ -454,7 +454,14 @@ func (cs *CacheService) cacheFromLocalPath(localPath string, buffer *bytes.Buffe
 }
 
 func (cs *CacheService) cacheFromS3(source *proto.CacheSource, buffer *bytes.Buffer) error {
-	s3Client, err := NewS3Client(cs.ctx, CacheSource{
+	s3Client, err := NewS3Client(cs.ctx, struct {
+		BucketName  string
+		Path        string
+		Region      string
+		EndpointURL string
+		AccessKey   string
+		SecretKey   string
+	}{
 		BucketName:  source.BucketName,
 		Path:        source.Path,
 		Region:      source.Region,

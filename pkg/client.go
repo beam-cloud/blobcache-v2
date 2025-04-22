@@ -478,16 +478,14 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-type CacheSource struct {
+func (c *BlobCacheClient) StoreContentFromSource(source struct {
 	Path        string
 	BucketName  string
 	Region      string
 	EndpointURL string
 	AccessKey   string
 	SecretKey   string
-}
-
-func (c *BlobCacheClient) StoreContentFromSource(source CacheSource) (string, error) {
+}) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -515,7 +513,14 @@ func (c *BlobCacheClient) StoreContentFromSource(source CacheSource) (string, er
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSourceWithLock(source CacheSource) (string, error) {
+func (c *BlobCacheClient) StoreContentFromSourceWithLock(source struct {
+	Path        string
+	BucketName  string
+	Region      string
+	EndpointURL string
+	AccessKey   string
+	SecretKey   string
+}) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 

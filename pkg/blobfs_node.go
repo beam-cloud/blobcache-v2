@@ -122,7 +122,14 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 		n.log("Storing content from source with path: %s", sourcePath)
 
-		cacheSource := CacheSource{
+		cacheSource := struct {
+			Path        string
+			BucketName  string
+			Region      string
+			EndpointURL string
+			AccessKey   string
+			SecretKey   string
+		}{
 			Path:        sourcePath,
 			BucketName:  "",
 			Region:      "",
@@ -185,7 +192,14 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 		if err == ErrContentNotFound {
 
 			sourcePath := n.bfsNode.Path
-			cacheSource := CacheSource{
+			cacheSource := struct {
+				Path        string
+				BucketName  string
+				Region      string
+				EndpointURL string
+				AccessKey   string
+				SecretKey   string
+			}{
 				Path:        sourcePath,
 				BucketName:  "",
 				Region:      "",

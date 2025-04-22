@@ -14,10 +14,24 @@ import (
 
 type S3Client struct {
 	s3Client *s3.Client
-	source   CacheSource
+	source   struct {
+		BucketName  string
+		Path        string
+		Region      string
+		EndpointURL string
+		AccessKey   string
+		SecretKey   string
+	}
 }
 
-func NewS3Client(ctx context.Context, source CacheSource) (*S3Client, error) {
+func NewS3Client(ctx context.Context, source struct {
+	BucketName  string
+	Path        string
+	Region      string
+	EndpointURL string
+	AccessKey   string
+	SecretKey   string
+}) (*S3Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(source.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
