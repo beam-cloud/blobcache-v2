@@ -1,7 +1,7 @@
 chartVersion := 0.1.1
 imageVersion := latest
 GOOS ?= linux
-GOARCH ?= arm64
+GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
 
 
 init:
@@ -37,5 +37,4 @@ setup: build
 		echo "Current context is not k3d-beta9"; \
 		exit 1; \
 	fi
-	helm install blobcache-valkey oci://registry-1.docker.io/bitnamicharts/valkey --set architecture=standalone --set auth.password=password
 	cd hack; kubectl apply -f deployment.yaml; cd ..
