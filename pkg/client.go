@@ -521,7 +521,6 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 		return "", err
 	}
 
-	hash := ""
 	if opts.Lock {
 		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
 			Path: source.Path,
@@ -538,24 +537,22 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 			return "", ErrUnableToPopulateContent
 		}
 
-		hash = resp.Hash
-	} else {
-		resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-			Path: source.Path,
-		}})
-
-		if err != nil {
-			return "", err
-		}
-
-		if !resp.Ok {
-			return "", ErrUnableToPopulateContent
-		}
-
-		hash = resp.Hash
+		return resp.Hash, nil
 	}
 
-	return hash, nil
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path: source.Path,
+	}})
+
+	if err != nil {
+		return "", err
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
+	}
+
+	return resp.Hash, nil
 }
 
 func (c *BlobCacheClient) StoreContentFromS3(source struct {
@@ -585,7 +582,6 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		return "", err
 	}
 
-	hash := ""
 	if opts.Lock {
 		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
 			Path:        source.Path,
@@ -607,27 +603,25 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 			return "", ErrUnableToPopulateContent
 		}
 
-	} else {
-		resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-			Path:        source.Path,
-			BucketName:  source.BucketName,
-			Region:      source.Region,
-			EndpointUrl: source.EndpointURL,
-			AccessKey:   source.AccessKey,
-			SecretKey:   source.SecretKey,
-		}})
-		if err != nil {
-			return "", err
-		}
-
-		if !resp.Ok {
-			return "", ErrUnableToPopulateContent
-		}
-
-		hash = resp.Hash
+		return resp.Hash, nil
 	}
 
-	return hash, nil
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path:        source.Path,
+		BucketName:  source.BucketName,
+		Region:      source.Region,
+		EndpointUrl: source.EndpointURL,
+		AccessKey:   source.AccessKey,
+		SecretKey:   source.SecretKey,
+	}})
+	if err != nil {
+		return "", err
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
+	}
+	return resp.Hash, nil
 }
 
 func (c *BlobCacheClient) HostsAvailable() bool {
