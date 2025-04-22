@@ -120,7 +120,11 @@ func storeFile(client *blobcache.BlobCacheClient, filePath string, fileHash stri
 		close(chunks)
 	}()
 
-	hash, err := client.StoreContent(chunks, fileHash)
+	hash, err := client.StoreContent(chunks, fileHash, struct {
+		RoutingKey string
+	}{
+		RoutingKey: fileHash,
+	})
 	if err != nil {
 		return "", 0, err
 	}
@@ -133,7 +137,11 @@ func TestGetContentStream(client *blobcache.BlobCacheClient, hash string, fileSi
 	contentCheckPassed := false
 
 	startTime := time.Now()
-	contentChan, err := client.GetContentStream(hash, 0, int64(fileSize))
+	contentChan, err := client.GetContentStream(hash, 0, int64(fileSize), struct {
+		RoutingKey string
+	}{
+		RoutingKey: hash,
+	})
 	if err != nil {
 		return TestResult{}, err
 	}
@@ -191,7 +199,11 @@ func TestGetContent(client *blobcache.BlobCacheClient, hash string, fileSize int
 			end = fileSize
 		}
 
-		chunk, err := client.GetContent(hash, offset, end-offset)
+		chunk, err := client.GetContent(hash, offset, end-offset, struct {
+			RoutingKey string
+		}{
+			RoutingKey: hash,
+		})
 		if err != nil {
 			return TestResult{}, err
 		}

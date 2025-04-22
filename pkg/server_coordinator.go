@@ -135,6 +135,28 @@ func (cs *CacheService) GetFsNode(ctx context.Context, req *proto.GetFsNodeReque
 	return &proto.GetFsNodeResponse{Metadata: metadata.ToProto(), Ok: true}, nil
 }
 
+func (cs *CacheService) RemoveFsNode(ctx context.Context, req *proto.RemoveFsNodeRequest) (*proto.RemoveFsNodeResponse, error) {
+	Logger.Debugf("RemoveFsNode[ACK] - [%s]", req.Id)
+
+	err := cs.coordinator.RemoveFsNode(ctx, req.Id)
+	if err != nil {
+		return &proto.RemoveFsNodeResponse{Ok: false}, nil
+	}
+
+	return &proto.RemoveFsNodeResponse{Ok: true}, nil
+}
+
+func (cs *CacheService) RemoveFsNodeChild(ctx context.Context, req *proto.RemoveFsNodeChildRequest) (*proto.RemoveFsNodeChildResponse, error) {
+	Logger.Debugf("RemoveFsNodeChild[ACK] - [%s]", req.Id)
+
+	err := cs.coordinator.RemoveFsNodeChild(ctx, req.Pid, req.Id)
+	if err != nil {
+		return &proto.RemoveFsNodeChildResponse{Ok: false}, nil
+	}
+
+	return &proto.RemoveFsNodeChildResponse{Ok: true}, nil
+}
+
 func (cs *CacheService) GetFsNodeChildren(ctx context.Context, req *proto.GetFsNodeChildrenRequest) (*proto.GetFsNodeChildrenResponse, error) {
 	Logger.Debugf("GetFsNodeChildren[ACK] - [%s]", req.Id)
 

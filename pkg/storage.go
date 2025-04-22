@@ -96,7 +96,7 @@ type cacheValue struct {
 	Content []byte
 }
 
-func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte, sourcePath string, sourceOffset int64) error {
+func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, content []byte) error {
 	size := int64(len(content))
 	chunkKeys := []string{}
 

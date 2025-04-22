@@ -41,7 +41,11 @@ func main() {
 	hashBytes := sha256.Sum256([]byte(content))
 	hash := hex.EncodeToString(hashBytes[:])
 
-	gotContent, err := client.GetContent(hash, 0, int64(len(content)))
+	gotContent, err := client.GetContent(hash, 0, int64(len(content)), struct {
+		RoutingKey string
+	}{
+		RoutingKey: hash,
+	})
 	if err != nil {
 		log.Printf("Unable to get content: %v", err)
 	}
@@ -55,7 +59,11 @@ func main() {
 		contentChan <- []byte(content)
 	}()
 
-	computedHash, err := client.StoreContent(contentChan, hash)
+	computedHash, err := client.StoreContent(contentChan, hash, struct {
+		RoutingKey string
+	}{
+		RoutingKey: hash,
+	})
 	if err != nil {
 		log.Fatalf("Unable to store content: %v", err)
 	}
@@ -70,7 +78,11 @@ func main() {
 
 	log.Printf("Content is cached nearby: %v", exists)
 
-	gotContent, err = client.GetContent(hash, 0, int64(len(content)))
+	gotContent, err = client.GetContent(hash, 0, int64(len(content)), struct {
+		RoutingKey string
+	}{
+		RoutingKey: hash,
+	})
 	if err != nil {
 		log.Fatalf("Unable to get content: %v", err)
 	}

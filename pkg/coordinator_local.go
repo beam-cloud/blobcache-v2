@@ -16,6 +16,8 @@ type CoordinatorClient interface {
 	RefreshStoreFromContentLock(ctx context.Context, locality string, sourcePath string) error
 	SetFsNode(ctx context.Context, id string, metadata *BlobFsMetadata) error
 	GetFsNode(ctx context.Context, id string) (*BlobFsMetadata, error)
+	RemoveFsNode(ctx context.Context, id string) error
+	RemoveFsNodeChild(ctx context.Context, pid, id string) error
 	GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error)
 	AddFsNodeChild(ctx context.Context, pid, id string) error
 }
@@ -84,6 +86,14 @@ func (c *CoordinatorClientLocal) GetFsNode(ctx context.Context, id string) (*Blo
 
 func (c *CoordinatorClientLocal) AddFsNodeChild(ctx context.Context, pid, id string) error {
 	return c.metadata.AddFsNodeChild(ctx, pid, id)
+}
+
+func (c *CoordinatorClientLocal) RemoveFsNode(ctx context.Context, id string) error {
+	return c.metadata.RemoveFsNode(ctx, id)
+}
+
+func (c *CoordinatorClientLocal) RemoveFsNodeChild(ctx context.Context, pid, id string) error {
+	return c.metadata.RemoveFsNodeChild(ctx, pid, id)
 }
 
 func (c *CoordinatorClientLocal) GetFsNodeChildren(ctx context.Context, id string) ([]*BlobFsMetadata, error) {

@@ -3,6 +3,7 @@ package blobcache
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -33,6 +34,10 @@ type RendezvousHasher interface {
 	Add(hosts ...*BlobCacheHost)
 	Remove(host *BlobCacheHost)
 	GetN(n int, key string) []*BlobCacheHost
+}
+
+type ClientOptions struct {
+	RoutingKey string
 }
 
 type BlobCacheClient struct {
@@ -261,7 +266,9 @@ func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
 	return false, nil
 }
 
-func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([]byte, error) {
+func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, opts struct {
+	RoutingKey string
+}) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentRequestTimeout)
 	defer cancel()
 
@@ -270,11 +277,15 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		maxAttempts = int(c.maxGetContentAttempts)
 	}
 
-	for attempt := 0; attempt < maxAttempts; attempt += 1 {
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = hash
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
 			hash:      hash,
-			key:       hash,
+			key:       opts.RoutingKey,
 			hostIndex: attempt,
 		})
 		if err != nil {
@@ -284,11 +295,9 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 		start := time.Now()
 		getContentResponse, err := client.GetContent(ctx, &proto.GetContentRequest{Hash: hash, Offset: offset, Length: length})
 		if err != nil || !getContentResponse.Ok {
-
 			c.mu.Lock()
 			delete(c.localHostCache, hash)
 			c.mu.Unlock()
-
 			continue
 		}
 
@@ -299,9 +308,15 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64) ([
 	return nil, ErrContentNotFound
 }
 
-func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
+func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64, opts struct {
+	RoutingKey string
+}) (chan []byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentStreamRequestTimeout)
 	contentChan := make(chan []byte)
+
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = hash
+	}
 
 	go func() {
 		defer close(contentChan)
@@ -316,7 +331,7 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 			client, _, err := c.getGRPCClient(&ClientRequest{
 				rt:        ClientRequestTypeRetrieval,
 				hash:      hash,
-				key:       hash,
+				key:       opts.RoutingKey,
 				hostIndex: attempt,
 			})
 			if err != nil {
@@ -441,14 +456,20 @@ func (c *BlobCacheClient) getGRPCClient(request *ClientRequest) (proto.BlobCache
 	return client, host, nil
 }
 
-func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string, error) {
+func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string, opts struct {
+	RoutingKey string
+}) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
+
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = hash
+	}
 
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
 		hash:      hash,
-		key:       hash,
+		key:       opts.RoutingKey,
 		hostIndex: 0,
 	})
 	if err != nil {
@@ -477,47 +498,54 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string) (string,
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromSource(sourcePath string, sourceOffset int64) (string, error) {
+func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
+	Path string
+}, opts struct {
+	RoutingKey string
+	Lock       bool
+}) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = source.Path
+	}
+
 	client, _, err := c.getGRPCClient(&ClientRequest{
 		rt:        ClientRequestTypeStorage,
-		key:       sourcePath,
+		hash:      source.Path,
+		key:       opts.RoutingKey,
 		hostIndex: 0,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
-	if err != nil {
-		return "", err
+	if opts.Lock {
+		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+			Path: source.Path,
+		}})
+		if err != nil {
+			return "", err
+		}
+
+		if resp.FailedToAcquireLock {
+			return "", ErrUnableToAcquireLock
+		}
+
+		if !resp.Ok {
+			return "", ErrUnableToPopulateContent
+		}
+
+		return resp.Hash, nil
 	}
 
-	return resp.Hash, nil
-}
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path: source.Path,
+	}})
 
-func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sourceOffset int64) (string, error) {
-	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
-	defer cancel()
-
-	client, _, err := c.getGRPCClient(&ClientRequest{
-		rt:        ClientRequestTypeStorage,
-		key:       sourcePath,
-		hostIndex: 0,
-	})
 	if err != nil {
 		return "", err
-	}
-
-	resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{SourcePath: sourcePath, SourceOffset: sourceOffset})
-	if err != nil {
-		return "", err
-	}
-
-	if resp.FailedToAcquireLock {
-		return "", ErrUnableToAcquireLock
 	}
 
 	if !resp.Ok {
@@ -525,7 +553,76 @@ func (c *BlobCacheClient) StoreContentFromSourceWithLock(sourcePath string, sour
 	}
 
 	return resp.Hash, nil
+}
 
+func (c *BlobCacheClient) StoreContentFromS3(source struct {
+	Path        string
+	BucketName  string
+	Region      string
+	EndpointURL string
+	AccessKey   string
+	SecretKey   string
+}, opts struct {
+	RoutingKey string
+	Lock       bool
+}) (string, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
+	defer cancel()
+
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = fmt.Sprintf("%s/%s/%s/%s", source.EndpointURL, source.Region, source.BucketName, source.Path)
+	}
+
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       opts.RoutingKey,
+		hostIndex: 0,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if opts.Lock {
+		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+			Path:        source.Path,
+			BucketName:  source.BucketName,
+			Region:      source.Region,
+			EndpointUrl: source.EndpointURL,
+			AccessKey:   source.AccessKey,
+			SecretKey:   source.SecretKey,
+		}})
+		if err != nil {
+			return "", err
+		}
+
+		if resp.FailedToAcquireLock {
+			return "", ErrUnableToAcquireLock
+		}
+
+		if !resp.Ok {
+			return "", ErrUnableToPopulateContent
+		}
+
+		return resp.Hash, nil
+	}
+
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		Path:        source.Path,
+		BucketName:  source.BucketName,
+		Region:      source.Region,
+		EndpointUrl: source.EndpointURL,
+		AccessKey:   source.AccessKey,
+		SecretKey:   source.SecretKey,
+	}})
+	if err != nil {
+		return "", err
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
+	}
+
+	return resp.Hash, nil
 }
 
 func (c *BlobCacheClient) HostsAvailable() bool {
