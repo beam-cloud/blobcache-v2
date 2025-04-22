@@ -13,30 +13,24 @@ import (
 )
 
 type S3Client struct {
-	s3Client *s3.Client
-	source   struct {
-		BucketName  string
-		Path        string
-		Region      string
-		EndpointURL string
-		AccessKey   string
-		SecretKey   string
-	}
+	Client *s3.Client
+	Source S3SourceConfig
 }
 
-func NewS3Client(ctx context.Context, source struct {
+type S3SourceConfig struct {
 	BucketName  string
-	Path        string
 	Region      string
 	EndpointURL string
 	AccessKey   string
 	SecretKey   string
-}) (*S3Client, error) {
+}
+
+func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig) (*S3Client, error) {
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(source.Region),
+		config.WithRegion(sourceConfig.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			source.AccessKey,
-			source.SecretKey,
+			sourceConfig.AccessKey,
+			sourceConfig.SecretKey,
 			"",
 		)),
 	)
@@ -44,29 +38,28 @@ func NewS3Client(ctx context.Context, source struct {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	if source.EndpointURL != "" {
-		Logger.Infof("NewS3Client[ACK] - using custom endpoint: %s", source.EndpointURL)
-		cfg.BaseEndpoint = aws.String(source.EndpointURL)
+	if sourceConfig.EndpointURL != "" {
+		cfg.BaseEndpoint = aws.String(sourceConfig.EndpointURL)
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
 	return &S3Client{
-		s3Client: s3Client,
-		source:   source,
+		Client: s3Client,
+		Source: sourceConfig,
 	}, nil
 }
 
-func (c *S3Client) S3Client() *s3.Client {
-	return c.s3Client
+func (c *S3Client) GetClient() *s3.Client {
+	return c.Client
 }
 
 func (c *S3Client) BucketName() string {
-	return c.source.BucketName
+	return c.Source.BucketName
 }
 
 func (c *S3Client) Head(ctx context.Context, key string) (bool, *s3.HeadObjectOutput, error) {
-	output, err := c.s3Client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(c.source.BucketName),
+	output, err := c.Client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(c.Source.BucketName),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -77,8 +70,8 @@ func (c *S3Client) Head(ctx context.Context, key string) (bool, *s3.HeadObjectOu
 }
 
 func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *bytes.Buffer) error {
-	resp, err := c.s3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(c.source.BucketName),
+	resp, err := c.Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.Source.BucketName),
 		Key:    aws.String(key),
 	})
 	if err != nil {

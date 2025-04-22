@@ -457,22 +457,16 @@ func (cs *CacheService) cacheSourceFromLocalPath(localPath string, buffer *bytes
 }
 
 func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *bytes.Buffer) error {
-	key := fmt.Sprintf("%s/%s/%s/%s", source.EndpointUrl, source.Region, source.BucketName, source.Path)
+	key := fmt.Sprintf("%s/%s/%s", source.EndpointUrl, source.Region, source.BucketName)
 
 	var s3Client *S3Client
+	var err error
+
 	if cachedS3Client, ok := cs.s3ClientCache.Load(key); ok {
 		s3Client = cachedS3Client.(*S3Client)
 	} else {
-		s3Client, err := NewS3Client(cs.ctx, struct {
-			BucketName  string
-			Path        string
-			Region      string
-			EndpointURL string
-			AccessKey   string
-			SecretKey   string
-		}{
+		s3Client, err = NewS3Client(cs.ctx, S3SourceConfig{
 			BucketName:  source.BucketName,
-			Path:        source.Path,
 			Region:      source.Region,
 			EndpointURL: source.EndpointUrl,
 			AccessKey:   source.AccessKey,
@@ -485,7 +479,7 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 		cs.s3ClientCache.Store(key, s3Client)
 	}
 
-	err := s3Client.DownloadIntoBuffer(cs.ctx, source.Path, buffer)
+	err = s3Client.DownloadIntoBuffer(cs.ctx, source.Path, buffer)
 	if err != nil {
 		return err
 	}
