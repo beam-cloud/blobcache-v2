@@ -288,13 +288,11 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, op
 		opt(&options)
 	}
 
-	routingKey := options.RoutingKey
-
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
 			hash:      hash,
-			key:       routingKey,
+			key:       options.RoutingKey,
 			hostIndex: attempt,
 		})
 		if err != nil {
@@ -317,9 +315,14 @@ func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, op
 	return nil, ErrContentNotFound
 }
 
-func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64) (chan []byte, error) {
+func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int64, opts ...ClientOption) (chan []byte, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, getContentStreamRequestTimeout)
 	contentChan := make(chan []byte)
+
+	options := ClientOpt{RoutingKey: hash}
+	for _, opt := range opts {
+		opt(&options)
+	}
 
 	go func() {
 		defer close(contentChan)
@@ -334,7 +337,7 @@ func (c *BlobCacheClient) GetContentStream(hash string, offset int64, length int
 			client, _, err := c.getGRPCClient(&ClientRequest{
 				rt:        ClientRequestTypeRetrieval,
 				hash:      hash,
-				key:       hash,
+				key:       options.RoutingKey,
 				hostIndex: attempt,
 			})
 			if err != nil {
