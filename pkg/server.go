@@ -430,7 +430,7 @@ func (cs *CacheService) GetState(ctx context.Context, req *proto.GetStateRequest
 	}, nil
 }
 
-func (cs *CacheService) cacheFromLocalPath(localPath string, buffer *bytes.Buffer) error {
+func (cs *CacheService) cacheSourceFromLocalPath(localPath string, buffer *bytes.Buffer) error {
 	// Check if the file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
 		Logger.Infof("StoreFromContent[ERR] - source not found: %v", err)
@@ -453,7 +453,7 @@ func (cs *CacheService) cacheFromLocalPath(localPath string, buffer *bytes.Buffe
 	return nil
 }
 
-func (cs *CacheService) cacheFromS3(source *proto.CacheSource, buffer *bytes.Buffer) error {
+func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *bytes.Buffer) error {
 	s3Client, err := NewS3Client(cs.ctx, struct {
 		BucketName  string
 		Path        string
@@ -487,12 +487,12 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 	var buffer bytes.Buffer
 	if req.Source.BucketName == "" {
-		err := cs.cacheFromLocalPath(localPath, &buffer)
+		err := cs.cacheSourceFromLocalPath(localPath, &buffer)
 		if err != nil {
 			return &proto.StoreContentFromSourceResponse{Ok: false}, err
 		}
 	} else {
-		err := cs.cacheFromS3(req.Source, &buffer)
+		err := cs.cacheSourceFromS3(req.Source, &buffer)
 		if err != nil {
 			return &proto.StoreContentFromSourceResponse{Ok: false}, err
 		}

@@ -32,6 +32,7 @@ func NewS3Client(ctx context.Context, source struct {
 	AccessKey   string
 	SecretKey   string
 }) (*S3Client, error) {
+	Logger.Infof("NewS3Client[ACK] - [%v]", source)
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(source.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(

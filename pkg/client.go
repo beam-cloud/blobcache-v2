@@ -510,6 +510,10 @@ func (c *BlobCacheClient) StoreContentFromSource(source struct {
 		return "", err
 	}
 
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
+	}
+
 	return resp.Hash, nil
 }
 
