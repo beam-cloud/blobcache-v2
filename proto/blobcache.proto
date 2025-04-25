@@ -93,9 +93,26 @@ message CacheSource {
   string endpoint_url = 4;
   string access_key = 5;
   string secret_key = 6;
+  bool force_path_style = 7;
 }
 
-message StoreContentFromSourceRequest { CacheSource source = 1; }
+enum CacheSourceType {
+  UNSPECIFIED = 0;
+  S3 = 1;
+  FUSE = 2;
+  CDN = 3;
+}
+
+enum ContentType {
+  GENERIC = 0;
+  CLIP = 1;
+}
+
+message StoreContentFromSourceRequest {
+  CacheSource source = 1;
+  CacheSourceType source_type = 2;
+  ContentType content_type = 3;
+}
 
 message StoreContentFromSourceResponse {
   bool ok = 1;

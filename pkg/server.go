@@ -292,7 +292,7 @@ func (cs *CacheService) store(ctx context.Context, buffer *bytes.Buffer) (string
 	return hash, nil
 }
 
-func (cs *CacheService) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64) error {
+func (cs *CacheService) StoreContentInBlobFs(ctx context.Context, path string, hash string, size uint64, isS3Source bool) error {
 	path = filepath.Join("/", filepath.Clean(path))
 	parts := strings.Split(path, string(filepath.Separator))
 
@@ -339,43 +339,52 @@ func (cs *CacheService) StoreContentInBlobFs(ctx context.Context, path string, h
 
 		// If currentPath matches the input path, use the actual file info
 		if currentPath == path {
-			fileInfo, err := os.Stat(currentPath)
-			if err != nil {
-				return err
-			}
+			metadata.Mode = fuse.S_IFREG | 0644
+			metadata.Hash = hash
+			metadata.Size = size
 
-			// Update metadata fields with actual file info values
-			modTime := fileInfo.ModTime()
-			accessTime := atime.Get(fileInfo)
-			metadata.Mode = uint32(fileInfo.Mode())
-			metadata.Atime = uint64(accessTime.Unix())
-			metadata.Atimensec = uint32(accessTime.Nanosecond())
-			metadata.Mtime = uint64(modTime.Unix())
-			metadata.Mtimensec = uint32(modTime.Nanosecond())
+			if !isS3Source {
+				fileInfo, err := os.Stat(currentPath)
+				if err != nil {
+					Logger.Infof("StoreContentInBlobFs[ERR] - [%s] - %v", currentPath, err)
+					return err
+				}
 
-			// Since we cannot get Ctime in a platform-independent way, set it to ModTime
-			metadata.Ctime = uint64(modTime.Unix())
-			metadata.Ctimensec = uint32(modTime.Nanosecond())
+				// Update metadata fields with actual file info values
+				modTime := fileInfo.ModTime()
+				accessTime := atime.Get(fileInfo)
+				metadata.Mode = uint32(fileInfo.Mode())
+				metadata.Atime = uint64(accessTime.Unix())
+				metadata.Atimensec = uint32(accessTime.Nanosecond())
+				metadata.Mtime = uint64(modTime.Unix())
+				metadata.Mtimensec = uint32(modTime.Nanosecond())
 
-			metadata.Size = uint64(fileInfo.Size())
-			if fileInfo.IsDir() {
-				metadata.Hash = GenerateFsID(currentPath)
-				metadata.Size = 0
-			} else {
-				metadata.Hash = hash
-				metadata.Size = size
+				// Since we cannot get Ctime in a platform-independent way, set it to ModTime
+				metadata.Ctime = uint64(modTime.Unix())
+				metadata.Ctimensec = uint32(modTime.Nanosecond())
+
+				metadata.Size = uint64(fileInfo.Size())
+				if fileInfo.IsDir() {
+					metadata.Hash = GenerateFsID(currentPath)
+					metadata.Size = 0
+				} else {
+					metadata.Hash = hash
+					metadata.Size = size
+				}
 			}
 		}
 
 		// Set metadata
 		err = cs.coordinator.SetFsNode(ctx, currentNodeId, metadata)
 		if err != nil {
+			Logger.Infof("StoreContentInBlobFs[ERR] - [%s] - %v", currentPath, err)
 			return err
 		}
 
 		// Add the current node as a child of the previous node
 		err = cs.coordinator.AddFsNodeChild(ctx, previousParentId, currentNodeId)
 		if err != nil {
+			Logger.Infof("StoreContentInBlobFs[ERR] - [%s] - %v", currentPath, err)
 			return err
 		}
 
@@ -466,13 +475,15 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 		s3Client = cachedS3Client.(*S3Client)
 	} else {
 		s3Client, err = NewS3Client(cs.ctx, S3SourceConfig{
-			BucketName:  source.BucketName,
-			Region:      source.Region,
-			EndpointURL: source.EndpointUrl,
-			AccessKey:   source.AccessKey,
-			SecretKey:   source.SecretKey,
+			BucketName:     source.BucketName,
+			Region:         source.Region,
+			EndpointURL:    source.EndpointUrl,
+			AccessKey:      source.AccessKey,
+			SecretKey:      source.SecretKey,
+			ForcePathStyle: source.ForcePathStyle,
 		})
 		if err != nil {
+			Logger.Infof("StoreFromContent[ERR] - error creating s3 client: %v", err)
 			return err
 		}
 
@@ -481,6 +492,7 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 
 	err = s3Client.DownloadIntoBuffer(cs.ctx, source.Path, buffer)
 	if err != nil {
+		Logger.Infof("StoreFromContent[ERR] - error downloading from s3: %v", err)
 		return err
 	}
 
@@ -492,7 +504,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	Logger.Infof("StoreFromContent[ACK] - [%s]", localPath)
 
 	var buffer bytes.Buffer
-	if req.Source.BucketName == "" {
+	if req.SourceType == proto.CacheSourceType_FUSE {
 		err := cs.cacheSourceFromLocalPath(localPath, &buffer)
 		if err != nil {
 			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
@@ -514,10 +526,15 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
 	// This is unnecessary for workspace storage, but still required for CLIP to lazy load content from cache
 	// and volume caching + juicefs to work
-	if cs.coordinator != nil && req.Source.BucketName == "" {
-		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()))
+	if cs.coordinator != nil && req.ContentType == proto.ContentType_CLIP {
+		if req.SourceType == proto.CacheSourceType_S3 {
+			// When storing from S3 add the images prefix because the localpath will refer to an object instead of
+			// a file in a mounted bucket
+			localPath = "images" + localPath
+		}
+
+		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()), req.SourceType == proto.CacheSourceType_S3)
 		if err != nil {
-			Logger.Infof("Store[ERR] - [%s] unable to store content in blobfs<path=%s> - %v", hash, localPath, err)
 			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, nil
 		}
 	}
@@ -533,6 +550,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 
 func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceWithLockResponse, error) {
 	sourcePath := req.Source.Path
+	Logger.Infof("StoreContentFromSourceWithLock[ACK] - [%s]", sourcePath)
 	if err := cs.coordinator.SetStoreFromContentLock(ctx, cs.locality, sourcePath); err != nil {
 		return &proto.StoreContentFromSourceWithLockResponse{Ok: false, FailedToAcquireLock: true, ErrorMsg: err.Error()}, nil
 	}
@@ -554,6 +572,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 		}
 	}()
 
+	Logger.Infof("StoreContentFromSourceWithLock[STORE] - [%s]", sourcePath)
 	storeContentFromSourceResp, err := cs.StoreContentFromSource(storeContext, req)
 	if err != nil {
 		return &proto.StoreContentFromSourceWithLockResponse{Hash: "", Ok: false, ErrorMsg: err.Error()}, nil

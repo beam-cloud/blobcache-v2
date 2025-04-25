@@ -18,11 +18,12 @@ type S3Client struct {
 }
 
 type S3SourceConfig struct {
-	BucketName  string
-	Region      string
-	EndpointURL string
-	AccessKey   string
-	SecretKey   string
+	BucketName     string
+	Region         string
+	EndpointURL    string
+	AccessKey      string
+	SecretKey      string
+	ForcePathStyle bool
 }
 
 func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig) (*S3Client, error) {
@@ -42,7 +43,12 @@ func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig) (*S3Client, e
 		cfg.BaseEndpoint = aws.String(sourceConfig.EndpointURL)
 	}
 
-	s3Client := s3.NewFromConfig(cfg)
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if sourceConfig.EndpointURL != "" {
+			o.BaseEndpoint = aws.String(sourceConfig.EndpointURL)
+		}
+		o.UsePathStyle = sourceConfig.ForcePathStyle
+	})
 	return &S3Client{
 		Client: s3Client,
 		Source: sourceConfig,
