@@ -37,4 +37,5 @@ setup: build
 		echo "Current context is not k3d-beta9"; \
 		exit 1; \
 	fi
+	helm install blobcache-valkey oci://registry-1.docker.io/bitnamicharts/valkey --set architecture=standalone --set auth.password=password
 	cd hack; kubectl apply -f deployment.yaml; cd ..
