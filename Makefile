@@ -38,4 +38,4 @@ setup: build
 		exit 1; \
 	fi
 	helm install blobcache-valkey oci://registry-1.docker.io/bitnamicharts/valkey --set architecture=standalone --set auth.password=password
-	cd hack; kubectl apply -f deployment.yaml; cd ..
+	cd hack; kubectl apply -f deployment.yaml; kubectl apply -f service.yaml; cd ..
