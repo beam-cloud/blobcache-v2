@@ -30,6 +30,26 @@ const (
 	readAheadKB = 32768
 )
 
+type ContentSourceS3 struct {
+	Path           string
+	BucketName     string
+	Region         string
+	EndpointURL    string
+	AccessKey      string
+	SecretKey      string
+	ForcePathStyle bool
+}
+
+type ContentSourceFUSE struct {
+	Path string
+}
+
+type StoreContentOptions struct {
+	CreateCacheFSEntry bool
+	RoutingKey         string
+	Lock               bool
+}
+
 type RendezvousHasher interface {
 	Add(hosts ...*BlobCacheHost)
 	Remove(host *BlobCacheHost)
@@ -498,12 +518,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string, opts str
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
-	Path string
-}, opts struct {
-	RoutingKey string
-	Lock       bool
-}) (string, error) {
+func (c *BlobCacheClient) StoreContentFromFUSE(source ContentSourceFUSE, opts StoreContentOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -555,19 +570,7 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromS3(source struct {
-	Path           string
-	BucketName     string
-	Region         string
-	EndpointURL    string
-	AccessKey      string
-	SecretKey      string
-	ForcePathStyle bool
-}, opts struct {
-	CreateCacheFSEntry bool
-	RoutingKey         string
-	Lock               bool
-}) (string, error) {
+func (c *BlobCacheClient) StoreContentFromS3(source ContentSourceS3, opts StoreContentOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 

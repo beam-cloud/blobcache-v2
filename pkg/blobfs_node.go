@@ -122,17 +122,13 @@ func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*
 
 		n.log("Storing content from source with path: %s", sourcePath)
 
-		cacheSource := struct {
-			Path string
-		}{
+		cacheSource := ContentSourceFUSE{
 			Path: sourcePath,
 		}
-		_, err := n.filesystem.Client.StoreContentFromFUSE(cacheSource, struct {
-			RoutingKey string
-			Lock       bool
-		}{
-			RoutingKey: sourcePath,
-			Lock:       true,
+		_, err := n.filesystem.Client.StoreContentFromFUSE(cacheSource, StoreContentOptions{
+			CreateCacheFSEntry: true,
+			RoutingKey:         sourcePath,
+			Lock:               true,
 		})
 		if err != nil {
 			return nil, syscall.ENOENT
@@ -197,12 +193,10 @@ func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int
 			}{
 				Path: sourcePath,
 			}
-			_, err = n.filesystem.Client.StoreContentFromFUSE(cacheSource, struct {
-				RoutingKey string
-				Lock       bool
-			}{
-				RoutingKey: sourcePath,
-				Lock:       true,
+			_, err = n.filesystem.Client.StoreContentFromFUSE(cacheSource, StoreContentOptions{
+				CreateCacheFSEntry: true,
+				RoutingKey:         sourcePath,
+				Lock:               true,
 			})
 			// If multiple clients try to store the same file, some may get ErrUnableToAcquireLock
 			// In this case, we should tell the client to retry the Read instead of returning an error
