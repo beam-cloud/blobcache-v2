@@ -556,12 +556,14 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 }
 
 func (c *BlobCacheClient) StoreContentFromS3(source struct {
-	Path        string
-	BucketName  string
-	Region      string
-	EndpointURL string
-	AccessKey   string
-	SecretKey   string
+	IsImage        bool
+	Path           string
+	BucketName     string
+	Region         string
+	EndpointURL    string
+	AccessKey      string
+	SecretKey      string
+	ForcePathStyle bool
 }, opts struct {
 	RoutingKey string
 	Lock       bool
@@ -582,15 +584,32 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		return "", err
 	}
 
+	sourceType := proto.CacheSourceType_FUSE
+	if source.BucketName != "" {
+		sourceType = proto.CacheSourceType_S3
+	}
+
+	contentType := proto.ContentType_GENERIC
+	if source.IsImage {
+		contentType = proto.ContentType_CLIP
+	}
+
+	sourceProto := proto.StoreContentFromSourceRequest{
+		Source: &proto.CacheSource{
+			Path:           source.Path,
+			BucketName:     source.BucketName,
+			Region:         source.Region,
+			EndpointUrl:    source.EndpointURL,
+			AccessKey:      source.AccessKey,
+			SecretKey:      source.SecretKey,
+			ForcePathStyle: source.ForcePathStyle,
+		},
+		SourceType:  sourceType,
+		ContentType: contentType,
+	}
+
 	if opts.Lock {
-		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-			Path:        source.Path,
-			BucketName:  source.BucketName,
-			Region:      source.Region,
-			EndpointUrl: source.EndpointURL,
-			AccessKey:   source.AccessKey,
-			SecretKey:   source.SecretKey,
-		}})
+		resp, err := client.StoreContentFromSourceWithLock(ctx, &sourceProto)
 		if err != nil {
 			return "", err
 		}
@@ -606,14 +625,7 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		return resp.Hash, nil
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-		Path:        source.Path,
-		BucketName:  source.BucketName,
-		Region:      source.Region,
-		EndpointUrl: source.EndpointURL,
-		AccessKey:   source.AccessKey,
-		SecretKey:   source.SecretKey,
-	}})
+	resp, err := client.StoreContentFromSource(ctx, &sourceProto)
 	if err != nil {
 		return "", err
 	}
