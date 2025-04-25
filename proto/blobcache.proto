@@ -102,16 +102,10 @@ enum CacheSourceType {
   FUSE = 2;
   CDN = 3;
 }
-
-enum ContentType {
-  GENERIC = 0;
-  CLIP = 1;
-}
-
 message StoreContentFromSourceRequest {
   CacheSource source = 1;
   CacheSourceType source_type = 2;
-  ContentType content_type = 3;
+  bool create_cache_fs_entry = 3;
 }
 
 message StoreContentFromSourceResponse {

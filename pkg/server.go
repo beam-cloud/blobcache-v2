@@ -526,11 +526,9 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	// Store references in blobfs if it's enabled (for disk access to the cached content)
 	// This is unnecessary for workspace storage, but still required for CLIP to lazy load content from cache
 	// and volume caching + juicefs to work
-	if cs.coordinator != nil && req.ContentType == proto.ContentType_CLIP {
+	if cs.coordinator != nil && req.CreateCacheFsEntry {
 		if req.SourceType == proto.CacheSourceType_S3 {
-			// When storing from S3 add the images prefix because the localpath will refer to an object instead of
-			// a file in a mounted bucket
-			localPath = "images" + localPath
+			localPath = filepath.Join(req.Source.Region, req.Source.BucketName, req.Source.Path)
 		}
 
 		err := cs.StoreContentInBlobFs(ctx, localPath, hash, uint64(buffer.Len()), req.SourceType == proto.CacheSourceType_S3)

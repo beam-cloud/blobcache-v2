@@ -556,7 +556,6 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 }
 
 func (c *BlobCacheClient) StoreContentFromS3(source struct {
-	IsImage        bool
 	Path           string
 	BucketName     string
 	Region         string
@@ -565,8 +564,9 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 	SecretKey      string
 	ForcePathStyle bool
 }, opts struct {
-	RoutingKey string
-	Lock       bool
+	CreateCacheFSEntry bool
+	RoutingKey         string
+	Lock               bool
 }) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
@@ -589,11 +589,6 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		sourceType = proto.CacheSourceType_S3
 	}
 
-	contentType := proto.ContentType_GENERIC
-	if source.IsImage {
-		contentType = proto.ContentType_CLIP
-	}
-
 	sourceProto := proto.StoreContentFromSourceRequest{
 		Source: &proto.CacheSource{
 			Path:           source.Path,
@@ -604,8 +599,8 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 			SecretKey:      source.SecretKey,
 			ForcePathStyle: source.ForcePathStyle,
 		},
-		SourceType:  sourceType,
-		ContentType: contentType,
+		SourceType:         sourceType,
+		CreateCacheFsEntry: opts.CreateCacheFSEntry,
 	}
 
 	if opts.Lock {
