@@ -23,6 +23,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// Start the metrics server in a separate goroutine
+	go blobcache.StartMetricsServer()
 
 	s.StartServer(cfg.Global.ServerPort)
 }
