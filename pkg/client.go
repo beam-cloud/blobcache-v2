@@ -243,47 +243,39 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 	}
 }
 
-func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, routingKey string) bool {
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(routingKey))
 	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
+		Logger.Errorf("error getting fs node: %v, path: %s", err, routingKey)
 		return false
 	}
 
-	exists, err := c.IsCachedNearby(metadata.Hash, path)
-	if err != nil {
-		Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
-		return false
-	}
-
-	return exists
-}
-
-func (c *BlobCacheClient) IsCachedNearby(hash string, routingKey string) (bool, error) {
 	hostsToCheck := c.clientConfig.NTopHosts
 
 	for hostIndex := 0; hostIndex < hostsToCheck; hostIndex++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
-			hash:      hash,
+			hash:      metadata.Hash,
 			key:       routingKey,
 			hostIndex: hostIndex,
 		})
 		if err != nil {
-			return false, err
+			Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+			return false
 		}
 
-		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: hash})
+		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: metadata.Hash})
 		if err != nil {
-			return false, err
+			Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+			return false
 		}
 
 		if resp.Exists {
-			return true, nil
+			return true
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, opts struct {
