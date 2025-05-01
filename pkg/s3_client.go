@@ -39,10 +39,6 @@ func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig) (*S3Client, e
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	if sourceConfig.EndpointURL != "" {
-		cfg.BaseEndpoint = aws.String(sourceConfig.EndpointURL)
-	}
-
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		if sourceConfig.EndpointURL != "" {
 			o.BaseEndpoint = aws.String(sourceConfig.EndpointURL)

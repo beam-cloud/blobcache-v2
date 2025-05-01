@@ -102,6 +102,7 @@ enum CacheSourceType {
   FUSE = 2;
   CDN = 3;
 }
+
 message StoreContentFromSourceRequest {
   CacheSource source = 1;
   CacheSourceType source_type = 2;
