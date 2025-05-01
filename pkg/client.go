@@ -230,7 +230,7 @@ func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) b
 		return false
 	}
 
-	exists, err := c.IsCachedNearby(metadata.Hash)
+	exists, err := c.IsCachedNearby(metadata.Hash, path)
 	if err != nil {
 		Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
 		return false
@@ -239,14 +239,14 @@ func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) b
 	return exists
 }
 
-func (c *BlobCacheClient) IsCachedNearby(hash string) (bool, error) {
+func (c *BlobCacheClient) IsCachedNearby(hash string, routingKey string) (bool, error) {
 	hostsToCheck := c.clientConfig.NTopHosts
 
 	for hostIndex := 0; hostIndex < hostsToCheck; hostIndex++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
 			hash:      hash,
-			key:       hash,
+			key:       routingKey,
 			hostIndex: hostIndex,
 		})
 		if err != nil {
