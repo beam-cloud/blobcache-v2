@@ -37,4 +37,5 @@ setup: build
 		echo "Current context is not k3d-beta9"; \
 		exit 1; \
 	fi
-	cd hack; kubectl apply -f deployment.yaml; cd ..
+	helm install blobcache-redis oci://registry-1.docker.io/bitnamicharts/redis --set architecture=standalone --set auth.password=password
+	cd hack; kubectl apply -f deployment.yaml; kubectl apply -f service.yaml; cd ..

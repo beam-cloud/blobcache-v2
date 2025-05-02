@@ -30,6 +30,26 @@ const (
 	readAheadKB = 32768
 )
 
+type ContentSourceS3 struct {
+	Path           string
+	BucketName     string
+	Region         string
+	EndpointURL    string
+	AccessKey      string
+	SecretKey      string
+	ForcePathStyle bool
+}
+
+type ContentSourceFUSE struct {
+	Path string
+}
+
+type StoreContentOptions struct {
+	CreateCacheFSEntry bool
+	RoutingKey         string
+	Lock               bool
+}
+
 type RendezvousHasher interface {
 	Add(hosts ...*BlobCacheHost)
 	Remove(host *BlobCacheHost)
@@ -223,47 +243,39 @@ func (c *BlobCacheClient) monitorHost(host *BlobCacheHost) {
 	}
 }
 
-func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, path string) bool {
-	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(path))
+func (c *BlobCacheClient) IsPathCachedNearby(ctx context.Context, routingKey string) bool {
+	metadata, err := c.coordinator.GetFsNode(ctx, GenerateFsID(routingKey))
 	if err != nil {
-		Logger.Errorf("error getting fs node: %v, path: %s", err, path)
+		Logger.Errorf("error getting fs node: %v, path: %s", err, routingKey)
 		return false
 	}
 
-	exists, err := c.IsCachedNearby(metadata.Hash, path)
-	if err != nil {
-		Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
-		return false
-	}
-
-	return exists
-}
-
-func (c *BlobCacheClient) IsCachedNearby(hash string, routingKey string) (bool, error) {
 	hostsToCheck := c.clientConfig.NTopHosts
 
 	for hostIndex := 0; hostIndex < hostsToCheck; hostIndex++ {
 		client, _, err := c.getGRPCClient(&ClientRequest{
 			rt:        ClientRequestTypeRetrieval,
-			hash:      hash,
+			hash:      metadata.Hash,
 			key:       routingKey,
 			hostIndex: hostIndex,
 		})
 		if err != nil {
-			return false, err
+			Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+			return false
 		}
 
-		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: hash})
+		resp, err := client.HasContent(c.ctx, &proto.HasContentRequest{Hash: metadata.Hash})
 		if err != nil {
-			return false, err
+			Logger.Errorf("error checking if content is cached nearby: %v, hash: %s", err, metadata.Hash)
+			return false
 		}
 
 		if resp.Exists {
-			return true, nil
+			return true
 		}
 	}
 
-	return false, nil
+	return false
 }
 
 func (c *BlobCacheClient) GetContent(hash string, offset int64, length int64, opts struct {
@@ -498,12 +510,7 @@ func (c *BlobCacheClient) StoreContent(chunks chan []byte, hash string, opts str
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
-	Path string
-}, opts struct {
-	RoutingKey string
-	Lock       bool
-}) (string, error) {
+func (c *BlobCacheClient) StoreContentFromFUSE(source ContentSourceFUSE, opts StoreContentOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -555,17 +562,7 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 	return resp.Hash, nil
 }
 
-func (c *BlobCacheClient) StoreContentFromS3(source struct {
-	Path        string
-	BucketName  string
-	Region      string
-	EndpointURL string
-	AccessKey   string
-	SecretKey   string
-}, opts struct {
-	RoutingKey string
-	Lock       bool
-}) (string, error) {
+func (c *BlobCacheClient) StoreContentFromS3(source ContentSourceS3, opts StoreContentOptions) (string, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
 	defer cancel()
 
@@ -582,15 +579,27 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		return "", err
 	}
 
+	sourceType := proto.CacheSourceType_FUSE
+	if source.BucketName != "" {
+		sourceType = proto.CacheSourceType_S3
+	}
+
+	sourceProto := proto.StoreContentFromSourceRequest{
+		Source: &proto.CacheSource{
+			Path:           source.Path,
+			BucketName:     source.BucketName,
+			Region:         source.Region,
+			EndpointUrl:    source.EndpointURL,
+			AccessKey:      source.AccessKey,
+			SecretKey:      source.SecretKey,
+			ForcePathStyle: source.ForcePathStyle,
+		},
+		SourceType:         sourceType,
+		CreateCacheFsEntry: opts.CreateCacheFSEntry,
+	}
+
 	if opts.Lock {
-		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-			Path:        source.Path,
-			BucketName:  source.BucketName,
-			Region:      source.Region,
-			EndpointUrl: source.EndpointURL,
-			AccessKey:   source.AccessKey,
-			SecretKey:   source.SecretKey,
-		}})
+		resp, err := client.StoreContentFromSourceWithLock(ctx, &sourceProto)
 		if err != nil {
 			return "", err
 		}
@@ -606,14 +615,7 @@ func (c *BlobCacheClient) StoreContentFromS3(source struct {
 		return resp.Hash, nil
 	}
 
-	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
-		Path:        source.Path,
-		BucketName:  source.BucketName,
-		Region:      source.Region,
-		EndpointUrl: source.EndpointURL,
-		AccessKey:   source.AccessKey,
-		SecretKey:   source.SecretKey,
-	}})
+	resp, err := client.StoreContentFromSource(ctx, &sourceProto)
 	if err != nil {
 		return "", err
 	}
