@@ -500,6 +500,7 @@ func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.S
 	} else {
 		err := cs.cacheSourceFromS3(req.Source, &buffer)
 		if err != nil {
+			Logger.Errorf("StoreFromContent[ERR] - error caching source: %v", err)
 			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
 		}
 	}
