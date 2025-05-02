@@ -12,6 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+const (
+	downloadChunkSize = 64 * 1024 * 1024 // 64MB
+)
+
 type S3Client struct {
 	Client *s3.Client
 	Source S3SourceConfig
@@ -70,15 +74,39 @@ func (c *S3Client) Head(ctx context.Context, key string) (bool, *s3.HeadObjectOu
 }
 
 func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *bytes.Buffer) error {
-	resp, err := c.Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(c.Source.BucketName),
-		Key:    aws.String(key),
-	})
-	if err != nil {
+	ok, head, err := c.Head(ctx, key)
+	if err != nil || !ok {
 		return err
 	}
+	size := aws.ToInt64(head.ContentLength)
 
-	defer resp.Body.Close()
-	_, err = io.Copy(buffer, resp.Body)
-	return err
+	buffer.Reset()
+	var start int64 = 0
+
+	for start < size {
+		end := start + downloadChunkSize - 1
+		if end >= size {
+			end = size - 1
+		}
+
+		rangeHeader := fmt.Sprintf("bytes=%d-%d", start, end)
+		resp, err := c.Client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(c.Source.BucketName),
+			Key:    aws.String(key),
+			Range:  &rangeHeader,
+		})
+		if err != nil {
+			return err
+		}
+
+		n, err := io.Copy(buffer, resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+
+		start += n
+	}
+
+	return nil
 }
