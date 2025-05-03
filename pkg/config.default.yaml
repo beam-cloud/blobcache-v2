@@ -8,6 +8,8 @@ server:
   pageSizeBytes: 4000000 # 4MB
   maxCachePct: 60
   options: []
+  downloadConcurrency: 16
+  downloadChunkSize: 64000000 # 64MB
   metadata:
     redisAddr:
     redisPasswd:

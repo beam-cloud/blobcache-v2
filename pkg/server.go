@@ -471,7 +471,7 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 			EndpointURL: source.EndpointUrl,
 			AccessKey:   source.AccessKey,
 			SecretKey:   source.SecretKey,
-		})
+		}, cs.serverConfig)
 		if err != nil {
 			return err
 		}
