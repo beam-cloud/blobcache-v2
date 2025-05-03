@@ -1,4 +1,4 @@
-chartVersion := 0.1.1
+chartVersion := 0.1.2
 imageVersion := latest
 GOOS ?= linux
 GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/')
