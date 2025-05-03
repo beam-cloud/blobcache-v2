@@ -1,12 +1,12 @@
 ---
 # -- See the common values.yaml for all the options you can set.
-# https://github.com/bjw-s/helm-charts/blob/common-2.5.0/charts/library/common/values.yaml
+# https://github.com/bjw-s-labs/helm-charts/blob/common-2.5.0/charts/library/common/values.yaml
 global:
   fullnameOverride:
 
 image:
   repository: public.ecr.aws/n4e0e1y0/beam-blobcache-v2
-  tag: latest
+  tag: 0.1.30
 
 controllers:
   main:

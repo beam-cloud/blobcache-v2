@@ -13,6 +13,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+const (
+	defaultDownloadConcurrency = 16
+	defaultDownloadChunkSize   = 64 * 1024 * 1024 // 64MB
+)
+
 type S3Client struct {
 	Client              *s3.Client
 	Source              S3SourceConfig
@@ -43,6 +48,14 @@ func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig, serverConfig 
 
 	if sourceConfig.EndpointURL != "" {
 		cfg.BaseEndpoint = aws.String(sourceConfig.EndpointURL)
+	}
+
+	if serverConfig.S3DownloadConcurrency <= 0 {
+		serverConfig.S3DownloadConcurrency = defaultDownloadConcurrency
+	}
+
+	if serverConfig.S3DownloadChunkSize <= 0 {
+		serverConfig.S3DownloadChunkSize = defaultDownloadChunkSize
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
