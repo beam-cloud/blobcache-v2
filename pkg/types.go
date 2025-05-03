@@ -54,18 +54,18 @@ const (
 )
 
 type BlobCacheServerConfig struct {
-	Mode                 BlobCacheServerMode `key:"mode" json:"mode"`
-	DiskCacheDir         string              `key:"diskCacheDir" json:"disk_cache_dir"`
-	DiskCacheMaxUsagePct float64             `key:"diskCacheMaxUsagePct" json:"disk_cache_max_usage_pct"`
-	Token                string              `key:"token" json:"token"`
-	PrettyLogs           bool                `key:"prettyLogs" json:"pretty_logs"`
-	ObjectTtlS           int                 `key:"objectTtlS" json:"object_ttl_s"`
-	MaxCachePct          int64               `key:"maxCachePct" json:"max_cache_pct"`
-	PageSizeBytes        int64               `key:"pageSizeBytes" json:"page_size_bytes"`
-	Metadata             MetadataConfig      `key:"metadata" json:"metadata"`
-	Sources              []SourceConfig      `key:"sources" json:"sources"`
-	DownloadConcurrency  int64               `key:"downloadConcurrency" json:"download_concurrency"`
-	DownloadChunkSize    int64               `key:"downloadChunkSize" json:"download_chunk_size"`
+	Mode                  BlobCacheServerMode `key:"mode" json:"mode"`
+	DiskCacheDir          string              `key:"diskCacheDir" json:"disk_cache_dir"`
+	DiskCacheMaxUsagePct  float64             `key:"diskCacheMaxUsagePct" json:"disk_cache_max_usage_pct"`
+	Token                 string              `key:"token" json:"token"`
+	PrettyLogs            bool                `key:"prettyLogs" json:"pretty_logs"`
+	ObjectTtlS            int                 `key:"objectTtlS" json:"object_ttl_s"`
+	MaxCachePct           int64               `key:"maxCachePct" json:"max_cache_pct"`
+	PageSizeBytes         int64               `key:"pageSizeBytes" json:"page_size_bytes"`
+	Metadata              MetadataConfig      `key:"metadata" json:"metadata"`
+	Sources               []SourceConfig      `key:"sources" json:"sources"`
+	S3DownloadConcurrency int64               `key:"s3DownloadConcurrency" json:"s3_download_concurrency"`
+	S3DownloadChunkSize   int64               `key:"s3DownloadChunkSize" json:"s3_download_chunk_size"`
 
 	// Allows a coordinator to override a slave server's config for a specific locality/region
 	Regions map[string]RegionConfig `key:"regions" json:"regions"`
@@ -73,17 +73,17 @@ type BlobCacheServerConfig struct {
 
 func (c *BlobCacheServerConfig) ToProto() *proto.BlobCacheServerConfig {
 	protoConfig := &proto.BlobCacheServerConfig{
-		Mode:                 string(c.Mode),
-		DiskCacheDir:         c.DiskCacheDir,
-		DiskCacheMaxUsagePct: float32(c.DiskCacheMaxUsagePct),
-		MaxCachePct:          c.MaxCachePct,
-		PageSizeBytes:        c.PageSizeBytes,
-		ObjectTtlS:           int64(c.ObjectTtlS),
-		PrettyLogs:           c.PrettyLogs,
-		Token:                c.Token,
-		Sources:              make([]*proto.SourceConfig, 0),
-		DownloadConcurrency:  c.DownloadConcurrency,
-		DownloadChunkSize:    c.DownloadChunkSize,
+		Mode:                  string(c.Mode),
+		DiskCacheDir:          c.DiskCacheDir,
+		DiskCacheMaxUsagePct:  float32(c.DiskCacheMaxUsagePct),
+		MaxCachePct:           c.MaxCachePct,
+		PageSizeBytes:         c.PageSizeBytes,
+		ObjectTtlS:            int64(c.ObjectTtlS),
+		PrettyLogs:            c.PrettyLogs,
+		Token:                 c.Token,
+		Sources:               make([]*proto.SourceConfig, 0),
+		S3DownloadConcurrency: c.S3DownloadConcurrency,
+		S3DownloadChunkSize:   c.S3DownloadChunkSize,
 	}
 
 	for _, source := range c.Sources {
@@ -122,17 +122,17 @@ func (c *BlobCacheServerConfig) ToProto() *proto.BlobCacheServerConfig {
 
 func BlobCacheServerConfigFromProto(protoConfig *proto.BlobCacheServerConfig) BlobCacheServerConfig {
 	cfg := BlobCacheServerConfig{
-		Mode:                 BlobCacheServerMode(protoConfig.Mode),
-		DiskCacheDir:         protoConfig.DiskCacheDir,
-		DiskCacheMaxUsagePct: float64(protoConfig.DiskCacheMaxUsagePct),
-		MaxCachePct:          protoConfig.MaxCachePct,
-		PageSizeBytes:        protoConfig.PageSizeBytes,
-		ObjectTtlS:           int(protoConfig.ObjectTtlS),
-		PrettyLogs:           protoConfig.PrettyLogs,
-		Token:                protoConfig.Token,
-		Sources:              make([]SourceConfig, len(protoConfig.Sources)),
-		DownloadConcurrency:  protoConfig.DownloadConcurrency,
-		DownloadChunkSize:    protoConfig.DownloadChunkSize,
+		Mode:                  BlobCacheServerMode(protoConfig.Mode),
+		DiskCacheDir:          protoConfig.DiskCacheDir,
+		DiskCacheMaxUsagePct:  float64(protoConfig.DiskCacheMaxUsagePct),
+		MaxCachePct:           protoConfig.MaxCachePct,
+		PageSizeBytes:         protoConfig.PageSizeBytes,
+		ObjectTtlS:            int(protoConfig.ObjectTtlS),
+		PrettyLogs:            protoConfig.PrettyLogs,
+		Token:                 protoConfig.Token,
+		Sources:               make([]SourceConfig, len(protoConfig.Sources)),
+		S3DownloadConcurrency: protoConfig.S3DownloadConcurrency,
+		S3DownloadChunkSize:   protoConfig.S3DownloadChunkSize,
 	}
 
 	for i, protoSource := range protoConfig.Sources {

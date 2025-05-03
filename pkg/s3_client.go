@@ -49,8 +49,8 @@ func NewS3Client(ctx context.Context, sourceConfig S3SourceConfig, serverConfig 
 	return &S3Client{
 		Client:              s3Client,
 		Source:              sourceConfig,
-		DownloadConcurrency: serverConfig.DownloadConcurrency,
-		DownloadChunkSize:   serverConfig.DownloadChunkSize,
+		DownloadConcurrency: serverConfig.S3DownloadConcurrency,
+		DownloadChunkSize:   serverConfig.S3DownloadChunkSize,
 	}, nil
 }
 

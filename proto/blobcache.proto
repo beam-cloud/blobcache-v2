@@ -126,8 +126,8 @@ message BlobCacheServerConfig {
   int64 object_ttl_s = 6;
   bool pretty_logs = 7;
   string token = 8;
-  int64 download_concurrency = 9;
-  int64 download_chunk_size = 10;
+  int64 s3_download_concurrency = 9;
+  int64 s3_download_chunk_size = 10;
   repeated SourceConfig sources = 11;
 }
 
