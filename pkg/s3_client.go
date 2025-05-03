@@ -86,7 +86,7 @@ func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *b
 
 	numChunks := int((size + c.DownloadChunkSize - 1) / c.DownloadChunkSize)
 	chunks := make([][]byte, numChunks)
-	sem := make(chan struct{}, c.DownloadConcurrency) // limit to 16 concurrent downloads
+	sem := make(chan struct{}, c.DownloadConcurrency)
 	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -98,8 +98,8 @@ func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *b
 		wg.Add(1)
 
 		go func(i int) {
-			sem <- struct{}{}        // acquire semaphore
-			defer func() { <-sem }() // release semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			defer wg.Done()
 
 			if ctx.Err() != nil {
