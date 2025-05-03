@@ -64,6 +64,8 @@ type BlobCacheServerConfig struct {
 	PageSizeBytes        int64               `key:"pageSizeBytes" json:"page_size_bytes"`
 	Metadata             MetadataConfig      `key:"metadata" json:"metadata"`
 	Sources              []SourceConfig      `key:"sources" json:"sources"`
+	DownloadConcurrency  int64               `key:"downloadConcurrency" json:"download_concurrency"`
+	DownloadChunkSize    int64               `key:"downloadChunkSize" json:"download_chunk_size"`
 
 	// Allows a coordinator to override a slave server's config for a specific locality/region
 	Regions map[string]RegionConfig `key:"regions" json:"regions"`
@@ -80,6 +82,8 @@ func (c *BlobCacheServerConfig) ToProto() *proto.BlobCacheServerConfig {
 		PrettyLogs:           c.PrettyLogs,
 		Token:                c.Token,
 		Sources:              make([]*proto.SourceConfig, 0),
+		DownloadConcurrency:  c.DownloadConcurrency,
+		DownloadChunkSize:    c.DownloadChunkSize,
 	}
 
 	for _, source := range c.Sources {
@@ -127,6 +131,8 @@ func BlobCacheServerConfigFromProto(protoConfig *proto.BlobCacheServerConfig) Bl
 		PrettyLogs:           protoConfig.PrettyLogs,
 		Token:                protoConfig.Token,
 		Sources:              make([]SourceConfig, len(protoConfig.Sources)),
+		DownloadConcurrency:  protoConfig.DownloadConcurrency,
+		DownloadChunkSize:    protoConfig.DownloadChunkSize,
 	}
 
 	for i, protoSource := range protoConfig.Sources {

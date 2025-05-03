@@ -71,7 +71,7 @@ func main() {
 	log.Printf("Stored content with hash: %v", hash)
 	log.Printf("Computed hash: %v", computedHash)
 
-	exists, err := client.IsCachedNearby(hash)
+	exists, err := client.IsCachedNearby(hash, hash)
 	if err != nil {
 		log.Fatalf("Unable to check if content is cached nearby: %v", err)
 	}
