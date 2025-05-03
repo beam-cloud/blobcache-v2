@@ -87,6 +87,12 @@ func (c *S3Client) Head(ctx context.Context, key string) (bool, *s3.HeadObjectOu
 	return true, output, nil
 }
 
+type chunkResult struct {
+	index int
+	data  []byte
+	err   error
+}
+
 func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *bytes.Buffer) error {
 	ok, head, err := c.Head(ctx, key)
 	if err != nil || !ok {
@@ -98,26 +104,19 @@ func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *b
 	}
 
 	numChunks := int((size + c.DownloadChunkSize - 1) / c.DownloadChunkSize)
-	chunks := make([][]byte, numChunks)
+	chunkCh := make(chan chunkResult, numChunks)
 	sem := make(chan struct{}, c.DownloadConcurrency)
-	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, 1)
-
+	var wg sync.WaitGroup
 	for i := 0; i < numChunks; i++ {
 		wg.Add(1)
-
 		go func(i int) {
+			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			defer wg.Done()
-
-			if ctx.Err() != nil {
-				return
-			}
 
 			start := int64(i) * c.DownloadChunkSize
 			end := start + c.DownloadChunkSize - 1
@@ -132,11 +131,8 @@ func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *b
 				Range:  &rangeHeader,
 			})
 			if err != nil {
-				select {
-				case errCh <- fmt.Errorf("range request failed for %s: %w", rangeHeader, err):
-					cancel()
-				default:
-				}
+				chunkCh <- chunkResult{i, nil, fmt.Errorf("range request failed for %s: %w", rangeHeader, err)}
+				cancel()
 				return
 			}
 			defer resp.Body.Close()
@@ -144,29 +140,34 @@ func (c *S3Client) DownloadIntoBuffer(ctx context.Context, key string, buffer *b
 			part := make([]byte, end-start+1)
 			n, err := io.ReadFull(resp.Body, part)
 			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-				select {
-				case errCh <- fmt.Errorf("error reading range %s: %w", rangeHeader, err):
-					cancel()
-				default:
-				}
+				chunkCh <- chunkResult{i, nil, fmt.Errorf("error reading range %s: %w", rangeHeader, err)}
+				cancel()
 				return
 			}
-
-			chunks[i] = part[:n]
+			chunkCh <- chunkResult{i, part[:n], nil}
 		}(i)
 	}
 
-	wg.Wait()
-	close(errCh)
+	go func() {
+		wg.Wait()
+		close(chunkCh)
+	}()
 
-	if err, ok := <-errCh; ok {
-		return err
+	chunks := make([][]byte, numChunks)
+	var errs []error
+	for res := range chunkCh {
+		if res.err != nil {
+			errs = append(errs, res.err)
+		}
+		chunks[res.index] = res.data
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("download errors: %v", errs)
 	}
 
 	buffer.Reset()
 	for _, chunk := range chunks {
 		buffer.Write(chunk)
 	}
-
 	return nil
 }
