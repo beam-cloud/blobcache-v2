@@ -199,7 +199,7 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 			var err error
 			value, found, err = cas.getFromDiskCache(hash, chunkKey)
 			if err != nil || !found {
-				return 0, err
+				return 0, ErrContentNotFound
 			}
 		}
 
