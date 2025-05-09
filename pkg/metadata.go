@@ -125,20 +125,20 @@ func (m *BlobCacheMetadata) GetFsNodeChildren(ctx context.Context, id string) ([
 }
 
 func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, locality string, removeHostCallback func(host *BlobCacheHost)) ([]*BlobCacheHost, error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
+	hostIds, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
 	if err != nil {
 		return nil, err
 	}
 
 	hosts := []*BlobCacheHost{}
-	for _, addr := range hostAddrs {
-		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(locality, addr)).Bytes()
+	for _, hostId := range hostIds {
+		hostBytes, err := m.rdb.Get(ctx, MetadataKeys.MetadataHostKeepAlive(locality, hostId)).Bytes()
 		if err != nil {
 
 			// If the keepalive key doesn't exist, remove the host index key
 			if err == redis.Nil {
-				m.RemoveHostFromIndex(ctx, locality, &BlobCacheHost{Addr: addr})
-				removeHostCallback(&BlobCacheHost{Addr: addr})
+				m.RemoveHostFromIndex(ctx, locality, &BlobCacheHost{HostId: hostId})
+				removeHostCallback(&BlobCacheHost{HostId: hostId})
 			}
 
 			continue
@@ -160,11 +160,11 @@ func (m *BlobCacheMetadata) GetAvailableHosts(ctx context.Context, locality stri
 }
 
 func (m *BlobCacheMetadata) AddHostToIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
-	return m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(locality), host.Addr).Err()
+	return m.rdb.SAdd(ctx, MetadataKeys.MetadataHostIndex(locality), host.HostId).Err()
 }
 
 func (m *BlobCacheMetadata) RemoveHostFromIndex(ctx context.Context, locality string, host *BlobCacheHost) error {
-	return m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(locality), host.Addr).Err()
+	return m.rdb.SRem(ctx, MetadataKeys.MetadataHostIndex(locality), host.HostId).Err()
 }
 
 func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, locality string, host *BlobCacheHost) error {
@@ -173,18 +173,18 @@ func (m *BlobCacheMetadata) SetHostKeepAlive(ctx context.Context, locality strin
 		return err
 	}
 
-	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(locality, host.Addr), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
+	return m.rdb.Set(ctx, MetadataKeys.MetadataHostKeepAlive(locality, host.HostId), hostBytes, time.Duration(defaultHostKeepAliveTimeoutS)*time.Second).Err()
 }
 
 func (m *BlobCacheMetadata) GetHostIndex(ctx context.Context, locality string) ([]*BlobCacheHost, error) {
-	hostAddrs, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
+	hostIds, err := m.rdb.SMembers(ctx, MetadataKeys.MetadataHostIndex(locality)).Result()
 	if err != nil {
 		return nil, err
 	}
 
 	hosts := []*BlobCacheHost{}
-	for _, addr := range hostAddrs {
-		hosts = append(hosts, &BlobCacheHost{Addr: addr})
+	for _, hostId := range hostIds {
+		hosts = append(hosts, &BlobCacheHost{HostId: hostId})
 	}
 
 	return hosts, nil
@@ -239,8 +239,8 @@ func (k *metadataKeys) MetadataHostIndex(locality string) string {
 	return fmt.Sprintf(metadataHostIndex, locality)
 }
 
-func (k *metadataKeys) MetadataHostKeepAlive(locality, addr string) string {
-	return fmt.Sprintf(metadataHostKeepAlive, locality, addr)
+func (k *metadataKeys) MetadataHostKeepAlive(locality, hostId string) string {
+	return fmt.Sprintf(metadataHostKeepAlive, locality, hostId)
 }
 
 func (k *metadataKeys) MetadataLocation(hash string) string {
