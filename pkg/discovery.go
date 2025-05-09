@@ -76,7 +76,7 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 		}
 
 		wg.Add(1)
-		go func(addr string) {
+		go func(hostId string) {
 			defer wg.Done()
 
 			hostState, err := d.GetHostState(ctx, host)
@@ -89,7 +89,7 @@ func (d *DiscoveryClient) discoverHosts(ctx context.Context) ([]*BlobCacheHost, 
 			mu.Unlock()
 
 			Logger.Debugf("Added host with private address to map: %s", hostState.PrivateAddr)
-		}(host.Addr)
+		}(host.HostId)
 
 	}
 
@@ -110,7 +110,6 @@ func (d *DiscoveryClient) GetHostState(ctx context.Context, host *BlobCacheHost)
 		h2creds := credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
-
 
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
