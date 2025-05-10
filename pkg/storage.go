@@ -20,6 +20,50 @@ const (
 	diskCacheUsageCheckInterval = 1 * time.Minute
 )
 
+// Adding a new Struct BlobCacheMetrics encapsulates metrics for the cache system, including Ristretto metrics, disk usage, and uptime.
+type BlobCacheMetrics struct {
+	RistrettoMetrics *ristretto.Metrics
+	DiskUsageMb      int64
+	TotalDiskSpaceMb int64
+	UsagePercentage  float64
+	Uptime           time.Duration
+	StartTime        time.Time
+}
+
+// NewBlobCacheMetrics initializes a new BlobCacheMetrics instance with the current start time.
+func NewBlobCacheMetrics() *BlobCacheMetrics {
+	return &BlobCacheMetrics{
+		StartTime: time.Now(),
+	}
+}
+
+// UpdateDiskMetrics updates the disk usage and capacity metrics for the given disk cache directory.
+func (m *BlobCacheMetrics) UpdateDiskMetrics(diskCacheDir string) error {
+	var err error
+	m.DiskUsageMb, err = getDiskUsageMb(diskCacheDir)
+	if err != nil {
+		return fmt.Errorf("failed to calculate disk usage: %w", err)
+	}
+
+	m.TotalDiskSpaceMb, err = getTotalDiskSpaceMb(diskCacheDir)
+	if err != nil {
+		return fmt.Errorf("failed to calculate total disk space: %w", err)
+	}
+
+	if m.TotalDiskSpaceMb > 0 {
+		m.UsagePercentage = (float64(m.DiskUsageMb) / float64(m.TotalDiskSpaceMb)) * 100
+	} else {
+		m.UsagePercentage = 0
+	}
+
+	return nil
+}
+
+// CalculateUptime calculates the uptime of the cache system based on the start time.
+func (m *BlobCacheMetrics) CalculateUptime() {
+	m.Uptime = time.Since(m.StartTime)
+}
+
 type ContentAddressableStorage struct {
 	ctx                     context.Context
 	currentHost             *BlobCacheHost
@@ -83,12 +127,87 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 	return cas, nil
 }
 
+func (cas *ContentAddressableStorage) GetDiskCacheMetrics() (currentUsage int64, totalDiskSpace int64, usagePercentage float64, err error) {
+	// Get current disk usage
+	currentUsage, err = getDiskUsageMb(cas.diskCacheDir)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to calculate disk usage: %w", err)
+	}
+
+	// Get total disk capacity
+	totalDiskSpace, err = getTotalDiskSpaceMb(cas.diskCacheDir)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to calculate total disk space: %w", err)
+	}
+
+	// Calculate usage percentage
+	if totalDiskSpace > 0 {
+		usagePercentage = (float64(currentUsage) / float64(totalDiskSpace)) * 100
+	} else {
+		usagePercentage = 0
+	}
+
+	return currentUsage, totalDiskSpace, usagePercentage, nil
+}
+
+func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
+	ticker := time.NewTicker(diskCacheUsageCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cas.ctx.Done():
+			return
+		case <-ticker.C:
+			currentUsage, totalDiskSpace, usagePercentage, err := cas.GetDiskCacheMetrics()
+			if err != nil {
+				Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				continue
+			}
+
+			// Log the metrics
+			Logger.Infof("Disk Cache Usage: %dMB / %dMB (%.2f%%)", currentUsage, totalDiskSpace, usagePercentage)
+
+			// Update internal state for disk usage exceeded
+			cas.mu.Lock()
+			cas.diskCachedUsageExceeded = usagePercentage > cas.serverConfig.DiskCacheMaxUsagePct
+			cas.mu.Unlock()
+		}
+	}
+}
+
 func getAvailableMemoryMb() int64 {
 	v, err := mem.VirtualMemory()
 	if err != nil {
 		log.Fatalf("Unable to retrieve host memory info: %v", err)
 	}
 	return int64(v.Total / (1024 * 1024))
+}
+
+func getDiskUsageMb(path string) (int64, error) {
+	var totalUsage int64 = 0
+	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalUsage += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return totalUsage / (1024 * 1024), nil
+}
+
+func getTotalDiskSpaceMb(path string) (int64, error) {
+	var stat syscall.Statfs_t
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, err
+	}
+	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
 }
 
 type cacheValue struct {
@@ -144,7 +263,6 @@ func (cas *ContentAddressableStorage) Add(ctx context.Context, hash string, cont
 		if !added {
 			return errors.New("unable to cache: set dropped")
 		}
-
 	}
 
 	// Release the large initial buffer
@@ -291,56 +409,4 @@ func min(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
-	ticker := time.NewTicker(diskCacheUsageCheckInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-cas.ctx.Done():
-			return
-		case <-ticker.C:
-			usage, err := getDiskUsageMb(cas.diskCacheDir)
-			if err == nil {
-				totalDiskSpace, err := getTotalDiskSpaceMb(cas.diskCacheDir)
-				if err == nil {
-					usagePct := float64(usage) / float64(totalDiskSpace)
-
-					Logger.Infof("Disk cache usage: %dMB / %dMB (%.2f%%)", usage, totalDiskSpace, usagePct*100)
-
-					cas.mu.Lock()
-					cas.diskCachedUsageExceeded = usagePct > cas.serverConfig.DiskCacheMaxUsagePct
-					cas.mu.Unlock()
-				}
-			}
-		}
-	}
-}
-
-func getDiskUsageMb(path string) (int64, error) {
-	var totalUsage int64 = 0
-	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			totalUsage += info.Size()
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	return totalUsage / (1024 * 1024), nil
-}
-
-func getTotalDiskSpaceMb(path string) (int64, error) {
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(path, &stat)
-	if err != nil {
-		return 0, err
-	}
-	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
 }
