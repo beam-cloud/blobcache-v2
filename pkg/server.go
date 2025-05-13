@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -49,6 +50,7 @@ type CacheService struct {
 	globalConfig  BlobCacheGlobalConfig
 	coordinator   CoordinatorClient
 	s3ClientCache sync.Map
+	httpClient    *http.Client
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
@@ -129,6 +131,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		privateIpAddr: privateIpAddr,
 		publicIpAddr:  publicIpAddr,
 		s3ClientCache: sync.Map{},
+		httpClient:    &http.Client{},
 	}
 
 	go cs.HostKeepAlive()
@@ -487,22 +490,52 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 	return nil
 }
 
+func (cs *CacheService) cacheSourceFromCDN(source *proto.CacheSource, buffer *bytes.Buffer) error {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", source.EndpointUrl, source.Path), nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := cs.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	_, err = io.Copy(buffer, resp.Body)
+	return err
+}
+
 func (cs *CacheService) StoreContentFromSource(ctx context.Context, req *proto.StoreContentFromSourceRequest) (*proto.StoreContentFromSourceResponse, error) {
 	localPath := filepath.Join("/", req.Source.Path)
 	Logger.Infof("StoreFromContent[ACK] - [%s]", localPath)
 
 	var buffer bytes.Buffer
-	if req.Source.BucketName == "" {
+
+	switch getSourceType(req) {
+	case SourceTypeCdn:
+		err := cs.cacheSourceFromCDN(req.Source, &buffer)
+		if err != nil {
+			Logger.Errorf("StoreFromContent[ERR] - error caching source: %v", err)
+			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
+		}
+	case SourceTypeLocal:
 		err := cs.cacheSourceFromLocalPath(localPath, &buffer)
 		if err != nil {
 			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
 		}
-	} else {
+	case SourceTypeS3:
 		err := cs.cacheSourceFromS3(req.Source, &buffer)
 		if err != nil {
 			Logger.Errorf("StoreFromContent[ERR] - error caching source: %v", err)
 			return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: err.Error()}, err
 		}
+	default:
+		return &proto.StoreContentFromSourceResponse{Ok: false, ErrorMsg: "unsupported source type"}, fmt.Errorf("unsupported source type")
 	}
 
 	// Store the content
@@ -565,4 +598,15 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 	}
 
 	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash, Ok: true}, nil
+}
+
+// FIXME: Should we just have a storage type field on the proto? probably...
+func getSourceType(req *proto.StoreContentFromSourceRequest) SourceType {
+	if req.Source.CdnUrl != "" {
+		return SourceTypeCdn
+	}
+	if req.Source.BucketName != "" {
+		return SourceTypeS3
+	}
+	return SourceTypeLocal
 }

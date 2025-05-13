@@ -7,6 +7,14 @@ import (
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 )
 
+type SourceType string
+
+const (
+	SourceTypeLocal SourceType = "local"
+	SourceTypeCdn   SourceType = "cdn"
+	SourceTypeS3    SourceType = "s3"
+)
+
 const (
 	BlobCacheHostPrefix string = "blobcache-host"
 	BlobCacheVersion    string = "dev"

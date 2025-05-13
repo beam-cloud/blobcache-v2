@@ -93,6 +93,7 @@ message CacheSource {
   string endpoint_url = 4;
   string access_key = 5;
   string secret_key = 6;
+  string cdn_url = 7;
 }
 
 message StoreContentFromSourceRequest { CacheSource source = 1; }
