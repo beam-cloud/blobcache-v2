@@ -491,7 +491,7 @@ func (cs *CacheService) cacheSourceFromS3(source *proto.CacheSource, buffer *byt
 }
 
 func (cs *CacheService) cacheSourceFromCDN(source *proto.CacheSource, buffer *bytes.Buffer) error {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", source.EndpointUrl, source.Path), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", source.CdnUrl, source.Path), nil)
 	if err != nil {
 		return err
 	}

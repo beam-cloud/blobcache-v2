@@ -555,6 +555,64 @@ func (c *BlobCacheClient) StoreContentFromFUSE(source struct {
 	return resp.Hash, nil
 }
 
+func (c *BlobCacheClient) StoreContentFromCDN(source struct {
+	CdnUrl string
+	Path   string
+}, opts struct {
+	RoutingKey string
+	Lock       bool
+}) (string, error) {
+	ctx, cancel := context.WithTimeout(c.ctx, storeContentRequestTimeout)
+	defer cancel()
+
+	if opts.RoutingKey == "" {
+		opts.RoutingKey = source.Path
+	}
+
+	client, _, err := c.getGRPCClient(&ClientRequest{
+		rt:        ClientRequestTypeStorage,
+		key:       opts.RoutingKey,
+		hostIndex: 0,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if opts.Lock {
+		resp, err := client.StoreContentFromSourceWithLock(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+			CdnUrl: source.CdnUrl,
+			Path:   source.Path,
+		}})
+		if err != nil {
+			return "", err
+		}
+
+		if resp.FailedToAcquireLock {
+			return "", ErrUnableToAcquireLock
+		}
+
+		if !resp.Ok {
+			return "", ErrUnableToPopulateContent
+		}
+
+		return resp.Hash, nil
+	}
+
+	resp, err := client.StoreContentFromSource(ctx, &proto.StoreContentFromSourceRequest{Source: &proto.CacheSource{
+		CdnUrl: source.CdnUrl,
+		Path:   source.Path,
+	}})
+	if err != nil {
+		return "", err
+	}
+
+	if !resp.Ok {
+		return "", ErrUnableToPopulateContent
+	}
+
+	return resp.Hash, nil
+}
+
 func (c *BlobCacheClient) StoreContentFromS3(source struct {
 	Path        string
 	BucketName  string
