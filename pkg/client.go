@@ -678,30 +678,30 @@ func grpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 	}
 }
 
-func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64) ([]byte, error) {
+func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, dest []byte) (int, error) {
 	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	resp, err := client.GetFileFromChunks(context.Background(), &proto.GetFileFromChunksRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return resp.Content, nil
+	return copy(dest, resp.Content), nil
 }
 
-func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, offset int64) ([]byte, error) {
+func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, offset int64, dest []byte) (int, error) {
 	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	resp, err := client.GetFileFromChunksWithOffset(context.Background(), &proto.GetFileFromChunksWithOffsetRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset, Offset: offset})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return resp.Content, nil
+	return copy(dest, resp.Content), nil
 }
