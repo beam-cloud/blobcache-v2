@@ -26,6 +26,8 @@ const (
 	BlobCache_StoreContentFromSource_FullMethodName         = "/blobcache.BlobCache/StoreContentFromSource"
 	BlobCache_StoreContentFromSourceWithLock_FullMethodName = "/blobcache.BlobCache/StoreContentFromSourceWithLock"
 	BlobCache_GetState_FullMethodName                       = "/blobcache.BlobCache/GetState"
+	BlobCache_GetFileFromChunks_FullMethodName              = "/blobcache.BlobCache/GetFileFromChunks"
+	BlobCache_GetFileFromChunksWithOffset_FullMethodName    = "/blobcache.BlobCache/GetFileFromChunksWithOffset"
 	BlobCache_GetAvailableHosts_FullMethodName              = "/blobcache.BlobCache/GetAvailableHosts"
 	BlobCache_GetRegionConfig_FullMethodName                = "/blobcache.BlobCache/GetRegionConfig"
 	BlobCache_SetClientLock_FullMethodName                  = "/blobcache.BlobCache/SetClientLock"
@@ -55,6 +57,8 @@ type BlobCacheClient interface {
 	StoreContentFromSource(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceResponse, error)
 	StoreContentFromSourceWithLock(ctx context.Context, in *StoreContentFromSourceRequest, opts ...grpc.CallOption) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error)
+	GetFileFromChunks(ctx context.Context, in *GetFileFromChunksRequest, opts ...grpc.CallOption) (*GetFileFromChunksResponse, error)
+	GetFileFromChunksWithOffset(ctx context.Context, in *GetFileFromChunksWithOffsetRequest, opts ...grpc.CallOption) (*GetFileFromChunksResponse, error)
 	// Coordinator RPCs
 	GetAvailableHosts(ctx context.Context, in *GetAvailableHostsRequest, opts ...grpc.CallOption) (*GetAvailableHostsResponse, error)
 	GetRegionConfig(ctx context.Context, in *GetRegionConfigRequest, opts ...grpc.CallOption) (*GetRegionConfigResponse, error)
@@ -186,6 +190,24 @@ func (c *blobCacheClient) StoreContentFromSourceWithLock(ctx context.Context, in
 func (c *blobCacheClient) GetState(ctx context.Context, in *GetStateRequest, opts ...grpc.CallOption) (*GetStateResponse, error) {
 	out := new(GetStateResponse)
 	err := c.cc.Invoke(ctx, BlobCache_GetState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) GetFileFromChunks(ctx context.Context, in *GetFileFromChunksRequest, opts ...grpc.CallOption) (*GetFileFromChunksResponse, error) {
+	out := new(GetFileFromChunksResponse)
+	err := c.cc.Invoke(ctx, BlobCache_GetFileFromChunks_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blobCacheClient) GetFileFromChunksWithOffset(ctx context.Context, in *GetFileFromChunksWithOffsetRequest, opts ...grpc.CallOption) (*GetFileFromChunksResponse, error) {
+	out := new(GetFileFromChunksResponse)
+	err := c.cc.Invoke(ctx, BlobCache_GetFileFromChunksWithOffset_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -339,6 +361,8 @@ type BlobCacheServer interface {
 	StoreContentFromSource(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceResponse, error)
 	StoreContentFromSourceWithLock(context.Context, *StoreContentFromSourceRequest) (*StoreContentFromSourceWithLockResponse, error)
 	GetState(context.Context, *GetStateRequest) (*GetStateResponse, error)
+	GetFileFromChunks(context.Context, *GetFileFromChunksRequest) (*GetFileFromChunksResponse, error)
+	GetFileFromChunksWithOffset(context.Context, *GetFileFromChunksWithOffsetRequest) (*GetFileFromChunksResponse, error)
 	// Coordinator RPCs
 	GetAvailableHosts(context.Context, *GetAvailableHostsRequest) (*GetAvailableHostsResponse, error)
 	GetRegionConfig(context.Context, *GetRegionConfigRequest) (*GetRegionConfigResponse, error)
@@ -382,6 +406,12 @@ func (UnimplementedBlobCacheServer) StoreContentFromSourceWithLock(context.Conte
 }
 func (UnimplementedBlobCacheServer) GetState(context.Context, *GetStateRequest) (*GetStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetState not implemented")
+}
+func (UnimplementedBlobCacheServer) GetFileFromChunks(context.Context, *GetFileFromChunksRequest) (*GetFileFromChunksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFileFromChunks not implemented")
+}
+func (UnimplementedBlobCacheServer) GetFileFromChunksWithOffset(context.Context, *GetFileFromChunksWithOffsetRequest) (*GetFileFromChunksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFileFromChunksWithOffset not implemented")
 }
 func (UnimplementedBlobCacheServer) GetAvailableHosts(context.Context, *GetAvailableHostsRequest) (*GetAvailableHostsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAvailableHosts not implemented")
@@ -574,6 +604,42 @@ func _BlobCache_GetState_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BlobCacheServer).GetState(ctx, req.(*GetStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_GetFileFromChunks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFileFromChunksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).GetFileFromChunks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_GetFileFromChunks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).GetFileFromChunks(ctx, req.(*GetFileFromChunksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlobCache_GetFileFromChunksWithOffset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFileFromChunksWithOffsetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlobCacheServer).GetFileFromChunksWithOffset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BlobCache_GetFileFromChunksWithOffset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlobCacheServer).GetFileFromChunksWithOffset(ctx, req.(*GetFileFromChunksWithOffsetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -874,6 +940,14 @@ var BlobCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetState",
 			Handler:    _BlobCache_GetState_Handler,
+		},
+		{
+			MethodName: "GetFileFromChunks",
+			Handler:    _BlobCache_GetFileFromChunks_Handler,
+		},
+		{
+			MethodName: "GetFileFromChunksWithOffset",
+			Handler:    _BlobCache_GetFileFromChunksWithOffset_Handler,
 		},
 		{
 			MethodName: "GetAvailableHosts",

@@ -677,3 +677,31 @@ func grpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 		return invoker(newCtx, method, req, reply, cc, opts...)
 	}
 }
+
+func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64) ([]byte, error) {
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.GetFileFromChunks(context.Background(), &proto.GetFileFromChunksRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Content, nil
+}
+
+func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, offset int64) ([]byte, error) {
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.GetFileFromChunksWithOffset(context.Background(), &proto.GetFileFromChunksWithOffsetRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset, Offset: offset})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Content, nil
+}

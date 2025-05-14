@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
+	clipv2 "github.com/beam-cloud/clip/pkg/v2"
 	"github.com/djherbis/atime"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -49,6 +51,7 @@ type CacheService struct {
 	globalConfig  BlobCacheGlobalConfig
 	coordinator   CoordinatorClient
 	s3ClientCache sync.Map
+	httpClient    *http.Client
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
@@ -129,6 +132,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		privateIpAddr: privateIpAddr,
 		publicIpAddr:  publicIpAddr,
 		s3ClientCache: sync.Map{},
+		httpClient:    &http.Client{},
 	}
 
 	go cs.HostKeepAlive()
@@ -565,4 +569,59 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 	}
 
 	return &proto.StoreContentFromSourceWithLockResponse{Hash: storeContentFromSourceResp.Hash, Ok: true}, nil
+}
+
+func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFileFromChunksRequest) (*proto.GetFileFromChunksResponse, error) {
+	dest := make([]byte, req.EndOffset-req.StartOffset)
+
+	if cs.cas.Exists(req.Hash) {
+		n, err := cs.cas.Get(req.Hash, 0, req.EndOffset-req.StartOffset, dest)
+		if err != nil {
+			return nil, err
+		}
+
+		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
+	}
+
+	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, req.Chunks, req.ChunkBaseUrl, req.ChunkSize, req.StartOffset, req.EndOffset, dest)
+	if err != nil {
+		return nil, err
+	}
+
+	err = cs.cas.Add(ctx, req.Hash, dest)
+	if err != nil {
+		Logger.Infof("Store[ERR] - [%s] - %v", req.Hash, err)
+		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
+	}
+
+	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
+}
+
+func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *proto.GetFileFromChunksWithOffsetRequest) (*proto.GetFileFromChunksResponse, error) {
+	dest := make([]byte, req.EndOffset-req.StartOffset)
+
+	if cs.cas.Exists(req.Hash) {
+		n, err := cs.cas.Get(req.Hash, req.Offset, req.EndOffset-req.StartOffset, dest)
+		if err != nil {
+			return nil, err
+		}
+
+		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
+	}
+
+	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, req.Chunks, req.ChunkBaseUrl, req.ChunkSize, req.StartOffset, req.EndOffset, dest)
+	if err != nil {
+		return nil, err
+	}
+
+	err = cs.cas.Add(ctx, req.Hash, dest)
+	if err != nil {
+		Logger.Infof("Store[ERR] - [%s] - %v", req.Hash, err)
+		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
+	}
+
+	// Reduce the dest slice to the actual bytes read
+	dest = dest[req.Offset-req.StartOffset : bytesRead]
+
+	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
 }
