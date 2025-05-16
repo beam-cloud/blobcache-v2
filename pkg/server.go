@@ -603,7 +603,6 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 		ChunkSize:      req.ChunkSize,
 		StartOffset:    req.StartOffset,
 		EndOffset:      req.EndOffset,
-		ChunkCache:     cs.chunkCache,
 	}, dest)
 	if err != nil {
 		return nil, err
@@ -615,7 +614,7 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
-	Logger.Infof("GetFileFromChunks[OK] - FROM CDN - [%s]", req.Hash)
+	Logger.Infof("GetFileFromChunks[OK] - FROM CDN - [%s][%d bytes]", req.Hash, bytesRead)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
 }
 
@@ -639,7 +638,6 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 		ChunkSize:      req.ChunkSize,
 		StartOffset:    req.StartOffset,
 		EndOffset:      req.EndOffset,
-		ChunkCache:     cs.chunkCache,
 	}, dest)
 	if err != nil {
 		return nil, err
