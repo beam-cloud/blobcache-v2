@@ -20,6 +20,7 @@ import (
 
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	clipv2 "github.com/beam-cloud/clip/pkg/v2"
+	"github.com/beam-cloud/ristretto"
 	"github.com/djherbis/atime"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -52,6 +53,7 @@ type CacheService struct {
 	coordinator   CoordinatorClient
 	s3ClientCache sync.Map
 	httpClient    *http.Client
+	chunkCache    *ristretto.Cache[string, []byte]
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
@@ -120,6 +122,15 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		Logger.Infof("Configured and mounted source: %+v", sourceConfig.FilesystemName)
 	}
 
+	chunkCache, err := ristretto.NewCache(&ristretto.Config[string, []byte]{
+		NumCounters: 1e7,
+		MaxCost:     3 * 1e9,
+		BufferItems: 64,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	cs := &CacheService{
 		ctx:           ctx,
 		mode:          cfg.Server.Mode,
@@ -133,6 +144,7 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		publicIpAddr:  publicIpAddr,
 		s3ClientCache: sync.Map{},
 		httpClient:    &http.Client{},
+		chunkCache:    chunkCache,
 	}
 
 	go cs.HostKeepAlive()
@@ -572,6 +584,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 }
 
 func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFileFromChunksRequest) (*proto.GetFileFromChunksResponse, error) {
+	Logger.Infof("GetFileFromChunks[ACK] - [%s]", req.Hash)
 	dest := make([]byte, req.EndOffset-req.StartOffset)
 
 	if cs.cas.Exists(req.Hash) {
@@ -580,10 +593,18 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 			return nil, err
 		}
 
+		Logger.Infof("GetFileFromChunks[OK] - FROM CACHE - [%s]", req.Hash)
 		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
 	}
 
-	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, req.Chunks, req.ChunkBaseUrl, req.ChunkSize, req.StartOffset, req.EndOffset, dest)
+	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, clipv2.ReadFileChunkRequest{
+		RequiredChunks: req.Chunks,
+		ChunkBaseUrl:   req.ChunkBaseUrl,
+		ChunkSize:      req.ChunkSize,
+		StartOffset:    req.StartOffset,
+		EndOffset:      req.EndOffset,
+		ChunkCache:     cs.chunkCache,
+	}, dest)
 	if err != nil {
 		return nil, err
 	}
@@ -594,10 +615,12 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
 
+	Logger.Infof("GetFileFromChunks[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
 }
 
 func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *proto.GetFileFromChunksWithOffsetRequest) (*proto.GetFileFromChunksResponse, error) {
+	Logger.Infof("GetFileFromChunksWithOffset[ACK] - [%s]", req.Hash)
 	dest := make([]byte, req.EndOffset-req.StartOffset)
 
 	if cs.cas.Exists(req.Hash) {
@@ -606,10 +629,18 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 			return nil, err
 		}
 
+		Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CACHE - [%s]", req.Hash)
 		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
 	}
 
-	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, req.Chunks, req.ChunkBaseUrl, req.ChunkSize, req.StartOffset, req.EndOffset, dest)
+	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, clipv2.ReadFileChunkRequest{
+		RequiredChunks: req.Chunks,
+		ChunkBaseUrl:   req.ChunkBaseUrl,
+		ChunkSize:      req.ChunkSize,
+		StartOffset:    req.StartOffset,
+		EndOffset:      req.EndOffset,
+		ChunkCache:     cs.chunkCache,
+	}, dest)
 	if err != nil {
 		return nil, err
 	}
@@ -623,5 +654,6 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 	// Reduce the dest slice to the actual bytes read
 	dest = dest[req.Offset-req.StartOffset : bytesRead]
 
+	Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
 }
