@@ -38,10 +38,8 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.30.1 h1:+woJ607dllHJQtsnJLi52ycuqHMw
 github.com/aws/aws-sdk-go-v2/service/sts v1.30.1/go.mod h1:jiNR3JqT15Dm+QWq2SRgh0x0bCNSRP2L25+CqPNpJlQ=
 github.com/aws/smithy-go v1.22.2 h1:6D9hW43xKFrRx/tXXfAlIZc4JI+yQe6snnWcQyxSyLQ=
 github.com/aws/smithy-go v1.22.2/go.mod h1:irrKGvNn1InZwb2d7fkIRNucdfwR8R+Ts3wxYa/cJHg=
-github.com/beam-cloud/clip v0.0.0-20250516152524-139806c0ebf4 h1:j1nhXBZ8EAYZwUXg3gh90hhfDOXB7OkZLtiMDmOTd6w=
-github.com/beam-cloud/clip v0.0.0-20250516152524-139806c0ebf4/go.mod h1:VoKQSQxHCJGDkSsgvpzyj96UR9m4CspEB80YpLtf5bE=
-github.com/beam-cloud/clip v0.0.0-20250516223343-24a261c9572d h1:3qL3io101X/+uDt+JdLsv0uw6eK5u/xkWWu0bNXVyTQ=
-github.com/beam-cloud/clip v0.0.0-20250516223343-24a261c9572d/go.mod h1:VoKQSQxHCJGDkSsgvpzyj96UR9m4CspEB80YpLtf5bE=
+github.com/beam-cloud/clip v0.0.0-20250519220252-c15990a1b727 h1:LQNAu2u2JxdgUSpQGV5NZhRgJ5tmrMPjVdgItIFkHp8=
+github.com/beam-cloud/clip v0.0.0-20250519220252-c15990a1b727/go.mod h1:VoKQSQxHCJGDkSsgvpzyj96UR9m4CspEB80YpLtf5bE=
 github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8 h1:lc3G6/sHW4e5/XPHO2w2Ni43fbu42nojS/uX45Ws6Ck=
 github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8/go.mod h1:rqrE88LppghBMjFICaVTVJ8CnAhg9UmdQUVA7iDNUow=
 github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2 h1:RvgYbYPfBiq2IvimR4Vll2ImJsElX3oPLU9OjVvjE0c=
