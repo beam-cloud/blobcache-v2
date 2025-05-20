@@ -17,7 +17,7 @@ service BlobCache {
   rpc GetState(GetStateRequest) returns (GetStateResponse) {}
   rpc GetFileFromChunks(GetFileFromChunksRequest) returns (GetFileFromChunksResponse) {}
   rpc GetFileFromChunksWithOffset(GetFileFromChunksWithOffsetRequest) returns (GetFileFromChunksResponse) {}
-
+  rpc WarmChunks(WarmChunksRequest) returns (WarmChunksResponse) {}
   // Coordinator RPCs
   rpc GetAvailableHosts(GetAvailableHostsRequest)
       returns (GetAvailableHostsResponse) {}
@@ -299,4 +299,13 @@ message GetFileFromChunksWithOffsetRequest {
   int64 start_offset = 5;
   int64 end_offset = 6;
   int64 offset = 7;
+}
+
+message WarmChunksRequest {
+  repeated string chunks = 1;
+  string chunk_base_url = 2;
+}
+
+message WarmChunksResponse {
+  bool ok = 1;
 }

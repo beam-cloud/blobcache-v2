@@ -679,7 +679,8 @@ func grpcAuthInterceptor(token string) grpc.UnaryClientInterceptor {
 }
 
 func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, dest []byte) (int, error) {
-	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
+	// Set the key to the chunk base URL so that all chunks are fetched from the same blobcache server
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0, key: chunkBaseURL})
 	if err != nil {
 		return 0, err
 	}
@@ -693,7 +694,8 @@ func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkB
 }
 
 func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, offset int64, dest []byte) (int, error) {
-	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0})
+	// Set the key to the chunk base URL so that all chunks are fetched from the same blobcache server
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0, key: chunkBaseURL})
 	if err != nil {
 		return 0, err
 	}
@@ -704,4 +706,19 @@ func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []stri
 	}
 
 	return copy(dest, resp.Content), nil
+}
+
+func (c *BlobCacheClient) WarmChunks(chunks []string, chunkBaseURL string) error {
+	// Set the key to the chunk base URL so that all chunks are fetched from the same blobcache server
+	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0, key: chunkBaseURL})
+	if err != nil {
+		return err
+	}
+
+	_, err = client.WarmChunks(context.Background(), &proto.WarmChunksRequest{Chunks: chunks, ChunkBaseUrl: chunkBaseURL})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

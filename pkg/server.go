@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -24,6 +23,7 @@ import (
 	"github.com/djherbis/atime"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"golang.org/x/sync/errgroup"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -52,7 +52,6 @@ type CacheService struct {
 	globalConfig  BlobCacheGlobalConfig
 	coordinator   CoordinatorClient
 	s3ClientCache sync.Map
-	httpClient    *http.Client
 	chunkCache    *ristretto.Cache[string, []byte]
 }
 
@@ -143,7 +142,6 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 		privateIpAddr: privateIpAddr,
 		publicIpAddr:  publicIpAddr,
 		s3ClientCache: sync.Map{},
-		httpClient:    &http.Client{},
 		chunkCache:    chunkCache,
 	}
 
@@ -597,7 +595,7 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
 	}
 
-	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, clipv2.ReadFileChunkRequest{
+	bytesRead, err := clipv2.ReadFileChunks(clipv2.ReadFileChunkRequest{
 		RequiredChunks: req.Chunks,
 		ChunkBaseUrl:   req.ChunkBaseUrl,
 		ChunkSize:      req.ChunkSize,
@@ -632,7 +630,7 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
 	}
 
-	bytesRead, err := clipv2.ReadFileChunks(cs.httpClient, clipv2.ReadFileChunkRequest{
+	bytesRead, err := clipv2.ReadFileChunks(clipv2.ReadFileChunkRequest{
 		RequiredChunks: req.Chunks,
 		ChunkBaseUrl:   req.ChunkBaseUrl,
 		ChunkSize:      req.ChunkSize,
@@ -654,4 +652,28 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 
 	Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
+}
+
+func (cs *CacheService) WarmChunks(ctx context.Context, req *proto.WarmChunksRequest) (*proto.WarmChunksResponse, error) {
+	Logger.Infof("WarmChunks[ACK] - [%s] [%+v]", req.ChunkBaseUrl, req.Chunks)
+
+	var errgroup errgroup.Group
+	for _, chunk := range req.Chunks {
+		chunkUrl := fmt.Sprintf("%s/%s", req.ChunkBaseUrl, chunk)
+
+		errgroup.Go(func() error {
+			_, err := clipv2.GetChunk(chunkUrl)
+			if err != nil {
+				Logger.Errorf("WarmChunks[ERR] - error getting chunk: %v", err)
+				return err
+			}
+			return nil
+		})
+	}
+
+	if err := errgroup.Wait(); err != nil {
+		return &proto.WarmChunksResponse{Ok: false}, nil
+	}
+
+	return &proto.WarmChunksResponse{Ok: true}, nil
 }
