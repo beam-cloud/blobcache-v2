@@ -700,7 +700,7 @@ func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []stri
 		return 0, err
 	}
 
-	resp, err := client.GetFileFromChunksWithOffset(context.Background(), &proto.GetFileFromChunksWithOffsetRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset})
+	resp, err := client.GetFileFromChunksWithOffset(context.Background(), &proto.GetFileFromChunksWithOffsetRequest{Hash: hash, Chunks: chunks, ChunkBaseUrl: chunkBaseURL, ChunkSize: chunkSize, StartOffset: startOffset, EndOffset: endOffset, Offset: offset})
 	if err != nil {
 		return 0, err
 	}
