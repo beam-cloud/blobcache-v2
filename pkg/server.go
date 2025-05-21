@@ -23,7 +23,6 @@ import (
 	"github.com/djherbis/atime"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"golang.org/x/sync/errgroup"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -657,22 +656,15 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 func (cs *CacheService) WarmChunks(ctx context.Context, req *proto.WarmChunksRequest) (*proto.WarmChunksResponse, error) {
 	Logger.Infof("WarmChunks[ACK] - [%s] [%+v]", req.ChunkBaseUrl, req.Chunks)
 
-	var errgroup errgroup.Group
 	for _, chunk := range req.Chunks {
 		chunkUrl := fmt.Sprintf("%s/%s", req.ChunkBaseUrl, chunk)
+		Logger.Infof("WarmChunks[ACK] - [%s]", chunkUrl)
 
-		errgroup.Go(func() error {
-			_, err := clipv2.GetChunk(chunkUrl)
-			if err != nil {
-				Logger.Errorf("WarmChunks[ERR] - error getting chunk: %v", err)
-				return err
-			}
-			return nil
-		})
-	}
-
-	if err := errgroup.Wait(); err != nil {
-		return &proto.WarmChunksResponse{Ok: false}, nil
+		_, err := clipv2.GetChunk(chunkUrl)
+		if err != nil {
+			Logger.Errorf("WarmChunks[ERR] - error getting chunk: %v", err)
+		}
+		Logger.Infof("WarmChunks[OK] - [%s]", chunkUrl)
 	}
 
 	return &proto.WarmChunksResponse{Ok: true}, nil
