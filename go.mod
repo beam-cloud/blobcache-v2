@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.27.24
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.24
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.58.0
-	github.com/beam-cloud/clip v0.0.0-20250520215015-c151475c4559
+	github.com/beam-cloud/clip v0.0.0-20250520220315-51153a381405
 	github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8
 	github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2
 	github.com/bsm/redislock v0.9.4
@@ -25,6 +25,7 @@ require (
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/shirou/gopsutil v2.21.11+incompatible
 	github.com/tj/assert v0.0.3
+	golang.org/x/sync v0.11.0
 	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.4
 	gotest.tools v2.2.0+incompatible
@@ -55,7 +56,6 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tidwall/btree v1.6.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
 )
 
 require (
