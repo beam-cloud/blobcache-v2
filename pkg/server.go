@@ -581,7 +581,7 @@ func (cs *CacheService) StoreContentFromSourceWithLock(ctx context.Context, req 
 }
 
 func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFileFromChunksRequest) (*proto.GetFileFromChunksResponse, error) {
-	Logger.Infof("GetFileFromChunks[ACK] - [%s]", req.Hash)
+	Logger.Infof("GetFileFromChunks[ACK] - [%s] [%d chunks]", req.Hash, len(req.Chunks))
 	dest := make([]byte, req.EndOffset-req.StartOffset)
 
 	if cs.cas.Exists(req.Hash) {
@@ -615,12 +615,13 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
 }
 
+// totalBytesRead, err = s.contentCache.GetFileFromChunksWithOffset(node.ContentHash, requiredChunks, chunkBaseUrl, chunkSize, fileStart, fileEnd, off, dest)
 func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *proto.GetFileFromChunksWithOffsetRequest) (*proto.GetFileFromChunksResponse, error) {
 	Logger.Infof("GetFileFromChunksWithOffset[ACK] - [%s]", req.Hash)
 	dest := make([]byte, req.EndOffset-req.StartOffset)
 
 	if cs.cas.Exists(req.Hash) {
-		n, err := cs.cas.Get(req.Hash, req.Offset, req.EndOffset-req.StartOffset, dest)
+		n, err := cs.cas.Get(req.Hash, req.Offset, req.DestSize, dest)
 		if err != nil {
 			return nil, err
 		}
@@ -647,7 +648,7 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 	}
 
 	// Reduce the dest slice to the actual bytes read
-	dest = dest[req.Offset-req.StartOffset : bytesRead]
+	dest = dest[req.Offset : req.Offset+req.DestSize]
 
 	Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil

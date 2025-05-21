@@ -299,6 +299,7 @@ message GetFileFromChunksWithOffsetRequest {
   int64 start_offset = 5;
   int64 end_offset = 6;
   int64 offset = 7;
+  int64 dest_size = 8;
 }
 
 message WarmChunksRequest {
