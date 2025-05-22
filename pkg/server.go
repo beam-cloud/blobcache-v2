@@ -620,8 +620,9 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 	Logger.Infof("GetFileFromChunksWithOffset[ACK] - [%s]", req.Hash)
 	dest := make([]byte, req.DestSize)
 
+	// When cached read the requested offset from the cache
 	if cs.cas.Exists(req.Hash) {
-		n, err := cs.cas.Get(req.Hash, req.FileRelOffset, req.DestSize, dest)
+		n, err := cs.cas.Get(req.Hash, req.RelOffset, req.DestSize, dest)
 		if err != nil {
 			return nil, err
 		}
@@ -630,22 +631,26 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 		return &proto.GetFileFromChunksResponse{BytesRead: int64(n), Content: dest}, nil
 	}
 
+	// When not cached, read the entire file and then return the requested offset
+	tempDest := make([]byte, req.EndOffset-req.StartOffset)
 	bytesRead, err := clipv2.ReadFileChunks(clipv2.ReadFileChunkRequest{
 		RequiredChunks: req.Chunks,
 		ChunkBaseUrl:   req.ChunkBaseUrl,
 		ChunkSize:      req.ChunkSize,
-		StartOffset:    req.ChunkRelOffset,
-		EndOffset:      req.FileRelOffset + req.DestSize,
-	}, dest)
+		StartOffset:    req.StartOffset,
+		EndOffset:      req.EndOffset,
+	}, tempDest)
 	if err != nil {
 		return nil, err
 	}
 
-	err = cs.cas.Add(ctx, req.Hash, dest)
+	err = cs.cas.Add(ctx, req.Hash, tempDest)
 	if err != nil {
 		Logger.Infof("Store[ERR] - [%s] - %v", req.Hash, err)
 		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
+
+	copy(dest, tempDest[req.RelOffset:req.RelOffset+req.DestSize])
 
 	Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil

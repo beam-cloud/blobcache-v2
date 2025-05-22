@@ -54,6 +54,8 @@ github.com/beam-cloud/clip v0.0.0-20250522210115-aa0919cea43b h1:Yon1zQWqf8SR3WZ
 github.com/beam-cloud/clip v0.0.0-20250522210115-aa0919cea43b/go.mod h1:gVyRTW1D6Ag8vxeX9zFvyoRRUSBypBrStt80tYGqShY=
 github.com/beam-cloud/clip v0.0.0-20250522213630-2c7ba3905bf8 h1:F3XlwDRVn+VPERYs3aXjgsN5koJI9fFUgJpdDipcWm4=
 github.com/beam-cloud/clip v0.0.0-20250522213630-2c7ba3905bf8/go.mod h1:gVyRTW1D6Ag8vxeX9zFvyoRRUSBypBrStt80tYGqShY=
+github.com/beam-cloud/clip v0.0.0-20250522215847-0af5af725d17 h1:dl5ik/a6hoeo4nutAypdkumorrDEQZOQyGPm5ENrwxY=
+github.com/beam-cloud/clip v0.0.0-20250522215847-0af5af725d17/go.mod h1:gVyRTW1D6Ag8vxeX9zFvyoRRUSBypBrStt80tYGqShY=
 github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8 h1:lc3G6/sHW4e5/XPHO2w2Ni43fbu42nojS/uX45Ws6Ck=
 github.com/beam-cloud/rendezvous v0.0.0-20250415141250-2a0f81633db8/go.mod h1:rqrE88LppghBMjFICaVTVJ8CnAhg9UmdQUVA7iDNUow=
 github.com/beam-cloud/ristretto v0.0.0-20241013204426-d1403e359aa2 h1:RvgYbYPfBiq2IvimR4Vll2ImJsElX3oPLU9OjVvjE0c=

@@ -693,8 +693,7 @@ func (c *BlobCacheClient) GetFileFromChunks(hash string, chunks []string, chunkB
 	return copy(dest, resp.Content), nil
 }
 
-// offset, err := s.contentCache.GetFileFromChunksWithOffset(node.ContentHash, requiredChunks, chunkBaseUrl, chunkSize, offsetInFirstChunk, dest)
-func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, chunkRelOffset int64, fileRelOffset int64, dest []byte) (int, error) {
+func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []string, chunkBaseURL string, chunkSize int64, startOffset int64, endOffset int64, relOffset int64, dest []byte) (int, error) {
 	// Set the key to the chunk base URL so that all chunks are fetched from the same blobcache server
 	client, _, err := c.getGRPCClient(&ClientRequest{rt: ClientRequestTypeRetrieval, hostIndex: 0, key: chunkBaseURL})
 	if err != nil {
@@ -702,13 +701,14 @@ func (c *BlobCacheClient) GetFileFromChunksWithOffset(hash string, chunks []stri
 	}
 
 	resp, err := client.GetFileFromChunksWithOffset(context.Background(), &proto.GetFileFromChunksWithOffsetRequest{
-		Hash:           hash,
-		Chunks:         chunks,
-		ChunkBaseUrl:   chunkBaseURL,
-		ChunkSize:      chunkSize,
-		ChunkRelOffset: chunkRelOffset,
-		FileRelOffset:  fileRelOffset,
-		DestSize:       int64(len(dest)),
+		Hash:         hash,
+		Chunks:       chunks,
+		ChunkBaseUrl: chunkBaseURL,
+		ChunkSize:    chunkSize,
+		StartOffset:  startOffset,
+		EndOffset:    endOffset,
+		RelOffset:    relOffset,
+		DestSize:     int64(len(dest)),
 	})
 	if err != nil {
 		return 0, err
