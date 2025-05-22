@@ -296,10 +296,9 @@ message GetFileFromChunksWithOffsetRequest {
   repeated string chunks = 2;
   string chunk_base_url = 3;
   int64 chunk_size = 4;
-  int64 start_offset = 5;
-  int64 end_offset = 6;
-  int64 offset = 7;
-  int64 dest_size = 8;
+  int64 chunk_rel_offset = 5;
+  int64 file_rel_offset = 6;
+  int64 dest_size = 7;
 }
 
 message WarmChunksRequest {

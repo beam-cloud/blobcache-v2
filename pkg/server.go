@@ -618,10 +618,10 @@ func (cs *CacheService) GetFileFromChunks(ctx context.Context, req *proto.GetFil
 // totalBytesRead, err = s.contentCache.GetFileFromChunksWithOffset(node.ContentHash, requiredChunks, chunkBaseUrl, chunkSize, fileStart, fileEnd, off, dest)
 func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *proto.GetFileFromChunksWithOffsetRequest) (*proto.GetFileFromChunksResponse, error) {
 	Logger.Infof("GetFileFromChunksWithOffset[ACK] - [%s]", req.Hash)
-	dest := make([]byte, req.EndOffset-req.StartOffset)
+	dest := make([]byte, req.DestSize)
 
 	if cs.cas.Exists(req.Hash) {
-		n, err := cs.cas.Get(req.Hash, req.Offset, req.DestSize, dest)
+		n, err := cs.cas.Get(req.Hash, req.FileRelOffset, req.DestSize, dest)
 		if err != nil {
 			return nil, err
 		}
@@ -634,8 +634,8 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 		RequiredChunks: req.Chunks,
 		ChunkBaseUrl:   req.ChunkBaseUrl,
 		ChunkSize:      req.ChunkSize,
-		StartOffset:    req.StartOffset,
-		EndOffset:      req.EndOffset,
+		StartOffset:    req.ChunkRelOffset,
+		EndOffset:      req.FileRelOffset + req.DestSize,
 	}, dest)
 	if err != nil {
 		return nil, err
@@ -646,9 +646,6 @@ func (cs *CacheService) GetFileFromChunksWithOffset(ctx context.Context, req *pr
 		Logger.Infof("Store[ERR] - [%s] - %v", req.Hash, err)
 		return nil, status.Errorf(codes.Internal, "Failed to add content: %v", err)
 	}
-
-	// Reduce the dest slice to the actual bytes read
-	dest = dest[req.Offset : req.Offset+req.DestSize]
 
 	Logger.Infof("GetFileFromChunksWithOffset[OK] - FROM CDN - [%s]", req.Hash)
 	return &proto.GetFileFromChunksResponse{BytesRead: int64(bytesRead), Content: dest}, nil
