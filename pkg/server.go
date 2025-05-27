@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,10 +21,11 @@ import (
 	proto "github.com/beam-cloud/blobcache-v2/proto"
 	clipv2 "github.com/beam-cloud/clip/pkg/v2"
 	"github.com/beam-cloud/ristretto"
+
 	"github.com/djherbis/atime"
 	"github.com/google/uuid"
 	"github.com/hanwen/go-fuse/v2/fuse"
-
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -52,6 +54,40 @@ type CacheService struct {
 	coordinator   CoordinatorClient
 	s3ClientCache sync.Map
 	chunkCache    *ristretto.Cache[string, []byte]
+}
+
+// StartProfiling starts a pprof server and memory monitoring
+func StartProfiling(port int) {
+	go func() {
+		addr := fmt.Sprintf(":%d", port)
+		log.Info().Msgf("Starting pprof server on %s", addr)
+		log.Info().Msgf("Access profiles at: http://localhost%s/debug/pprof/", addr)
+
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Error().Err(err).Msg("pprof server failed")
+		}
+	}()
+
+	// Log memory stats periodically
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				var m runtime.MemStats
+				runtime.ReadMemStats(&m)
+				log.Info().
+					Uint64("alloc_mb", m.Alloc/1024/1024).
+					Uint64("total_alloc_mb", m.TotalAlloc/1024/1024).
+					Uint64("sys_mb", m.Sys/1024/1024).
+					Uint64("heap_mb", m.HeapAlloc/1024/1024).
+					Uint32("num_gc", m.NumGC).
+					Msg("Memory stats")
+			}
+		}
+	}()
 }
 
 func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) (*CacheService, error) {
@@ -86,6 +122,8 @@ func NewCacheService(ctx context.Context, cfg BlobCacheConfig, locality string) 
 	if err != nil {
 		return nil, err
 	}
+
+	StartProfiling(6060)
 
 	hostId := getHostId(cfg.Server)
 	Logger.Infof("Server<%s> started in %s mode", hostId, cfg.Server.Mode)
