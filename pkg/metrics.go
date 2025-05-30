@@ -25,6 +25,7 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 		Headers: []string{
 			fmt.Sprintf("Authorization: Basic %s", credentials),
 		},
+		ExtraLabels: "host=" + currentHost.HostId,
 	}
 
 	pushURL := config.URL
@@ -36,10 +37,10 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 		Logger.Errorf("Failed to initialize metrics: %v", err)
 	}
 
-	diskCacheUsageMB := metrics.NewHistogram(`blobcache_disk_cache_usage_mb{host="` + currentHost.HostId + `"}`)
-	diskCacheUsagePct := metrics.NewHistogram(`blobcache_disk_cache_usage_pct{host="` + currentHost.HostId + `"}`)
-	memCacheUsageMB := metrics.NewHistogram(`blobcache_mem_cache_usage_mb{host="` + currentHost.HostId + `"}`)
-	memCacheUsagePct := metrics.NewHistogram(`blobcache_mem_cache_usage_pct{host="` + currentHost.HostId + `"}`)
+	diskCacheUsageMB := metrics.NewHistogram(`blobcache_disk_cache_usage_mb`)
+	diskCacheUsagePct := metrics.NewHistogram(`blobcache_disk_cache_usage_pct`)
+	memCacheUsageMB := metrics.NewHistogram(`blobcache_mem_cache_usage_mb`)
+	memCacheUsagePct := metrics.NewHistogram(`blobcache_mem_cache_usage_pct`)
 
 	return BlobcacheMetrics{
 		DiskCacheUsageMB:  diskCacheUsageMB,
