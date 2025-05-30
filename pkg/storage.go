@@ -32,6 +32,7 @@ type ContentAddressableStorage struct {
 	diskCacheDir            string
 	diskCachedUsageExceeded bool
 	mu                      sync.Mutex
+	metrics                 BlobcacheMetrics
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
@@ -48,15 +49,16 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		locality:     locality,
 		diskCacheDir: config.Server.DiskCacheDir,
 		mu:           sync.Mutex{},
+		metrics:      initMetrics(ctx, config.Metrics, currentHost),
 	}
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
 
-	availableMemoryMb := getAvailableMemoryMb()
-	maxCacheSizeMb := (availableMemoryMb * cas.serverConfig.MaxCachePct) / 100
+	_, totalMemoryMb := getMemoryMb()
+	maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
 	maxCost := maxCacheSizeMb * 1e6
 
-	Logger.Infof("Total available memory: %dMB", availableMemoryMb)
+	Logger.Infof("Total available memory: %dMB", totalMemoryMb)
 	Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
 	Logger.Infof("Max cost: %d", maxCost)
 
@@ -75,20 +77,11 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		return nil, err
 	}
 
-	cas.cache = cache
-	cas.maxCacheSizeMb = maxCacheSizeMb
-
 	go cas.monitorDiskCacheUsage()
 
+	cas.cache = cache
+	cas.maxCacheSizeMb = maxCacheSizeMb
 	return cas, nil
-}
-
-func getAvailableMemoryMb() int64 {
-	v, err := mem.VirtualMemory()
-	if err != nil {
-		log.Fatalf("Unable to retrieve host memory info: %v", err)
-	}
-	return int64(v.Total / (1024 * 1024))
 }
 
 type cacheValue struct {
@@ -286,39 +279,42 @@ func (cas *ContentAddressableStorage) Cleanup() {
 	cas.cache.Close()
 }
 
+func (cas *ContentAddressableStorage) GetDiskCacheMetrics() (int64, int64, float64, error) {
+	var (
+		diskUsageMb      int64
+		totalDiskSpaceMb int64
+		usagePercentage  float64
+		err              error
+	)
+
+	// Get current disk usage
+	diskUsageMb, err = getDiskUsageMb(cas.diskCacheDir)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	// Get total disk capacity
+	totalDiskSpaceMb, err = getTotalDiskSpaceMb(cas.diskCacheDir)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	// Calculate usage percentage
+	if totalDiskSpaceMb > 0 {
+		usagePercentage = (float64(diskUsageMb) / float64(totalDiskSpaceMb)) * 100
+	} else {
+		usagePercentage = 0
+	}
+
+	return diskUsageMb, totalDiskSpaceMb, usagePercentage, nil
+}
+
 func min(a, b int64) int64 {
 	if a < b {
 		return a
 	}
 	return b
 }
-
-func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
-	ticker := time.NewTicker(diskCacheUsageCheckInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-cas.ctx.Done():
-			return
-		case <-ticker.C:
-			usage, err := getDiskUsageMb(cas.diskCacheDir)
-			if err == nil {
-				totalDiskSpace, err := getTotalDiskSpaceMb(cas.diskCacheDir)
-				if err == nil {
-					usagePct := float64(usage) / float64(totalDiskSpace)
-
-					Logger.Infof("Disk cache usage: %dMB / %dMB (%.2f%%)", usage, totalDiskSpace, usagePct*100)
-
-					cas.mu.Lock()
-					cas.diskCachedUsageExceeded = usagePct > cas.serverConfig.DiskCacheMaxUsagePct
-					cas.mu.Unlock()
-				}
-			}
-		}
-	}
-}
-
 func getDiskUsageMb(path string) (int64, error) {
 	var totalUsage int64 = 0
 	err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
@@ -343,4 +339,45 @@ func getTotalDiskSpaceMb(path string) (int64, error) {
 		return 0, err
 	}
 	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
+}
+
+func getMemoryMb() (int64, int64) {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		log.Fatalf("Unable to retrieve host memory info: %v", err)
+	}
+	return int64(v.Available / (1024 * 1024)), int64(v.Total / (1024 * 1024))
+}
+
+func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
+	ticker := time.NewTicker(diskCacheUsageCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-cas.ctx.Done():
+			return
+		case <-ticker.C:
+			currentUsage, totalDiskSpace, usagePercentage, err := cas.GetDiskCacheMetrics()
+			if err != nil {
+				Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				continue
+			}
+
+			availableMemoryMb, totalMemoryMb := getMemoryMb()
+			usedMemoryMb := totalMemoryMb - availableMemoryMb
+			cas.metrics.MemCacheUsageMB.Update(float64(usedMemoryMb))
+			cas.metrics.MemCacheUsagePct.Update(float64(usedMemoryMb) / float64(totalMemoryMb) * 100)
+			cas.metrics.DiskCacheUsageMB.Update(float64(currentUsage))
+			cas.metrics.DiskCacheUsagePct.Update(float64(usagePercentage))
+
+			Logger.Infof("Memory Cache Usage: %dMB / %dMB (%.2f%%)", availableMemoryMb, totalMemoryMb, float64(availableMemoryMb)/float64(totalMemoryMb)*100)
+			Logger.Infof("Disk Cache Usage: %dMB / %dMB (%.2f%%)", currentUsage, totalDiskSpace, usagePercentage)
+
+			// Update internal state for disk usage exceeded
+			cas.mu.Lock()
+			cas.diskCachedUsageExceeded = usagePercentage > cas.serverConfig.DiskCacheMaxUsagePct
+			cas.mu.Unlock()
+		}
+	}
 }

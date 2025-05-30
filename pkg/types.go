@@ -19,9 +19,17 @@ const (
 )
 
 type BlobCacheConfig struct {
-	Server BlobCacheServerConfig `key:"server" json:"server"`
-	Client BlobCacheClientConfig `key:"client" json:"client"`
-	Global BlobCacheGlobalConfig `key:"global" json:"global"`
+	Server  BlobCacheServerConfig  `key:"server" json:"server"`
+	Client  BlobCacheClientConfig  `key:"client" json:"client"`
+	Global  BlobCacheGlobalConfig  `key:"global" json:"global"`
+	Metrics BlobCacheMetricsConfig `key:"metrics" json:"metrics"`
+}
+
+type BlobCacheMetricsConfig struct {
+	PushIntervalS int    `key:"pushIntervalS" json:"push_interval_s"`
+	URL           string `key:"url" json:"url"`
+	Username      string `key:"username" json:"username"`
+	Password      string `key:"password" json:"password"`
 }
 
 type BlobCacheGlobalConfig struct {
