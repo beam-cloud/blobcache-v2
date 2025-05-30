@@ -54,11 +54,11 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
 
-	availableMemoryMb := getAvailableMemoryMb()
-	maxCacheSizeMb := (availableMemoryMb * cas.serverConfig.MaxCachePct) / 100
+	_, totalMemoryMb := getMemoryMb()
+	maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
 	maxCost := maxCacheSizeMb * 1e6
 
-	Logger.Infof("Total available memory: %dMB", availableMemoryMb)
+	Logger.Infof("Total available memory: %dMB", totalMemoryMb)
 	Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
 	Logger.Infof("Max cost: %d", maxCost)
 
@@ -341,12 +341,12 @@ func getTotalDiskSpaceMb(path string) (int64, error) {
 	return int64(stat.Blocks) * int64(stat.Bsize) / (1024 * 1024), nil
 }
 
-func getAvailableMemoryMb() int64 {
+func getMemoryMb() (int64, int64) {
 	v, err := mem.VirtualMemory()
 	if err != nil {
 		log.Fatalf("Unable to retrieve host memory info: %v", err)
 	}
-	return int64(v.Total / (1024 * 1024))
+	return int64(v.Available / (1024 * 1024)), int64(v.Total / (1024 * 1024))
 }
 
 func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
@@ -364,10 +364,15 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 				continue
 			}
 
-			// Log the metrics
-			Logger.Infof("Disk Cache Usage: %dMB / %dMB (%.2f%%)", currentUsage, totalDiskSpace, usagePercentage)
+			availableMemoryMb, totalMemoryMb := getMemoryMb()
+			usedMemoryMb := totalMemoryMb - availableMemoryMb
+			cas.metrics.MemCacheUsageMB.Update(float64(usedMemoryMb))
+			cas.metrics.MemCacheUsagePct.Update(float64(usedMemoryMb) / float64(totalMemoryMb) * 100)
 			cas.metrics.DiskCacheUsageMB.Update(float64(currentUsage))
 			cas.metrics.DiskCacheUsagePct.Update(float64(usagePercentage))
+
+			Logger.Infof("Memory Cache Usage: %dMB / %dMB (%.2f%%)", availableMemoryMb, totalMemoryMb, float64(availableMemoryMb)/float64(totalMemoryMb)*100)
+			Logger.Infof("Disk Cache Usage: %dMB / %dMB (%.2f%%)", currentUsage, totalDiskSpace, usagePercentage)
 
 			// Update internal state for disk usage exceeded
 			cas.mu.Lock()

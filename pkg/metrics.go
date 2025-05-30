@@ -12,6 +12,8 @@ import (
 type BlobcacheMetrics struct {
 	DiskCacheUsageMB  *metrics.Histogram
 	DiskCacheUsagePct *metrics.Histogram
+	MemCacheUsageMB   *metrics.Histogram
+	MemCacheUsagePct  *metrics.Histogram
 }
 
 func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost) BlobcacheMetrics {
@@ -36,9 +38,13 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 
 	diskCacheUsageMB := metrics.NewHistogram(`blobcache_disk_cache_usage_mb{host="` + currentHost.HostId + `"}`)
 	diskCacheUsagePct := metrics.NewHistogram(`blobcache_disk_cache_usage_pct{host="` + currentHost.HostId + `"}`)
+	memCacheUsageMB := metrics.NewHistogram(`blobcache_mem_cache_usage_mb{host="` + currentHost.HostId + `"}`)
+	memCacheUsagePct := metrics.NewHistogram(`blobcache_mem_cache_usage_pct{host="` + currentHost.HostId + `"}`)
 
 	return BlobcacheMetrics{
 		DiskCacheUsageMB:  diskCacheUsageMB,
 		DiskCacheUsagePct: diskCacheUsagePct,
+		MemCacheUsageMB:   memCacheUsageMB,
+		MemCacheUsagePct:  memCacheUsagePct,
 	}
 }
