@@ -3,6 +3,7 @@ module github.com/beam-cloud/blobcache-v2
 go 1.22.10
 
 require (
+	github.com/VictoriaMetrics/metrics v1.37.0
 	github.com/aws/aws-sdk-go-v2 v1.30.1
 	github.com/aws/aws-sdk-go-v2/config v1.27.24
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.24
@@ -50,6 +51,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
+	github.com/valyala/fastrand v1.1.0 // indirect
+	github.com/valyala/histogram v1.2.0 // indirect
 )
 
 require (
