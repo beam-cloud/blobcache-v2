@@ -16,7 +16,7 @@ type BlobcacheMetrics struct {
 	MemCacheUsagePct  *metrics.Histogram
 }
 
-func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost) BlobcacheMetrics {
+func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost, locality string) BlobcacheMetrics {
 	username := config.Username
 	password := config.Password
 	credentials := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
@@ -25,7 +25,7 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 		Headers: []string{
 			fmt.Sprintf("Authorization: Basic %s", credentials),
 		},
-		ExtraLabels: "host=\"" + currentHost.HostId + "\"",
+		ExtraLabels: "host=\"" + currentHost.HostId + "\",locality=\"" + locality + "\"",
 	}
 
 	pushURL := config.URL
