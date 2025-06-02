@@ -49,7 +49,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		locality:     locality,
 		diskCacheDir: config.Server.DiskCacheDir,
 		mu:           sync.Mutex{},
-		metrics:      initMetrics(ctx, config.Metrics, currentHost),
+		metrics:      initMetrics(ctx, config.Metrics, currentHost, locality),
 	}
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
