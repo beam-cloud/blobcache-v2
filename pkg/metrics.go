@@ -25,7 +25,7 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 		Headers: []string{
 			fmt.Sprintf("Authorization: Basic %s", credentials),
 		},
-		ExtraLabels: "host=" + currentHost.HostId,
+		ExtraLabels: "host=\"" + currentHost.HostId + "\"",
 	}
 
 	pushURL := config.URL
