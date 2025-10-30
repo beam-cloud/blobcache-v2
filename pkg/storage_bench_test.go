@@ -5,18 +5,24 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 )
 
 // Benchmark storage layer performance with various workload patterns
 
+// Global setup to prevent metrics re-registration
+var benchmarkSetupOnce sync.Once
+
 func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 	ctx := context.Background()
 	tmpDir := b.TempDir()
 	
-	// Initialize logger to prevent nil pointer panics
-	InitLogger(false, false)
+	// Initialize logger once to prevent nil pointer panics
+	benchmarkSetupOnce.Do(func() {
+		InitLogger(false, false)
+	})
 	
 	config := BlobCacheConfig{
 		Server: BlobCacheServerConfig{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/VictoriaMetrics/metrics"
@@ -40,7 +41,19 @@ type BlobcacheMetrics struct {
 	ReadThroughputMBps *metrics.Histogram
 }
 
+var (
+	globalMetrics     BlobcacheMetrics
+	metricsInitOnce   sync.Once
+)
+
 func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost, locality string) BlobcacheMetrics {
+	metricsInitOnce.Do(func() {
+		globalMetrics = createMetrics(ctx, config, currentHost, locality)
+	})
+	return globalMetrics
+}
+
+func createMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost, locality string) BlobcacheMetrics {
 	// Only initialize metrics push if URL is configured
 	if config.URL != "" {
 		username := config.Username
