@@ -154,6 +154,7 @@ jobs:
       env:
         TEST_ITERATIONS: ${{ github.event.inputs.test_iterations || '3' }}
         REGRESSION_THRESHOLD: ${{ github.event.inputs.regression_threshold || '10' }}
+        CI_MODE: 'true'  # Use smaller test sizes for CI
       run: |
         chmod +x scripts/run_grpc_performance_tests.sh
         ./scripts/run_grpc_performance_tests.sh

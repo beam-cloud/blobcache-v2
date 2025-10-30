@@ -30,6 +30,7 @@ type TestConfig struct {
 	InitialWindowSize   int
 	InitialConnWindow   int
 	MaxConcurrentStreams int
+	MaxMessageSize      int64 // Max gRPC message size
 }
 
 type TestResult struct {
@@ -57,8 +58,16 @@ func main() {
 	flag.BoolVar(&config.TestRead, "read", true, "Test read operations")
 	flag.BoolVar(&config.TestStream, "stream", true, "Test streaming operations")
 	flag.IntVar(&config.Concurrency, "concurrency", 1, "Concurrent operations")
+	flag.Int64Var(&config.MaxMessageSize, "maxmsgsize", 256*1024*1024, "Max gRPC message size")
 	outputFile := flag.String("output", "", "Output file for results (JSON)")
+	ciMode := flag.Bool("ci", false, "CI mode (smaller test sizes)")
 	flag.Parse()
+	
+	// Adjust test sizes for CI
+	if *ciMode {
+		config.ChunkSize = 1 * 1024 * 1024 // 1MB chunks for CI
+		config.MaxMessageSize = 4 * 1024 * 1024 // 4MB max for CI
+	}
 	
 	fmt.Println("========================================")
 	fmt.Println(" gRPC Throughput Benchmark")
@@ -69,12 +78,21 @@ func main() {
 	fmt.Printf("Iterations: %d\n", config.Iterations)
 	fmt.Printf("Concurrency: %d\n\n", config.Concurrency)
 	
-	// Define test file sizes
-	config.FileSizes = []int64{
-		1 * 1024 * 1024,      // 1 MB
-		16 * 1024 * 1024,     // 16 MB
-		64 * 1024 * 1024,     // 64 MB
-		256 * 1024 * 1024,    // 256 MB
+	// Define test file sizes based on mode
+	if *ciMode {
+		// Smaller sizes for CI to avoid timeouts
+		config.FileSizes = []int64{
+			1 * 1024 * 1024,      // 1 MB
+			4 * 1024 * 1024,      // 4 MB
+		}
+	} else {
+		// Full benchmark sizes
+		config.FileSizes = []int64{
+			1 * 1024 * 1024,      // 1 MB
+			16 * 1024 * 1024,     // 16 MB
+			64 * 1024 * 1024,     // 64 MB
+			256 * 1024 * 1024,    // 256 MB
+		}
 	}
 	
 	// Run tests with different configurations
@@ -149,12 +167,18 @@ func createClient(config *TestConfig) (proto.BlobCacheClient, *grpc.ClientConn, 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	
+	maxMsgSize := int(config.MaxMessageSize)
+	
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithInitialWindowSize(int32(config.InitialWindowSize)),
 		grpc.WithInitialConnWindowSize(int32(config.InitialConnWindow)),
 		grpc.WithWriteBufferSize(256 * 1024),
 		grpc.WithReadBufferSize(256 * 1024),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxMsgSize),
+			grpc.MaxCallSendMsgSize(maxMsgSize),
+		),
 	}
 	
 	conn, err := grpc.DialContext(ctx, config.ServerAddr, opts...)
@@ -255,7 +279,7 @@ func testRead(config *TestConfig, fileSize int64, configName string) TestResult 
 	}
 	defer conn.Close()
 	
-	// First, store test data
+	// First, store test data (chunked)
 	data := make([]byte, fileSize)
 	rand.Read(data)
 	
@@ -267,7 +291,21 @@ func testRead(config *TestConfig, fileSize int64, configName string) TestResult 
 		return result
 	}
 	
-	stream.Send(&proto.StoreContentRequest{Content: data})
+	// Send data in chunks to avoid message size limits
+	sent := int64(0)
+	for sent < fileSize {
+		chunkSize := config.ChunkSize
+		if sent+chunkSize > fileSize {
+			chunkSize = fileSize - sent
+		}
+		if err := stream.Send(&proto.StoreContentRequest{Content: data[sent : sent+chunkSize]}); err != nil {
+			cancel()
+			result.Error = fmt.Sprintf("setup failed: %v", err)
+			return result
+		}
+		sent += chunkSize
+	}
+	
 	resp, err := stream.CloseAndRecv()
 	cancel()
 	if err != nil {

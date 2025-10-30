@@ -83,7 +83,7 @@ global:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
   grpcDialTimeoutS: 10
-  grpcMessageSizeBytes: 67108864
+  grpcMessageSizeBytes: 268435456
   debugMode: false
   prettyLogs: false
 
@@ -170,9 +170,19 @@ echo -e "${YELLOW}[4/6]${NC} Running performance tests..."
 echo "  This may take several minutes..."
 echo ""
 
+# Check if running in CI mode (smaller tests)
+CI_MODE=${CI_MODE:-false}
+CI_FLAG=""
+if [ "$CI_MODE" = "true" ]; then
+    echo "  Running in CI mode (reduced test sizes)"
+    CI_FLAG="-ci"
+fi
+
 if ! ./bin/grpc-throughput \
     -server "localhost:${SERVER_PORT}" \
     -iterations "$TEST_ITERATIONS" \
+    -maxmsgsize 268435456 \
+    $CI_FLAG \
     -output "$CURRENT_FILE"; then
     echo -e "${RED}✗ Performance tests failed${NC}"
     exit 1
