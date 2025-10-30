@@ -186,11 +186,26 @@ func (cs *CacheService) StartServer(port uint) error {
 	}
 
 	maxMessageSize := cs.globalConfig.GRPCMessageSizeBytes
+	
+	// Optimized gRPC settings for high throughput as per optimization plan
+	// HTTP/2 flow-control windows allow single streams to fly at line rate
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		grpc.WriteBufferSize(writeBufferSizeBytes),
-		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
+		
+		// Increase flow-control windows for high-throughput streams
+		grpc.InitialWindowSize(4*1024*1024),      // 4MB per-stream window (up from 64KB default)
+		grpc.InitialConnWindowSize(32*1024*1024), // 32MB per-connection window
+		
+		// Optimize buffer sizes for large messages
+		grpc.WriteBufferSize(256*1024), // 256KB write buffer (up from 32KB)
+		grpc.ReadBufferSize(256*1024),  // 256KB read buffer (up from 32KB)
+		
+		// Allow many concurrent streams per connection
+		grpc.MaxConcurrentStreams(1024),
+		
+		// Leverage all CPU cores for stream processing
+		grpc.NumStreamWorkers(uint32(runtime.NumCPU() * 2)),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 

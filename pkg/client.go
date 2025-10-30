@@ -151,6 +151,7 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 		transportCredentials = grpc.WithTransportCredentials(h2creds)
 	}
 
+	// Optimized client dial options matching server configuration
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
 		grpc.WithContextDialer(DialWithTimeout),
@@ -158,6 +159,11 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 			grpc.MaxCallSendMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 		),
+		// Match server flow-control windows
+		grpc.WithInitialWindowSize(4*1024*1024),      // 4MB per-stream
+		grpc.WithInitialConnWindowSize(32*1024*1024), // 32MB per-connection
+		grpc.WithWriteBufferSize(256*1024),           // 256KB write buffer
+		grpc.WithReadBufferSize(256*1024),            // 256KB read buffer
 	}
 
 	if c.clientConfig.Token != "" {

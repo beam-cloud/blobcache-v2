@@ -40,6 +40,14 @@ func (n *FSNode) OnAdd(ctx context.Context) {
 }
 
 func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	start := time.Now()
+	defer func() {
+		latencyMs := float64(time.Since(start).Microseconds()) / 1000.0
+		// Track FUSE operation latency if metrics available
+		// Note: metrics not directly accessible here, would need to pass through filesystem
+		n.log("Getattr completed in %.2fms", latencyMs)
+	}()
+	
 	n.log("Getattr called")
 
 	node := n.bfsNode
@@ -112,6 +120,12 @@ func (n *FSNode) inodeFromFsId(ctx context.Context, fsId string) (*fs.Inode, *fu
 }
 
 func (n *FSNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	start := time.Now()
+	defer func() {
+		latencyMs := float64(time.Since(start).Microseconds()) / 1000.0
+		n.log("Lookup completed in %.2fms", latencyMs)
+	}()
+	
 	fullPath := path.Join(n.bfsNode.Path, name) // Construct the full of this file path from root
 	n.log("Lookup called with path: %s", fullPath)
 
@@ -175,7 +189,13 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	n.log("Read called with offset: %v", off)
+	start := time.Now()
+	defer func() {
+		latencyMs := float64(time.Since(start).Microseconds()) / 1000.0
+		n.log("Read completed in %.2fms", latencyMs)
+	}()
+	
+	n.log("Read called with offset: %v, length: %v", off, len(dest))
 
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {

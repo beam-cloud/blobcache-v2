@@ -33,6 +33,8 @@ type ContentAddressableStorage struct {
 	diskCachedUsageExceeded bool
 	mu                      sync.Mutex
 	metrics                 BlobcacheMetrics
+	bufferPool              *BufferPool
+	prefetcher              *Prefetcher
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
@@ -81,6 +83,13 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	cas.cache = cache
 	cas.maxCacheSizeMb = maxCacheSizeMb
+	
+	// Initialize buffer pool for reduced allocations
+	cas.bufferPool = NewBufferPool()
+	
+	// Initialize prefetcher for sequential read optimization
+	cas.prefetcher = NewPrefetcher(ctx, cas, cas.bufferPool)
+	
 	return cas, nil
 }
 
@@ -174,6 +183,21 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 	remainingLength := length
 	o := offset
 	dstOffset := int64(0)
+	
+	// Track metrics
+	cas.metrics.TotalReads.Inc()
+	start := time.Now()
+	defer func() {
+		if dstOffset > 0 {
+			throughputMBps := (float64(dstOffset) / (1024 * 1024)) / (float64(time.Since(start).Microseconds()) / 1e6)
+			cas.metrics.ReadThroughputMBps.Update(throughputMBps)
+		}
+		// Update hit ratios
+		cas.updateHitRatios()
+	}()
+	
+	// Notify prefetcher about this read
+	cas.prefetcher.OnRead(hash, offset, length)
 
 	cas.cache.ResetTTL(hash, time.Duration(cas.serverConfig.ObjectTtlS)*time.Second)
 
@@ -184,16 +208,22 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		var value interface{}
 		var found bool = false
 
-		// Check in-memory cache for chunk
+		// Check in-memory cache for chunk (L0)
 		value, found = cas.cache.Get(chunkKey)
+		fromMemory := found
+		if found {
+			cas.metrics.L0Hits.Inc()
+		}
 
-		// Not found in memory, check disk cache before giving up
+		// Not found in memory, check disk cache (L1) before giving up
 		if !found {
 			var err error
 			value, found, err = cas.getFromDiskCache(hash, chunkKey)
 			if err != nil || !found {
+				cas.metrics.L2Misses.Inc()
 				return 0, ErrContentNotFound
 			}
+			cas.metrics.L1Hits.Inc()
 		}
 
 		v, ok := value.(cacheValue)
@@ -216,6 +246,13 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		}
 
 		copy(dst[dstOffset:dstOffset+readLength], chunkBytes[start:end])
+		
+		// Track bytes served from appropriate tier
+		if fromMemory {
+			cas.metrics.L0BytesServed.Add(int(readLength))
+		} else {
+			cas.metrics.L1BytesServed.Add(int(readLength))
+		}
 
 		remainingLength -= readLength
 		o += readLength
@@ -235,9 +272,27 @@ func (cas *ContentAddressableStorage) getFromDiskCache(hash, chunkKey string) (v
 	}
 
 	chunkPath := filepath.Join(cas.diskCacheDir, hash, chunkKey)
+	
+	// Use fadvise to hint sequential/random access patterns
+	file, err := os.Open(chunkPath)
+	if err != nil {
+		return cacheValue{}, false, ErrContentNotFound
+	}
+	defer file.Close()
+	
+	// Hint sequential access for better readahead
+	if err := fadviseSequential(file.Fd()); err == nil {
+		Logger.Debugf("Set FADV_SEQUENTIAL for %s", chunkPath)
+	}
+	
 	chunkBytes, err := os.ReadFile(chunkPath)
 	if err != nil {
 		return cacheValue{}, false, ErrContentNotFound
+	}
+	
+	// Hint willneed for prefetch
+	if err := fadviseWillneed(file.Fd(), 0, int64(len(chunkBytes))); err == nil {
+		Logger.Debugf("Set FADV_WILLNEED for %s", chunkPath)
 	}
 
 	value = cacheValue{Hash: hash, Content: chunkBytes}
@@ -379,5 +434,23 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 			cas.diskCachedUsageExceeded = usagePercentage > cas.serverConfig.DiskCacheMaxUsagePct
 			cas.mu.Unlock()
 		}
+	}
+}
+
+// updateHitRatios calculates and updates cache hit ratio metrics
+func (cas *ContentAddressableStorage) updateHitRatios() {
+	l0Hits := cas.metrics.L0Hits.Get()
+	l1Hits := cas.metrics.L1Hits.Get()
+	l2Misses := cas.metrics.L2Misses.Get()
+	total := l0Hits + l1Hits + l2Misses
+	
+	if total > 0 {
+		l0Ratio := float64(l0Hits) / float64(total) * 100
+		l1Ratio := float64(l1Hits) / float64(total) * 100
+		l2Ratio := float64(l2Misses) / float64(total) * 100
+		
+		cas.metrics.L0HitRatio.Update(l0Ratio)
+		cas.metrics.L1HitRatio.Update(l1Ratio)
+		cas.metrics.L2MissRatio.Update(l2Ratio)
 	}
 }

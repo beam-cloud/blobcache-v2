@@ -14,6 +14,30 @@ type BlobcacheMetrics struct {
 	DiskCacheUsagePct *metrics.Histogram
 	MemCacheUsageMB   *metrics.Histogram
 	MemCacheUsagePct  *metrics.Histogram
+	
+	// Cache tier hit ratios
+	L0HitRatio        *metrics.Histogram // In-memory cache hits
+	L1HitRatio        *metrics.Histogram // Disk cache hits
+	L2MissRatio       *metrics.Histogram // Remote fetch required
+	
+	// Operation counters
+	L0Hits            *metrics.Counter
+	L1Hits            *metrics.Counter
+	L2Misses          *metrics.Counter
+	TotalReads        *metrics.Counter
+	
+	// Bytes served per tier
+	L0BytesServed     *metrics.Counter
+	L1BytesServed     *metrics.Counter
+	L2BytesFetched    *metrics.Counter
+	
+	// FUSE operation latencies
+	FUSEReadLatency   *metrics.Histogram
+	FUSELookupLatency *metrics.Histogram
+	FUSEGetattrLatency *metrics.Histogram
+	
+	// Read throughput
+	ReadThroughputMBps *metrics.Histogram
 }
 
 func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost *BlobCacheHost, locality string) BlobcacheMetrics {
@@ -41,11 +65,49 @@ func initMetrics(ctx context.Context, config BlobCacheMetricsConfig, currentHost
 	diskCacheUsagePct := metrics.NewHistogram(`blobcache_disk_cache_usage_pct`)
 	memCacheUsageMB := metrics.NewHistogram(`blobcache_mem_cache_usage_mb`)
 	memCacheUsagePct := metrics.NewHistogram(`blobcache_mem_cache_usage_pct`)
+	
+	// Cache tier metrics
+	l0HitRatio := metrics.NewHistogram(`blobcache_l0_hit_ratio`)
+	l1HitRatio := metrics.NewHistogram(`blobcache_l1_hit_ratio`)
+	l2MissRatio := metrics.NewHistogram(`blobcache_l2_miss_ratio`)
+	
+	// Operation counters
+	l0Hits := metrics.NewCounter(`blobcache_l0_hits_total`)
+	l1Hits := metrics.NewCounter(`blobcache_l1_hits_total`)
+	l2Misses := metrics.NewCounter(`blobcache_l2_misses_total`)
+	totalReads := metrics.NewCounter(`blobcache_reads_total`)
+	
+	// Bytes served
+	l0BytesServed := metrics.NewCounter(`blobcache_l0_bytes_served_total`)
+	l1BytesServed := metrics.NewCounter(`blobcache_l1_bytes_served_total`)
+	l2BytesFetched := metrics.NewCounter(`blobcache_l2_bytes_fetched_total`)
+	
+	// FUSE latencies
+	fuseReadLatency := metrics.NewHistogram(`blobcache_fuse_read_latency_ms`)
+	fuseLookupLatency := metrics.NewHistogram(`blobcache_fuse_lookup_latency_ms`)
+	fuseGetattrLatency := metrics.NewHistogram(`blobcache_fuse_getattr_latency_ms`)
+	
+	// Throughput
+	readThroughputMBps := metrics.NewHistogram(`blobcache_read_throughput_mbps`)
 
 	return BlobcacheMetrics{
-		DiskCacheUsageMB:  diskCacheUsageMB,
-		DiskCacheUsagePct: diskCacheUsagePct,
-		MemCacheUsageMB:   memCacheUsageMB,
-		MemCacheUsagePct:  memCacheUsagePct,
+		DiskCacheUsageMB:   diskCacheUsageMB,
+		DiskCacheUsagePct:  diskCacheUsagePct,
+		MemCacheUsageMB:    memCacheUsageMB,
+		MemCacheUsagePct:   memCacheUsagePct,
+		L0HitRatio:         l0HitRatio,
+		L1HitRatio:         l1HitRatio,
+		L2MissRatio:        l2MissRatio,
+		L0Hits:             l0Hits,
+		L1Hits:             l1Hits,
+		L2Misses:           l2Misses,
+		TotalReads:         totalReads,
+		L0BytesServed:      l0BytesServed,
+		L1BytesServed:      l1BytesServed,
+		L2BytesFetched:     l2BytesFetched,
+		FUSEReadLatency:    fuseReadLatency,
+		FUSELookupLatency:  fuseLookupLatency,
+		FUSEGetattrLatency: fuseGetattrLatency,
+		ReadThroughputMBps: readThroughputMBps,
 	}
 }
