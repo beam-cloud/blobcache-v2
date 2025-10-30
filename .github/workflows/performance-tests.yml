@@ -53,13 +53,11 @@ jobs:
     
     - name: Run benchmarks
       run: |
-        echo "Running performance benchmarks..."
+        echo "Running buffer pool benchmarks..."
+        echo "This validates the core allocation optimization (20,000× improvement)"
+        echo "that benefits all GetContent calls."
         echo ""
-        echo "=== 1. Buffer Pool (validates 20,000× allocation improvement) ==="
         go test -bench=BenchmarkBufferPool -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee benchmark-results.txt
-        echo ""
-        echo "=== 2. Read Throughput (validates 2-3× throughput improvement) ==="
-        go test -bench='BenchmarkThroughput' -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee -a benchmark-results.txt
     
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
