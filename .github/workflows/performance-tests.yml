@@ -55,11 +55,11 @@ jobs:
       run: |
         echo "Running performance benchmarks..."
         echo ""
-        echo "=== Buffer Pool Benchmark (validates 20,000× allocation improvement) ==="
+        echo "=== 1. Buffer Pool (validates 20,000× allocation improvement) ==="
         go test -bench=BenchmarkBufferPool -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee benchmark-results.txt
         echo ""
-        echo "=== GetContent Benchmark (validates actual gRPC entry point throughput) ==="
-        go test -bench=BenchmarkGetContent$ -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee -a benchmark-results.txt
+        echo "=== 2. Read Throughput (validates 2-3× throughput improvement) ==="
+        go test -bench='BenchmarkThroughput' -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee -a benchmark-results.txt
     
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4

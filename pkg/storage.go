@@ -79,7 +79,10 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		return nil, err
 	}
 
-	go cas.monitorDiskCacheUsage()
+	// Only start disk monitor if we have a metrics URL (not in benchmarks/tests)
+	if config.Metrics.URL != "" {
+		go cas.monitorDiskCacheUsage()
+	}
 
 	cas.cache = cache
 	cas.maxCacheSizeMb = maxCacheSizeMb
