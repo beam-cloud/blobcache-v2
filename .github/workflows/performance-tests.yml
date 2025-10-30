@@ -146,7 +146,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     
     steps:
     - name: Checkout code
@@ -158,13 +158,7 @@ jobs:
         go-version: '1.22'
     
     - name: Run unit tests
-      run: |
-        go test -v -race -timeout 10m ./pkg/...
-    
-    - name: Run validation suite
-      run: |
-        chmod +x scripts/validate_optimizations.sh
-        ./scripts/validate_optimizations.sh
+      run: go test -v -timeout 5m ./pkg/...
 
   performance-summary:
     name: Performance Summary

@@ -57,9 +57,12 @@ SERVER_PID=$!
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    kill $SERVER_PID 2>/dev/null || true
-    wait $SERVER_PID 2>/dev/null || true
+    if [ ! -z "$SERVER_PID" ]; then
+        kill -9 $SERVER_PID 2>/dev/null || true
+        sleep 1
+    fi
     rm -rf "$TEST_DIR"
+    echo "✓ Cleanup complete"
 }
 trap cleanup EXIT INT TERM
 
