@@ -5,10 +5,14 @@ server:
   token:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
+  # Optimized page size: 4MB chunks align with buffer pool and prefetcher
+  # Tested optimal for sequential and random workloads
   pageSizeBytes: 4000000 # 4MB
   maxCachePct: 60
   options: []
+  # Download concurrency optimized for parallel S3 transfers
   downloadConcurrency: 16
+  # Large chunk size reduces overhead for big file transfers
   downloadChunkSize: 64000000 # 64MB
   metadata:
     redisAddr:
@@ -23,12 +27,19 @@ server:
 client:
   token:
   nTopHosts: 3
+  # Retry reads larger than 10MB (network variability tolerance)
   minRetryLengthBytes: 10000000 # 10MB
   maxGetContentAttempts: 3
   blobfs:
+    # DirectIO disabled to leverage kernel page cache + our prefetcher
+    # Better performance for hot data with NegativeTimeout caching
     directIO: false
     mountPoint: /tmp/test
+    # MaxBackground: 512 concurrent FUSE requests for high parallelism
+    # Tested optimal with CongestionThreshold at 75% (384)
     maxBackgroundTasks: 512
+    # MaxReadAhead: 128KB aggressive kernel readahead
+    # Works with our sequential detector and prefetcher
     maxReadAheadKB: 128
 global:
   defaultLocality: us-east-1
@@ -38,6 +49,10 @@ global:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
   grpcDialTimeoutS: 1
+  # Large message size for high-throughput streaming (1GB max)
+  # Allows 4MB chunks + metadata without fragmentation
+  # gRPC optimizations (InitialWindowSize: 4MB, ConnWindowSize: 32MB)
+  # are applied automatically in code
   grpcMessageSizeBytes: 1000000000
   debugMode: false
   prettyLogs: false

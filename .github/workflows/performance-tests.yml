@@ -1,0 +1,262 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_iterations:
+        description: 'Number of test iterations'
+        required: false
+        default: '3'
+      regression_threshold:
+        description: 'Regression threshold (%)'
+        required: false
+        default: '10'
+
+jobs:
+  unit-benchmarks:
+    name: Unit Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comparison
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Run benchmarks
+      run: |
+        echo "Running comprehensive benchmarks..."
+        go test -bench=. -benchmem -benchtime=5s ./pkg/ | tee benchmark-results.txt
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt
+        retention-days: 30
+    
+    - name: Check for performance regressions
+      run: |
+        # Extract key metrics
+        BUFFER_POOL_TIME=$(grep "BenchmarkBufferPool.*WithPool" benchmark-results.txt | awk '{print $3}' | head -1)
+        echo "Buffer Pool Time: $BUFFER_POOL_TIME"
+        
+        # Fail if buffer pool is too slow (should be < 100ns)
+        if [ ! -z "$BUFFER_POOL_TIME" ]; then
+          TIME_NS=$(echo $BUFFER_POOL_TIME | sed 's/ns\/op//')
+          if (( $(echo "$TIME_NS > 100" | bc -l) )); then
+            echo "❌ Buffer pool performance regression detected: ${TIME_NS}ns > 100ns"
+            exit 1
+          fi
+          echo "✅ Buffer pool performance OK: ${TIME_NS}ns"
+        fi
+    
+    - name: Comment benchmark results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const results = fs.readFileSync('benchmark-results.txt', 'utf8');
+          
+          const body = `## Benchmark Results\n\n\`\`\`\n${results}\n\`\`\``;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+
+  grpc-throughput-tests:
+    name: gRPC Throughput Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y netcat-openbsd bc
+    
+    - name: Build binaries
+      run: |
+        go build -o bin/blobcache cmd/main.go
+        go build -o bin/grpc-throughput e2e/grpc_throughput/main.go
+    
+    - name: Download baseline results
+      continue-on-error: true
+      uses: actions/download-artifact@v4
+      with:
+        name: performance-baseline
+        path: performance-results/
+    
+    - name: Run gRPC performance tests
+      env:
+        TEST_ITERATIONS: ${{ github.event.inputs.test_iterations || '3' }}
+        REGRESSION_THRESHOLD: ${{ github.event.inputs.regression_threshold || '10' }}
+      run: |
+        chmod +x scripts/run_grpc_performance_tests.sh
+        ./scripts/run_grpc_performance_tests.sh
+    
+    - name: Upload performance results
+      uses: actions/upload-artifact@v4
+      with:
+        name: grpc-performance-results
+        path: performance-results/
+        retention-days: 90
+    
+    - name: Save as baseline (main branch only)
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-baseline
+        path: performance-results/current.json
+        retention-days: 365
+    
+    - name: Upload performance report
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-report
+        path: performance-results/report.md
+        retention-days: 90
+    
+    - name: Comment performance report on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const report = fs.readFileSync('performance-results/report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+          } catch (error) {
+            console.log('Could not read report file:', error);
+          }
+    
+    - name: Check for regressions
+      run: |
+        if [ -f performance-results/report.md ]; then
+          if grep -q "Performance Regression Detected" performance-results/report.md; then
+            echo "❌ Performance regression detected!"
+            exit 1
+          fi
+          echo "✅ No performance regressions detected"
+        fi
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Run unit tests
+      run: |
+        go test -v -race -timeout 10m ./pkg/...
+    
+    - name: Run validation suite
+      run: |
+        chmod +x scripts/validate_optimizations.sh
+        ./scripts/validate_optimizations.sh
+
+  performance-summary:
+    name: Performance Summary
+    needs: [unit-benchmarks, grpc-throughput-tests, integration-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Generate summary
+      run: |
+        echo "# Performance Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+        echo "- Unit Benchmarks: ${{ needs.unit-benchmarks.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- gRPC Throughput: ${{ needs.grpc-throughput-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f performance-report/report.md ]; then
+          echo "## Performance Report" >> $GITHUB_STEP_SUMMARY
+          cat performance-report/report.md >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f benchmark-results/benchmark-results.txt ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          head -50 benchmark-results/benchmark-results.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: Check overall status
+      run: |
+        if [ "${{ needs.unit-benchmarks.result }}" != "success" ] || \
+           [ "${{ needs.grpc-throughput-tests.result }}" != "success" ] || \
+           [ "${{ needs.integration-tests.result }}" != "success" ]; then
+          echo "❌ Some performance tests failed"
+          exit 1
+        fi
+        echo "✅ All performance tests passed"
