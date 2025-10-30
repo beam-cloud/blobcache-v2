@@ -19,7 +19,7 @@ server:
     redisPasswd:
     redisTLSEnabled: false
   regions:
-    us-east-1:
+    default:
       token:
       rttThresholdMilliseconds: 40
       hostStorageCapacityThresholdPct: 0.5
@@ -42,7 +42,7 @@ client:
     # Works with our sequential detector and prefetcher
     maxReadAheadKB: 128
 global:
-  defaultLocality: us-east-1
+  defaultLocality: default
   coordinatorHost:
   serverPort: 2049
   discoveryIntervalS: 5

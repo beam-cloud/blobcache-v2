@@ -19,3 +19,17 @@ spec:
         securityContext:
           privileged: true
       dnsPolicy: ClusterFirstWithHostNet
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: blobcache
+spec:
+  selector:
+    app: blobcache
+  ports:
+  - name: nfs
+    port: 2049
+    targetPort: 2049
+    protocol: TCP
+  type: ClusterIP
