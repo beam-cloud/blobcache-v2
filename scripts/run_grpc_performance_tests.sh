@@ -70,6 +70,9 @@ server:
   s3DownloadChunkSize: 16777216
   metadata:
     mode: local
+    redisAddr: ""
+    redisPasswd: ""
+    redisTLSEnabled: false
 
 global:
   serverPort: ${SERVER_PORT}
@@ -90,6 +93,13 @@ client:
   nTopHosts: 3
   blobfs:
     enabled: false
+    mountPoint: /tmp/blobcache-test
+    maxBackgroundTasks: 512
+    maxReadAheadKB: 128
+    maxWriteKB: 1024
+    directMount: false
+    directIO: false
+    options: []
 
 metrics:
   pushIntervalS: 60

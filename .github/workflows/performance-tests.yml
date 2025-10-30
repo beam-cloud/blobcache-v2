@@ -122,6 +122,11 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y netcat-openbsd bc
     
+    - name: Initialize logger for tests
+      run: |
+        # Tests use local mode (no Redis required)
+        echo "Tests configured to use local metadata mode"
+    
     - name: Build binaries
       run: |
         go build -o bin/blobcache cmd/main.go

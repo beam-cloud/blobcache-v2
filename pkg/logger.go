@@ -91,6 +91,9 @@ func (l *logger) Error(msg string, fields ...any) {
 }
 
 func (l *logger) Errorf(template string, args ...interface{}) {
+	if l == nil {
+		return
+	}
 	l.logger.Error().Msgf(template, args...)
 }
 

@@ -15,6 +15,9 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 	ctx := context.Background()
 	tmpDir := b.TempDir()
 	
+	// Initialize logger to prevent nil pointer panics
+	InitLogger(false, false)
+	
 	config := BlobCacheConfig{
 		Server: BlobCacheServerConfig{
 			DiskCacheDir:         tmpDir,
@@ -28,7 +31,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		},
 		Metrics: BlobCacheMetricsConfig{
 			PushIntervalS: 60,
-			URL:           "",
+			URL:           "", // Empty URL disables metrics push
 		},
 	}
 	
@@ -38,6 +41,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		RTT:      0,
 	}
 	
+	// Pass nil coordinator for benchmarks (no external dependencies)
 	cas, err := NewContentAddressableStorage(ctx, currentHost, "local", nil, config)
 	if err != nil {
 		b.Fatalf("Failed to create CAS: %v", err)
