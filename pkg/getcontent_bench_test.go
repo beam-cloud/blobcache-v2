@@ -17,12 +17,12 @@ func BenchmarkGetContentDiskCache(b *testing.B) {
 
 	tmpDir := b.TempDir()
 
-	// Disk-first mode (no memory cache)
+	// Disk-only mode (no memory cache)
 	config := BlobCacheConfig{
 		Server: BlobCacheServerConfig{
 			DiskCacheDir:         tmpDir,
 			DiskCacheMaxUsagePct: 90,
-			EnableMemoryCache:    false, // Disk-only
+			MaxCachePct:          0, // Disk-only (no memory cache)
 			PageSizeBytes:        4 * 1024 * 1024,
 			ObjectTtlS:           300,
 		},

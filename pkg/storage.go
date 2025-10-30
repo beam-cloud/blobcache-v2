@@ -56,12 +56,11 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
 
-	// Memory cache is now OPT-IN (disabled by default for disk-first approach)
-	if config.Server.EnableMemoryCache {
-		if config.Server.MaxCachePct <= 0 {
-			return nil, errors.New("enableMemoryCache=true requires maxCachePct > 0")
-		}
-
+	// Memory cache enabled by default if MaxCachePct > 0 (backwards compatible)
+	// Set MaxCachePct to 0 for disk-only mode
+	enableMemCache := config.Server.MaxCachePct > 0
+	
+	if enableMemCache {
 		_, totalMemoryMb := getMemoryMb()
 		maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
 		maxCost := maxCacheSizeMb * 1e6
@@ -89,7 +88,7 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 		cas.cache = cache
 		cas.maxCacheSizeMb = maxCacheSizeMb
 	} else {
-		Logger.Infof("Memory cache DISABLED (disk-first mode)")
+		Logger.Infof("Memory cache DISABLED (disk-only mode)")
 		// Create a minimal cache just for metadata tracking
 		cache, _ := ristretto.NewCache(&ristretto.Config[string, interface{}]{
 			NumCounters: 1e5,
