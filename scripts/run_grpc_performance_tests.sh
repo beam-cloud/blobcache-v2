@@ -69,10 +69,11 @@ server:
   s3DownloadConcurrency: 8
   s3DownloadChunkSize: 16777216
   metadata:
-    mode: local
-    redisAddr: ""
+    mode: default
+    redisAddr: "localhost:6379"
     redisPasswd: ""
     redisTLSEnabled: false
+    redisMode: "single"
 
 global:
   serverPort: ${SERVER_PORT}

@@ -41,8 +41,9 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		RTT:      0,
 	}
 	
-	// Pass nil coordinator for benchmarks (no external dependencies)
-	cas, err := NewContentAddressableStorage(ctx, currentHost, "local", nil, config)
+	// Use mock coordinator for benchmarks (no Redis/external dependencies required)
+	mockCoordinator := NewMockCoordinator()
+	cas, err := NewContentAddressableStorage(ctx, currentHost, "local", mockCoordinator, config)
 	if err != nil {
 		b.Fatalf("Failed to create CAS: %v", err)
 	}
