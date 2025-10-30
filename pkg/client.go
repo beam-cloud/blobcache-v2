@@ -152,6 +152,26 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	}
 
 	// Optimized client dial options matching server configuration
+	initialWindowSize := c.globalConfig.GRPCInitialWindowSize
+	if initialWindowSize == 0 {
+		initialWindowSize = 4 * 1024 * 1024
+	}
+	
+	initialConnWindowSize := c.globalConfig.GRPCInitialConnWindowSize
+	if initialConnWindowSize == 0 {
+		initialConnWindowSize = 32 * 1024 * 1024
+	}
+	
+	writeBufferSize := c.globalConfig.GRPCWriteBufferSize
+	if writeBufferSize == 0 {
+		writeBufferSize = 256 * 1024
+	}
+	
+	readBufferSize := c.globalConfig.GRPCReadBufferSize
+	if readBufferSize == 0 {
+		readBufferSize = 256 * 1024
+	}
+
 	var dialOpts = []grpc.DialOption{
 		transportCredentials,
 		grpc.WithContextDialer(DialWithTimeout),
@@ -159,11 +179,10 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 			grpc.MaxCallRecvMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 			grpc.MaxCallSendMsgSize(c.globalConfig.GRPCMessageSizeBytes),
 		),
-		// Match server flow-control windows
-		grpc.WithInitialWindowSize(4*1024*1024),      // 4MB per-stream
-		grpc.WithInitialConnWindowSize(32*1024*1024), // 32MB per-connection
-		grpc.WithWriteBufferSize(256*1024),           // 256KB write buffer
-		grpc.WithReadBufferSize(256*1024),            // 256KB read buffer
+		grpc.WithInitialWindowSize(int32(initialWindowSize)),
+		grpc.WithInitialConnWindowSize(int32(initialConnWindowSize)),
+		grpc.WithWriteBufferSize(writeBufferSize),
+		grpc.WithReadBufferSize(readBufferSize),
 	}
 
 	if c.clientConfig.Token != "" {

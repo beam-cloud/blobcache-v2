@@ -6,10 +6,7 @@ import (
 	"testing"
 )
 
-// BenchmarkGetContentDiskCache benchmarks the actual GetContent method
-// Uses disk-only cache to test the real code path without memory cache complexity
 func BenchmarkGetContentDiskCache(b *testing.B) {
-	// Initialize logger
 	InitLogger(false, false)
 	
 	ctx, cancel := context.WithCancel(context.Background())
@@ -17,12 +14,11 @@ func BenchmarkGetContentDiskCache(b *testing.B) {
 
 	tmpDir := b.TempDir()
 
-	// Disk-only mode (no memory cache)
 	config := BlobCacheConfig{
 		Server: BlobCacheServerConfig{
 			DiskCacheDir:         tmpDir,
 			DiskCacheMaxUsagePct: 90,
-			MaxCachePct:          0, // Disk-only (no memory cache)
+			MaxCachePct:          0,
 			PageSizeBytes:        4 * 1024 * 1024,
 			ObjectTtlS:           300,
 		},
@@ -30,7 +26,7 @@ func BenchmarkGetContentDiskCache(b *testing.B) {
 			DebugMode: false,
 		},
 		Metrics: BlobCacheMetricsConfig{
-			URL: "", // No metrics = no background goroutine
+			URL: "",
 		},
 	}
 
@@ -75,7 +71,6 @@ func BenchmarkGetContentDiskCache(b *testing.B) {
 				readSize = fileSize - offset
 			}
 
-			// THIS IS THE REAL GETCONTENT PATH
 			n, err := cas.Get(hash, offset, readSize, dst)
 			if err != nil {
 				b.Fatalf("GetContent failed at offset %d: %v", offset, err)
@@ -84,7 +79,6 @@ func BenchmarkGetContentDiskCache(b *testing.B) {
 				b.Fatalf("Expected %d bytes, got %d", readSize, n)
 			}
 
-			// Validate first chunk data integrity
 			if offset == 0 && i == 0 {
 				for j := int64(0); j < 1024 && j < n; j++ {
 					if dst[j] != content[j] {

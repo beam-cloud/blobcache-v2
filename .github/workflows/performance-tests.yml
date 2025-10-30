@@ -70,18 +70,28 @@ jobs:
     
     - name: Check for performance regressions
       run: |
-        # Extract key metrics
         BUFFER_POOL_TIME=$(grep "BenchmarkBufferPool.*WithPool" benchmark-results.txt | awk '{print $3}' | head -1)
-        echo "Buffer Pool Time: $BUFFER_POOL_TIME"
+        GETCONTENT_THROUGHPUT=$(grep "BenchmarkGetContentDiskCache" benchmark-results.txt | grep "MB/s" | awk '{print $4}' | head -1)
         
-        # Fail if buffer pool is too slow (should be < 100ns)
+        echo "Buffer Pool: $BUFFER_POOL_TIME"
+        echo "GetContent: $GETCONTENT_THROUGHPUT"
+        
         if [ ! -z "$BUFFER_POOL_TIME" ]; then
           TIME_NS=$(echo $BUFFER_POOL_TIME | sed 's/ns\/op//')
           if (( $(echo "$TIME_NS > 100" | bc -l) )); then
-            echo "❌ Buffer pool performance regression detected: ${TIME_NS}ns > 100ns"
+            echo "❌ Buffer pool regression: ${TIME_NS}ns > 100ns"
             exit 1
           fi
-          echo "✅ Buffer pool performance OK: ${TIME_NS}ns"
+          echo "✅ Buffer pool OK: ${TIME_NS}ns"
+        fi
+        
+        if [ ! -z "$GETCONTENT_THROUGHPUT" ]; then
+          THROUGHPUT=$(echo $GETCONTENT_THROUGHPUT | sed 's/MB\/s//')
+          if (( $(echo "$THROUGHPUT < 2000" | bc -l) )); then
+            echo "❌ GetContent regression: ${THROUGHPUT} MB/s < 2000 MB/s"
+            exit 1
+          fi
+          echo "✅ GetContent OK: ${THROUGHPUT} MB/s"
         fi
     
     - name: Comment benchmark results on PR

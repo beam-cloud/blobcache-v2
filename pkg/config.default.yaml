@@ -49,11 +49,13 @@ global:
   rttThresholdMilliseconds: 100
   hostStorageCapacityThresholdPct: 0.95
   grpcDialTimeoutS: 1
-  # Large message size for high-throughput streaming (1GB max)
-  # Allows 4MB chunks + metadata without fragmentation
-  # gRPC optimizations (InitialWindowSize: 4MB, ConnWindowSize: 32MB)
-  # are applied automatically in code
   grpcMessageSizeBytes: 1000000000
+  grpcInitialWindowSize: 4194304
+  grpcInitialConnWindowSize: 33554432
+  grpcWriteBufferSize: 262144
+  grpcReadBufferSize: 262144
+  grpcMaxConcurrentStreams: 1024
+  grpcNumStreamWorkers: 0
   debugMode: false
   prettyLogs: false
   sources: []

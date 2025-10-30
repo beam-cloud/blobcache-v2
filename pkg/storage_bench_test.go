@@ -10,28 +10,12 @@ import (
 	"time"
 )
 
-// Benchmark storage layer performance with various workload patterns
-//
-// NOTE: Most benchmarks in this file are integration-level tests that require
-// full CAS setup and are too slow for CI (5-10 minutes). They're useful for
-// local performance analysis but not for fast CI validation.
-//
-// For CI, we run only BenchmarkBufferPool which validates the key optimization
-// (20,000-40,000× improvement) and completes in ~15 seconds.
-//
-// To run slow benchmarks locally:
-//   go test -bench=BenchmarkSequentialRead -benchtime=10s ./pkg/
-//   go test -bench=BenchmarkCacheHitRatios -benchtime=10s ./pkg/
-
-// Global setup to prevent metrics re-registration
 var benchmarkSetupOnce sync.Once
 
 func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
-	// Use cancellable context to ensure goroutines stop when benchmark completes
 	ctx, cancel := context.WithCancel(context.Background())
 	tmpDir := b.TempDir()
 	
-	// Initialize logger once to prevent nil pointer panics
 	benchmarkSetupOnce.Do(func() {
 		InitLogger(false, false)
 	})
@@ -40,9 +24,8 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		Server: BlobCacheServerConfig{
 			DiskCacheDir:         tmpDir,
 			DiskCacheMaxUsagePct: 90,
-			EnableMemoryCache:    true,  // Enable for benchmarks
 			MaxCachePct:          50,
-			PageSizeBytes:        4 * 1024 * 1024, // 4MB chunks
+			PageSizeBytes:        4 * 1024 * 1024,
 			ObjectTtlS:           300,
 		},
 		Global: BlobCacheGlobalConfig{
@@ -50,7 +33,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		},
 		Metrics: BlobCacheMetricsConfig{
 			PushIntervalS: 60,
-			URL:           "", // Empty URL disables metrics push
+			URL:           "",
 		},
 	}
 	
@@ -60,7 +43,6 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		RTT:      0,
 	}
 	
-	// Use mock coordinator for benchmarks (no Redis/external dependencies required)
 	mockCoordinator := NewMockCoordinator()
 	cas, err := NewContentAddressableStorage(ctx, currentHost, "local", mockCoordinator, config)
 	if err != nil {
@@ -68,7 +50,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 	}
 	
 	cleanup := func() {
-		cancel() // Stop all goroutines
+		cancel()
 		cas.Cleanup()
 		os.RemoveAll(tmpDir)
 	}
@@ -76,12 +58,10 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 	return cas, cleanup
 }
 
-// BenchmarkSequentialRead tests sequential read performance (aligned with optimization plan)
-// Using smaller sizes for CI/CD to avoid timeouts
 func BenchmarkSequentialRead(b *testing.B) {
 	sizes := []int64{
-		1 * 1024 * 1024,      // 1 MB
-		4 * 1024 * 1024,      // 4 MB
+		1 * 1024 * 1024,
+		4 * 1024 * 1024,
 	}
 	
 	for _, size := range sizes {
@@ -123,14 +103,13 @@ func BenchmarkSequentialRead(b *testing.B) {
 	}
 }
 
-// BenchmarkRandomRead tests random read performance
 func BenchmarkRandomRead(b *testing.B) {
 	chunkSizes := []int64{
-		64 * 1024,      // 64 KB
-		512 * 1024,     // 512 KB
+		64 * 1024,
+		512 * 1024,
 	}
 	
-	fileSize := int64(16 * 1024 * 1024) // 16 MB file (reduced for CI)
+	fileSize := int64(16 * 1024 * 1024)
 	
 	for _, chunkSize := range chunkSizes {
 		b.Run(fmt.Sprintf("chunk_%dKB", chunkSize/1024), func(b *testing.B) {
@@ -165,16 +144,14 @@ func BenchmarkRandomRead(b *testing.B) {
 	}
 }
 
-// BenchmarkSmallFiles tests small file read performance
 func BenchmarkSmallFiles(b *testing.B) {
-	fileSizes := []int{10*1024, 100*1024} // 10KB, 100KB
+	fileSizes := []int{10 * 1024, 100 * 1024}
 	
 	for _, fileSize := range fileSizes {
 		b.Run(fmt.Sprintf("size_%dKB", fileSize/1024), func(b *testing.B) {
 			cas, cleanup := setupBenchmarkCAS(b)
 			defer cleanup()
 			
-			// Pre-populate with small files (reduced count for CI)
 			numFiles := 100
 			hashes := make([]string, numFiles)
 			
