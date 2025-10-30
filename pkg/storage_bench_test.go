@@ -40,6 +40,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 		Server: BlobCacheServerConfig{
 			DiskCacheDir:         tmpDir,
 			DiskCacheMaxUsagePct: 90,
+			EnableMemoryCache:    true,  // Enable for benchmarks
 			MaxCachePct:          50,
 			PageSizeBytes:        4 * 1024 * 1024, // 4MB chunks
 			ObjectTtlS:           300,

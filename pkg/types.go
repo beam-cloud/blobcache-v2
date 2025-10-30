@@ -65,6 +65,7 @@ type BlobCacheServerConfig struct {
 	Mode                  BlobCacheServerMode `key:"mode" json:"mode"`
 	DiskCacheDir          string              `key:"diskCacheDir" json:"disk_cache_dir"`
 	DiskCacheMaxUsagePct  float64             `key:"diskCacheMaxUsagePct" json:"disk_cache_max_usage_pct"`
+	EnableMemoryCache     bool                `key:"enableMemoryCache" json:"enable_memory_cache"`
 	Token                 string              `key:"token" json:"token"`
 	PrettyLogs            bool                `key:"prettyLogs" json:"pretty_logs"`
 	ObjectTtlS            int                 `key:"objectTtlS" json:"object_ttl_s"`

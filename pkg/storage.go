@@ -38,7 +38,7 @@ type ContentAddressableStorage struct {
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
-	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
+	if config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
 
@@ -56,36 +56,55 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
 
-	_, totalMemoryMb := getMemoryMb()
-	maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
-	maxCost := maxCacheSizeMb * 1e6
+	// Memory cache is now OPT-IN (disabled by default for disk-first approach)
+	if config.Server.EnableMemoryCache {
+		if config.Server.MaxCachePct <= 0 {
+			return nil, errors.New("enableMemoryCache=true requires maxCachePct > 0")
+		}
 
-	Logger.Infof("Total available memory: %dMB", totalMemoryMb)
-	Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
-	Logger.Infof("Max cost: %d", maxCost)
+		_, totalMemoryMb := getMemoryMb()
+		maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
+		maxCost := maxCacheSizeMb * 1e6
 
-	if maxCacheSizeMb <= 0 {
-		return nil, errors.New("invalid memory limit")
-	}
+		Logger.Infof("Memory cache ENABLED")
+		Logger.Infof("Total available memory: %dMB", totalMemoryMb)
+		Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
+		Logger.Infof("Max cost: %d", maxCost)
 
-	cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
-		NumCounters: 1e7,
-		MaxCost:     maxCost,
-		BufferItems: 64,
-		OnEvict:     cas.onEvict,
-		Metrics:     cas.globalConfig.DebugMode,
-	})
-	if err != nil {
-		return nil, err
+		if maxCacheSizeMb <= 0 {
+			return nil, errors.New("invalid memory limit")
+		}
+
+		cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
+			NumCounters: 1e7,
+			MaxCost:     maxCost,
+			BufferItems: 64,
+			OnEvict:     cas.onEvict,
+			Metrics:     cas.globalConfig.DebugMode,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		cas.cache = cache
+		cas.maxCacheSizeMb = maxCacheSizeMb
+	} else {
+		Logger.Infof("Memory cache DISABLED (disk-first mode)")
+		// Create a minimal cache just for metadata tracking
+		cache, _ := ristretto.NewCache(&ristretto.Config[string, interface{}]{
+			NumCounters: 1e5,
+			MaxCost:     1024 * 1024, // 1MB for metadata only
+			BufferItems: 64,
+			OnEvict:     cas.onEvict,
+			Metrics:     false,
+		})
+		cas.cache = cache
 	}
 
 	// Only start disk monitor if we have a metrics URL (not in benchmarks/tests)
 	if config.Metrics.URL != "" {
 		go cas.monitorDiskCacheUsage()
 	}
-
-	cas.cache = cache
-	cas.maxCacheSizeMb = maxCacheSizeMb
 	
 	// Initialize buffer pool for reduced allocations
 	cas.bufferPool = NewBufferPool()
