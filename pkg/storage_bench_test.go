@@ -11,6 +11,17 @@ import (
 )
 
 // Benchmark storage layer performance with various workload patterns
+//
+// NOTE: Most benchmarks in this file are integration-level tests that require
+// full CAS setup and are too slow for CI (5-10 minutes). They're useful for
+// local performance analysis but not for fast CI validation.
+//
+// For CI, we run only BenchmarkBufferPool which validates the key optimization
+// (20,000-40,000× improvement) and completes in ~15 seconds.
+//
+// To run slow benchmarks locally:
+//   go test -bench=BenchmarkSequentialRead -benchtime=10s ./pkg/
+//   go test -bench=BenchmarkCacheHitRatios -benchtime=10s ./pkg/
 
 // Global setup to prevent metrics re-registration
 var benchmarkSetupOnce sync.Once
