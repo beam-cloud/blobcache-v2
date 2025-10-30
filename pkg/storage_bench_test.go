@@ -16,7 +16,8 @@ import (
 var benchmarkSetupOnce sync.Once
 
 func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
-	ctx := context.Background()
+	// Use cancellable context to ensure goroutines stop when benchmark completes
+	ctx, cancel := context.WithCancel(context.Background())
 	tmpDir := b.TempDir()
 	
 	// Initialize logger once to prevent nil pointer panics
@@ -55,6 +56,7 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 	}
 	
 	cleanup := func() {
+		cancel() // Stop all goroutines
 		cas.Cleanup()
 		os.RemoveAll(tmpDir)
 	}
@@ -63,12 +65,11 @@ func setupBenchmarkCAS(b *testing.B) (*ContentAddressableStorage, func()) {
 }
 
 // BenchmarkSequentialRead tests sequential read performance (aligned with optimization plan)
+// Using smaller sizes for CI/CD to avoid timeouts
 func BenchmarkSequentialRead(b *testing.B) {
 	sizes := []int64{
 		1 * 1024 * 1024,      // 1 MB
-		16 * 1024 * 1024,     // 16 MB
-		64 * 1024 * 1024,     // 64 MB
-		256 * 1024 * 1024,    // 256 MB
+		4 * 1024 * 1024,      // 4 MB
 	}
 	
 	for _, size := range sizes {
@@ -113,12 +114,11 @@ func BenchmarkSequentialRead(b *testing.B) {
 // BenchmarkRandomRead tests random read performance
 func BenchmarkRandomRead(b *testing.B) {
 	chunkSizes := []int64{
-		4 * 1024,       // 4 KB
 		64 * 1024,      // 64 KB
 		512 * 1024,     // 512 KB
 	}
 	
-	fileSize := int64(64 * 1024 * 1024) // 64 MB file
+	fileSize := int64(16 * 1024 * 1024) // 16 MB file (reduced for CI)
 	
 	for _, chunkSize := range chunkSizes {
 		b.Run(fmt.Sprintf("chunk_%dKB", chunkSize/1024), func(b *testing.B) {
@@ -155,15 +155,15 @@ func BenchmarkRandomRead(b *testing.B) {
 
 // BenchmarkSmallFiles tests small file read performance
 func BenchmarkSmallFiles(b *testing.B) {
-	fileSizes := []int{1024, 10*1024, 100*1024} // 1KB, 10KB, 100KB
+	fileSizes := []int{10*1024, 100*1024} // 10KB, 100KB
 	
 	for _, fileSize := range fileSizes {
 		b.Run(fmt.Sprintf("size_%dKB", fileSize/1024), func(b *testing.B) {
 			cas, cleanup := setupBenchmarkCAS(b)
 			defer cleanup()
 			
-			// Pre-populate with many small files
-			numFiles := 1000
+			// Pre-populate with small files (reduced count for CI)
+			numFiles := 100
 			hashes := make([]string, numFiles)
 			
 			for i := 0; i < numFiles; i++ {

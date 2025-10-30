@@ -415,7 +415,10 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 		case <-ticker.C:
 			currentUsage, totalDiskSpace, usagePercentage, err := cas.GetDiskCacheMetrics()
 			if err != nil {
-				Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				// Silently skip if directory doesn't exist (common in tests/benchmarks)
+				if !os.IsNotExist(err) {
+					Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				}
 				continue
 			}
 
