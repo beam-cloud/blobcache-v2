@@ -53,8 +53,13 @@ jobs:
     
     - name: Run benchmarks
       run: |
-        echo "Running buffer pool benchmarks (validates 20,000× improvement)..."
-        go test -bench=BenchmarkBufferPool -benchmem -benchtime=3s -timeout=2m ./pkg/ | tee benchmark-results.txt
+        echo "Running performance benchmarks..."
+        echo ""
+        echo "=== Buffer Pool Benchmark (validates 20,000× allocation improvement) ==="
+        go test -bench=BenchmarkBufferPool -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee benchmark-results.txt
+        echo ""
+        echo "=== GetContent Benchmark (validates actual gRPC entry point throughput) ==="
+        go test -bench=BenchmarkGetContent$ -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee -a benchmark-results.txt
     
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
