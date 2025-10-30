@@ -187,25 +187,45 @@ func (cs *CacheService) StartServer(port uint) error {
 
 	maxMessageSize := cs.globalConfig.GRPCMessageSizeBytes
 	
-	// Optimized gRPC settings for high throughput as per optimization plan
-	// HTTP/2 flow-control windows allow single streams to fly at line rate
+	initialWindowSize := cs.globalConfig.GRPCInitialWindowSize
+	if initialWindowSize == 0 {
+		initialWindowSize = 4 * 1024 * 1024
+	}
+	
+	initialConnWindowSize := cs.globalConfig.GRPCInitialConnWindowSize
+	if initialConnWindowSize == 0 {
+		initialConnWindowSize = 32 * 1024 * 1024
+	}
+	
+	writeBufferSize := cs.globalConfig.GRPCWriteBufferSize
+	if writeBufferSize == 0 {
+		writeBufferSize = 256 * 1024
+	}
+	
+	readBufferSize := cs.globalConfig.GRPCReadBufferSize
+	if readBufferSize == 0 {
+		readBufferSize = 256 * 1024
+	}
+	
+	maxConcurrentStreams := cs.globalConfig.GRPCMaxConcurrentStreams
+	if maxConcurrentStreams == 0 {
+		maxConcurrentStreams = 1024
+	}
+	
+	numStreamWorkers := cs.globalConfig.GRPCNumStreamWorkers
+	if numStreamWorkers == 0 {
+		numStreamWorkers = runtime.NumCPU() * 2
+	}
+
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		
-		// Increase flow-control windows for high-throughput streams
-		grpc.InitialWindowSize(4*1024*1024),      // 4MB per-stream window (up from 64KB default)
-		grpc.InitialConnWindowSize(32*1024*1024), // 32MB per-connection window
-		
-		// Optimize buffer sizes for large messages
-		grpc.WriteBufferSize(256*1024), // 256KB write buffer (up from 32KB)
-		grpc.ReadBufferSize(256*1024),  // 256KB read buffer (up from 32KB)
-		
-		// Allow many concurrent streams per connection
-		grpc.MaxConcurrentStreams(1024),
-		
-		// Leverage all CPU cores for stream processing
-		grpc.NumStreamWorkers(uint32(runtime.NumCPU() * 2)),
+		grpc.InitialWindowSize(int32(initialWindowSize)),
+		grpc.InitialConnWindowSize(int32(initialConnWindowSize)),
+		grpc.WriteBufferSize(writeBufferSize),
+		grpc.ReadBufferSize(readBufferSize),
+		grpc.MaxConcurrentStreams(uint32(maxConcurrentStreams)),
+		grpc.NumStreamWorkers(uint32(numStreamWorkers)),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 
