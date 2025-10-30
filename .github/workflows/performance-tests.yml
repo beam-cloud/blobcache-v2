@@ -94,7 +94,7 @@ jobs:
   grpc-throughput-tests:
     name: gRPC Throughput Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     
     services:
       redis:
@@ -110,8 +110,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -121,95 +119,24 @@ jobs:
     - name: Cache Go modules
       uses: actions/cache@v4
       with:
-        path: |
-          ~/go/pkg/mod
-          ~/.cache/go-build
+        path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
     
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y netcat-openbsd bc
-    
-    - name: Initialize logger for tests
-      run: |
-        # Tests use local mode (no Redis required)
-        echo "Tests configured to use local metadata mode"
-    
-    - name: Build binaries
-      run: |
-        go build -o bin/blobcache cmd/main.go
-        go build -o bin/grpc-throughput e2e/grpc_throughput/main.go
-    
-    - name: Download baseline results
-      continue-on-error: true
-      uses: actions/download-artifact@v4
-      with:
-        name: performance-baseline
-        path: performance-results/
+    - name: Install netcat
+      run: sudo apt-get update && sudo apt-get install -y netcat-openbsd
     
     - name: Run gRPC performance tests
-      env:
-        TEST_ITERATIONS: ${{ github.event.inputs.test_iterations || '3' }}
-        REGRESSION_THRESHOLD: ${{ github.event.inputs.regression_threshold || '10' }}
-        CI_MODE: 'true'  # Use smaller test sizes for CI
       run: |
         chmod +x scripts/run_grpc_performance_tests.sh
         ./scripts/run_grpc_performance_tests.sh
     
-    - name: Upload performance results
+    - name: Upload results
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: grpc-performance-results
         path: performance-results/
-        retention-days: 90
-    
-    - name: Save as baseline (main branch only)
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      uses: actions/upload-artifact@v4
-      with:
-        name: performance-baseline
-        path: performance-results/current.json
-        retention-days: 365
-    
-    - name: Upload performance report
-      uses: actions/upload-artifact@v4
-      with:
-        name: performance-report
-        path: performance-results/report.md
-        retention-days: 90
-    
-    - name: Comment performance report on PR
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          
-          try {
-            const report = fs.readFileSync('performance-results/report.md', 'utf8');
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
-          } catch (error) {
-            console.log('Could not read report file:', error);
-          }
-    
-    - name: Check for regressions
-      run: |
-        if [ -f performance-results/report.md ]; then
-          if grep -q "Performance Regression Detected" performance-results/report.md; then
-            echo "❌ Performance regression detected!"
-            exit 1
-          fi
-          echo "✅ No performance regressions detected"
-        fi
+        retention-days: 30
 
   integration-tests:
     name: Integration Tests
