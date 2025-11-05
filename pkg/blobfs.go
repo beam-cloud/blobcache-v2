@@ -75,9 +75,11 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	root, _ := blobfs.Root()
 	attrTimeout := time.Second * 5
 	entryTimeout := time.Second * 5
+	negativeTimeout := time.Second * 2  // Cache negative lookups to reduce FUSE chatter
 	fsOptions := &fs.Options{
-		AttrTimeout:  &attrTimeout,
-		EntryTimeout: &entryTimeout,
+		AttrTimeout:     &attrTimeout,
+		EntryTimeout:    &entryTimeout,
+		NegativeTimeout: &negativeTimeout,
 	}
 
 	maxWriteKB := opts.Config.BlobFs.MaxWriteKB
@@ -94,6 +96,9 @@ func Mount(ctx context.Context, opts BlobFsSystemOpts) (func() error, <-chan err
 	if maxBackgroundTasks <= 0 {
 		maxBackgroundTasks = 512
 	}
+	
+	// Note: CongestionThreshold would be set to 75% of MaxBackground if supported
+	// This is a recommended optimization but may not be available in all go-fuse versions
 
 	options := []string{}
 	options = append(options, opts.Config.BlobFs.Options...)

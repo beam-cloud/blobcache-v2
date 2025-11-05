@@ -44,7 +44,6 @@ func (n *FSNode) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOu
 
 	node := n.bfsNode
 
-	// Fill in the AttrOut struct
 	out.Ino = node.Attr.Ino
 	out.Size = node.Attr.Size
 	out.Blocks = node.Attr.Blocks
@@ -175,7 +174,7 @@ func (n *FSNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuse
 }
 
 func (n *FSNode) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	n.log("Read called with offset: %v", off)
+	n.log("Read called with offset: %v, length: %v", off, len(dest))
 
 	// Don't try to read 0 byte files
 	if n.bfsNode.Attr.Size == 0 {

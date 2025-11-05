@@ -186,11 +186,46 @@ func (cs *CacheService) StartServer(port uint) error {
 	}
 
 	maxMessageSize := cs.globalConfig.GRPCMessageSizeBytes
+	
+	initialWindowSize := cs.globalConfig.GRPCInitialWindowSize
+	if initialWindowSize == 0 {
+		initialWindowSize = 4 * 1024 * 1024
+	}
+	
+	initialConnWindowSize := cs.globalConfig.GRPCInitialConnWindowSize
+	if initialConnWindowSize == 0 {
+		initialConnWindowSize = 32 * 1024 * 1024
+	}
+	
+	writeBufferSize := cs.globalConfig.GRPCWriteBufferSize
+	if writeBufferSize == 0 {
+		writeBufferSize = 256 * 1024
+	}
+	
+	readBufferSize := cs.globalConfig.GRPCReadBufferSize
+	if readBufferSize == 0 {
+		readBufferSize = 256 * 1024
+	}
+	
+	maxConcurrentStreams := cs.globalConfig.GRPCMaxConcurrentStreams
+	if maxConcurrentStreams == 0 {
+		maxConcurrentStreams = 1024
+	}
+	
+	numStreamWorkers := cs.globalConfig.GRPCNumStreamWorkers
+	if numStreamWorkers == 0 {
+		numStreamWorkers = runtime.NumCPU() * 2
+	}
+
 	s := grpc.NewServer(
 		grpc.MaxRecvMsgSize(maxMessageSize),
 		grpc.MaxSendMsgSize(maxMessageSize),
-		grpc.WriteBufferSize(writeBufferSizeBytes),
-		grpc.NumStreamWorkers(uint32(runtime.NumCPU())),
+		grpc.InitialWindowSize(int32(initialWindowSize)),
+		grpc.InitialConnWindowSize(int32(initialConnWindowSize)),
+		grpc.WriteBufferSize(writeBufferSize),
+		grpc.ReadBufferSize(readBufferSize),
+		grpc.MaxConcurrentStreams(uint32(maxConcurrentStreams)),
+		grpc.NumStreamWorkers(uint32(numStreamWorkers)),
 	)
 	proto.RegisterBlobCacheServer(s, cs)
 

@@ -41,6 +41,12 @@ type BlobCacheGlobalConfig struct {
 	HostStorageCapacityThresholdPct float64 `key:"hostStorageCapacityThresholdPct" json:"host_storage_capacity_threshold_pct"`
 	GRPCDialTimeoutS                int     `key:"grpcDialTimeoutS" json:"grpc_dial_timeout_s"`
 	GRPCMessageSizeBytes            int     `key:"grpcMessageSizeBytes" json:"grpc_message_size_bytes"`
+	GRPCInitialWindowSize           int     `key:"grpcInitialWindowSize" json:"grpc_initial_window_size"`
+	GRPCInitialConnWindowSize       int     `key:"grpcInitialConnWindowSize" json:"grpc_initial_conn_window_size"`
+	GRPCWriteBufferSize             int     `key:"grpcWriteBufferSize" json:"grpc_write_buffer_size"`
+	GRPCReadBufferSize              int     `key:"grpcReadBufferSize" json:"grpc_read_buffer_size"`
+	GRPCMaxConcurrentStreams        int     `key:"grpcMaxConcurrentStreams" json:"grpc_max_concurrent_streams"`
+	GRPCNumStreamWorkers            int     `key:"grpcNumStreamWorkers" json:"grpc_num_stream_workers"`
 	DebugMode                       bool    `key:"debugMode" json:"debug_mode"`
 	PrettyLogs                      bool    `key:"prettyLogs" json:"pretty_logs"`
 }
@@ -65,6 +71,7 @@ type BlobCacheServerConfig struct {
 	Mode                  BlobCacheServerMode `key:"mode" json:"mode"`
 	DiskCacheDir          string              `key:"diskCacheDir" json:"disk_cache_dir"`
 	DiskCacheMaxUsagePct  float64             `key:"diskCacheMaxUsagePct" json:"disk_cache_max_usage_pct"`
+	EnableMemoryCache     bool                `key:"enableMemoryCache" json:"enable_memory_cache"`
 	Token                 string              `key:"token" json:"token"`
 	PrettyLogs            bool                `key:"prettyLogs" json:"pretty_logs"`
 	ObjectTtlS            int                 `key:"objectTtlS" json:"object_ttl_s"`

@@ -15,7 +15,7 @@ server:
     redisPasswd:
     redisTLSEnabled: false
   regions:
-    us-east-1:
+    default:
       token:
       rttThresholdMilliseconds: 40
       hostStorageCapacityThresholdPct: 0.5
@@ -31,7 +31,7 @@ client:
     maxBackgroundTasks: 512
     maxReadAheadKB: 128
 global:
-  defaultLocality: us-east-1
+  defaultLocality: default
   coordinatorHost:
   serverPort: 2049
   discoveryIntervalS: 5
@@ -39,6 +39,12 @@ global:
   hostStorageCapacityThresholdPct: 0.95
   grpcDialTimeoutS: 1
   grpcMessageSizeBytes: 1000000000
+  grpcInitialWindowSize: 4194304
+  grpcInitialConnWindowSize: 33554432
+  grpcWriteBufferSize: 262144
+  grpcReadBufferSize: 262144
+  grpcMaxConcurrentStreams: 1024
+  grpcNumStreamWorkers: 0
   debugMode: false
   prettyLogs: false
   sources: []

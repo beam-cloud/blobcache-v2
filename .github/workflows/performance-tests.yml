@@ -1,0 +1,217 @@
+name: Performance Tests
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+    inputs:
+      test_iterations:
+        description: 'Number of test iterations'
+        required: false
+        default: '3'
+      regression_threshold:
+        description: 'Regression threshold (%)'
+        required: false
+        default: '10'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  unit-benchmarks:
+    name: Unit Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for comparison
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Run benchmarks
+      run: |
+        echo "Running performance benchmarks..."
+        echo ""
+        echo "=== 1. Buffer Pool (20,000× allocation improvement) ==="
+        go test -bench=BenchmarkBufferPool -benchmem -benchtime=2s -timeout=2m ./pkg/ | tee benchmark-results.txt
+        echo ""
+        echo "=== 2. GetContent End-to-End (real disk-based throughput) ==="
+        go test -bench=BenchmarkGetContentDiskCache -benchmem -benchtime=500ms -timeout=2m ./pkg/ | tee -a benchmark-results.txt
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt
+        retention-days: 30
+    
+    - name: Check for performance regressions
+      run: |
+        BUFFER_POOL_TIME=$(grep "BenchmarkBufferPool.*WithPool" benchmark-results.txt | awk '{print $3}' | head -1)
+        GETCONTENT_THROUGHPUT=$(grep "BenchmarkGetContentDiskCache" benchmark-results.txt | grep "MB/s" | awk '{print $4}' | head -1)
+        
+        echo "Buffer Pool: $BUFFER_POOL_TIME"
+        echo "GetContent: $GETCONTENT_THROUGHPUT"
+        
+        if [ ! -z "$BUFFER_POOL_TIME" ]; then
+          TIME_NS=$(echo $BUFFER_POOL_TIME | sed 's/ns\/op//')
+          if (( $(echo "$TIME_NS > 100" | bc -l) )); then
+            echo "❌ Buffer pool regression: ${TIME_NS}ns > 100ns"
+            exit 1
+          fi
+          echo "✅ Buffer pool OK: ${TIME_NS}ns"
+        fi
+        
+        if [ ! -z "$GETCONTENT_THROUGHPUT" ]; then
+          THROUGHPUT=$(echo $GETCONTENT_THROUGHPUT | sed 's/MB\/s//')
+          if (( $(echo "$THROUGHPUT < 2000" | bc -l) )); then
+            echo "❌ GetContent regression: ${THROUGHPUT} MB/s < 2000 MB/s"
+            exit 1
+          fi
+          echo "✅ GetContent OK: ${THROUGHPUT} MB/s"
+        fi
+    
+    - name: Comment benchmark results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const results = fs.readFileSync('benchmark-results.txt', 'utf8');
+          
+          const body = `## Benchmark Results\n\n\`\`\`\n${results}\n\`\`\``;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+
+  grpc-throughput-tests:
+    name: gRPC Throughput Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+    
+    - name: Install netcat
+      run: sudo apt-get update && sudo apt-get install -y netcat-openbsd
+    
+    - name: Run gRPC performance tests
+      run: |
+        chmod +x bin/run_grpc_performance_tests.sh
+        ./bin/run_grpc_performance_tests.sh
+    
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: grpc-performance-results
+        path: performance-results/
+        retention-days: 30
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+    
+    - name: Run unit tests
+      run: go test -v -timeout 5m ./pkg/...
+
+  performance-summary:
+    name: Performance Summary
+    needs: [unit-benchmarks, grpc-throughput-tests, integration-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Generate summary
+      run: |
+        echo "# Performance Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+        echo "- Unit Benchmarks: ${{ needs.unit-benchmarks.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- gRPC Throughput: ${{ needs.grpc-throughput-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f performance-report/report.md ]; then
+          echo "## Performance Report" >> $GITHUB_STEP_SUMMARY
+          cat performance-report/report.md >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f benchmark-results/benchmark-results.txt ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          head -50 benchmark-results/benchmark-results.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+    
+    - name: Check overall status
+      run: |
+        if [ "${{ needs.unit-benchmarks.result }}" != "success" ] || \
+           [ "${{ needs.grpc-throughput-tests.result }}" != "success" ] || \
+           [ "${{ needs.integration-tests.result }}" != "success" ]; then
+          echo "❌ Some performance tests failed"
+          exit 1
+        fi
+        echo "✅ All performance tests passed"

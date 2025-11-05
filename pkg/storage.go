@@ -33,10 +33,12 @@ type ContentAddressableStorage struct {
 	diskCachedUsageExceeded bool
 	mu                      sync.Mutex
 	metrics                 BlobcacheMetrics
+	bufferPool              *BufferPool
+	prefetcher              *Prefetcher
 }
 
 func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHost, locality string, coordinator CoordinatorClient, config BlobCacheConfig) (*ContentAddressableStorage, error) {
-	if config.Server.MaxCachePct <= 0 || config.Server.PageSizeBytes <= 0 {
+	if config.Server.PageSizeBytes <= 0 {
 		return nil, errors.New("invalid cache configuration")
 	}
 
@@ -54,33 +56,61 @@ func NewContentAddressableStorage(ctx context.Context, currentHost *BlobCacheHos
 
 	Logger.Infof("Disk cache directory located at: '%s'", cas.diskCacheDir)
 
-	_, totalMemoryMb := getMemoryMb()
-	maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
-	maxCost := maxCacheSizeMb * 1e6
+	// Memory cache enabled by default if MaxCachePct > 0 (backwards compatible)
+	// Set MaxCachePct to 0 for disk-only mode
+	enableMemCache := config.Server.MaxCachePct > 0
+	
+	if enableMemCache {
+		_, totalMemoryMb := getMemoryMb()
+		maxCacheSizeMb := (totalMemoryMb * cas.serverConfig.MaxCachePct) / 100
+		maxCost := maxCacheSizeMb * 1e6
 
-	Logger.Infof("Total available memory: %dMB", totalMemoryMb)
-	Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
-	Logger.Infof("Max cost: %d", maxCost)
+		Logger.Infof("Memory cache ENABLED")
+		Logger.Infof("Total available memory: %dMB", totalMemoryMb)
+		Logger.Infof("Max cache size: %dMB", maxCacheSizeMb)
+		Logger.Infof("Max cost: %d", maxCost)
 
-	if maxCacheSizeMb <= 0 {
-		return nil, errors.New("invalid memory limit")
+		if maxCacheSizeMb <= 0 {
+			return nil, errors.New("invalid memory limit")
+		}
+
+		cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
+			NumCounters: 1e7,
+			MaxCost:     maxCost,
+			BufferItems: 64,
+			OnEvict:     cas.onEvict,
+			Metrics:     cas.globalConfig.DebugMode,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		cas.cache = cache
+		cas.maxCacheSizeMb = maxCacheSizeMb
+	} else {
+		Logger.Infof("Memory cache DISABLED (disk-only mode)")
+		// Create a minimal cache just for metadata tracking
+		cache, _ := ristretto.NewCache(&ristretto.Config[string, interface{}]{
+			NumCounters: 1e5,
+			MaxCost:     1024 * 1024, // 1MB for metadata only
+			BufferItems: 64,
+			OnEvict:     cas.onEvict,
+			Metrics:     false,
+		})
+		cas.cache = cache
 	}
 
-	cache, err := ristretto.NewCache(&ristretto.Config[string, interface{}]{
-		NumCounters: 1e7,
-		MaxCost:     maxCost,
-		BufferItems: 64,
-		OnEvict:     cas.onEvict,
-		Metrics:     cas.globalConfig.DebugMode,
-	})
-	if err != nil {
-		return nil, err
+	// Only start disk monitor if we have a metrics URL (not in benchmarks/tests)
+	if config.Metrics.URL != "" {
+		go cas.monitorDiskCacheUsage()
 	}
-
-	go cas.monitorDiskCacheUsage()
-
-	cas.cache = cache
-	cas.maxCacheSizeMb = maxCacheSizeMb
+	
+	// Initialize buffer pool for reduced allocations
+	cas.bufferPool = NewBufferPool()
+	
+	// Initialize prefetcher for sequential read optimization
+	cas.prefetcher = NewPrefetcher(ctx, cas, cas.bufferPool)
+	
 	return cas, nil
 }
 
@@ -174,6 +204,21 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 	remainingLength := length
 	o := offset
 	dstOffset := int64(0)
+	
+	// Track metrics
+	cas.metrics.TotalReads.Inc()
+	start := time.Now()
+	defer func() {
+		if dstOffset > 0 {
+			throughputMBps := (float64(dstOffset) / (1024 * 1024)) / (float64(time.Since(start).Microseconds()) / 1e6)
+			cas.metrics.ReadThroughputMBps.Update(throughputMBps)
+		}
+		// Update hit ratios
+		cas.updateHitRatios()
+	}()
+	
+	// Notify prefetcher about this read
+	cas.prefetcher.OnRead(hash, offset, length)
 
 	cas.cache.ResetTTL(hash, time.Duration(cas.serverConfig.ObjectTtlS)*time.Second)
 
@@ -184,16 +229,22 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		var value interface{}
 		var found bool = false
 
-		// Check in-memory cache for chunk
+		// Check in-memory cache for chunk (L0)
 		value, found = cas.cache.Get(chunkKey)
+		fromMemory := found
+		if found {
+			cas.metrics.L0Hits.Inc()
+		}
 
-		// Not found in memory, check disk cache before giving up
+		// Not found in memory, check disk cache (L1) before giving up
 		if !found {
 			var err error
 			value, found, err = cas.getFromDiskCache(hash, chunkKey)
 			if err != nil || !found {
+				cas.metrics.L2Misses.Inc()
 				return 0, ErrContentNotFound
 			}
+			cas.metrics.L1Hits.Inc()
 		}
 
 		v, ok := value.(cacheValue)
@@ -216,6 +267,13 @@ func (cas *ContentAddressableStorage) Get(hash string, offset, length int64, dst
 		}
 
 		copy(dst[dstOffset:dstOffset+readLength], chunkBytes[start:end])
+		
+		// Track bytes served from appropriate tier
+		if fromMemory {
+			cas.metrics.L0BytesServed.Add(int(readLength))
+		} else {
+			cas.metrics.L1BytesServed.Add(int(readLength))
+		}
 
 		remainingLength -= readLength
 		o += readLength
@@ -235,9 +293,27 @@ func (cas *ContentAddressableStorage) getFromDiskCache(hash, chunkKey string) (v
 	}
 
 	chunkPath := filepath.Join(cas.diskCacheDir, hash, chunkKey)
+	
+	// Use fadvise to hint sequential/random access patterns
+	file, err := os.Open(chunkPath)
+	if err != nil {
+		return cacheValue{}, false, ErrContentNotFound
+	}
+	defer file.Close()
+	
+	// Hint sequential access for better readahead
+	if err := fadviseSequential(file.Fd()); err == nil {
+		Logger.Debugf("Set FADV_SEQUENTIAL for %s", chunkPath)
+	}
+	
 	chunkBytes, err := os.ReadFile(chunkPath)
 	if err != nil {
 		return cacheValue{}, false, ErrContentNotFound
+	}
+	
+	// Hint willneed for prefetch
+	if err := fadviseWillneed(file.Fd(), 0, int64(len(chunkBytes))); err == nil {
+		Logger.Debugf("Set FADV_WILLNEED for %s", chunkPath)
 	}
 
 	value = cacheValue{Hash: hash, Content: chunkBytes}
@@ -360,7 +436,10 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 		case <-ticker.C:
 			currentUsage, totalDiskSpace, usagePercentage, err := cas.GetDiskCacheMetrics()
 			if err != nil {
-				Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				// Silently skip if directory doesn't exist (common in tests/benchmarks)
+				if !os.IsNotExist(err) {
+					Logger.Errorf("Failed to fetch disk cache metrics: %v", err)
+				}
 				continue
 			}
 
@@ -379,5 +458,23 @@ func (cas *ContentAddressableStorage) monitorDiskCacheUsage() {
 			cas.diskCachedUsageExceeded = usagePercentage > cas.serverConfig.DiskCacheMaxUsagePct
 			cas.mu.Unlock()
 		}
+	}
+}
+
+// updateHitRatios calculates and updates cache hit ratio metrics
+func (cas *ContentAddressableStorage) updateHitRatios() {
+	l0Hits := cas.metrics.L0Hits.Get()
+	l1Hits := cas.metrics.L1Hits.Get()
+	l2Misses := cas.metrics.L2Misses.Get()
+	total := l0Hits + l1Hits + l2Misses
+	
+	if total > 0 {
+		l0Ratio := float64(l0Hits) / float64(total) * 100
+		l1Ratio := float64(l1Hits) / float64(total) * 100
+		l2Ratio := float64(l2Misses) / float64(total) * 100
+		
+		cas.metrics.L0HitRatio.Update(l0Ratio)
+		cas.metrics.L1HitRatio.Update(l1Ratio)
+		cas.metrics.L2MissRatio.Update(l2Ratio)
 	}
 }
