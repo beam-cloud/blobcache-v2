@@ -20,10 +20,10 @@ import (
 const (
 	getContentRequestTimeout        = 60 * time.Second
 	getContentStreamRequestTimeout  = 600 * time.Second
-	storeContentRequestTimeout      = 300 * time.Second
+	storeContentRequestTimeout      = 600 * time.Second
 	closestHostTimeout              = 30 * time.Second
 	localClientCacheCleanupInterval = 5 * time.Second
-	localClientCacheTTL             = 300 * time.Second
+	localClientCacheTTL             = 600 * time.Second
 
 	// NOTE: This value for readAheadKB is separate from the blobfs config since the FUSE library does
 	// weird stuff with the other read_ahead_kb value internally
@@ -156,17 +156,17 @@ func (c *BlobCacheClient) addHost(host *BlobCacheHost) error {
 	if initialWindowSize == 0 {
 		initialWindowSize = 4 * 1024 * 1024
 	}
-	
+
 	initialConnWindowSize := c.globalConfig.GRPCInitialConnWindowSize
 	if initialConnWindowSize == 0 {
 		initialConnWindowSize = 32 * 1024 * 1024
 	}
-	
+
 	writeBufferSize := c.globalConfig.GRPCWriteBufferSize
 	if writeBufferSize == 0 {
 		writeBufferSize = 256 * 1024
 	}
-	
+
 	readBufferSize := c.globalConfig.GRPCReadBufferSize
 	if readBufferSize == 0 {
 		readBufferSize = 256 * 1024
